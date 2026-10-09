@@ -128,6 +128,7 @@ public partial class ResourceListView : UserControl
         _vm.SelectedRows.Clear();
         foreach (var r in Grid.SelectedItems.OfType<ResourceRowViewModel>()) _vm.SelectedRows.Add(r);
         _vm.SelectedRow = Grid.SelectedItems.Count == 1 ? Grid.SelectedItem as ResourceRowViewModel : Grid.SelectedItems.OfType<ResourceRowViewModel>().FirstOrDefault();
+        _vm.NotifySelectionChanged();
     }
 
     private void OnLoadingRow(object? sender, DataGridRowEventArgs e)

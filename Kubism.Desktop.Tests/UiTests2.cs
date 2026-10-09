@@ -262,3 +262,41 @@ public class UiYamlTabTests
         h.Screenshot("23-yaml-tab");
     }
 }
+
+public class UiMultiSelectTests
+{
+    [AvaloniaFact]
+    public async Task Multi_selection_keeps_delete_reachable_and_deletes_all_selected()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.Select("default");
+        ws.OpenKind(ws.Session.Discovery.FindByName("pods")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Rows.Count >= 3);
+        var list = (ResourceListViewModel)ws.CurrentContent!;
+        UiHarness.Pump();
+        var grid = h.Find<Avalonia.Controls.DataGrid>(g => g.Name == "Grid")!;
+        var victims = list.Rows.Where(r => r.Name.StartsWith("web-")).Take(2).ToList();
+        foreach (var v in victims) grid.SelectedItems.Add(v);
+        UiHarness.Pump();
+        Assert.Equal(2, list.SelectedRows.Count);
+        Assert.Equal("Delete 2 selected", list.DeleteLabel);
+        var del = h.Find<Avalonia.Controls.Button>(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Delete selected")!;
+        Assert.True(del.IsEnabled);
+        // The toolbar wraps: the button is inside the list's own width, not pushed under the details panel.
+        var listView = h.Find<Kubism.Desktop.Views.ResourceListView>()!;
+        var right = Avalonia.VisualExtensions.TranslatePoint(del, new Avalonia.Point(del.Bounds.Width, 0), listView)!.Value.X;
+        Assert.True(right <= listView.Bounds.Width + 1, $"delete button ends at {right}, list is {listView.Bounds.Width} wide");
+        h.Screenshot("26-multi-select");
+        await del.Command!.ExecuteAsyncIfPossible();
+        foreach (var v in victims) await UiHarness.WaitFor(() => h.Demo.Server.Get(Gvr.Pods, "default", v.Name) is null, what: "deleted");
+    }
+}
+
+internal static class CommandExt
+{
+    public static async Task ExecuteAsyncIfPossible(this System.Windows.Input.ICommand c)
+    {
+        if (c is CommunityToolkit.Mvvm.Input.IAsyncRelayCommand a) await a.ExecuteAsync(null); else c.Execute(null);
+    }
+}

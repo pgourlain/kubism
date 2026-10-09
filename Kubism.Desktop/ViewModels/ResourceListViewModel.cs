@@ -54,6 +54,15 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
     [ObservableProperty] private bool _sortDescending;
     public List<ResourceRowViewModel> SelectedRows { get; } = [];
 
+    /// <summary>Called by the view after it filled <see cref="SelectedRows"/>.</summary>
+    public void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(HasSelection)); OnPropertyChanged(nameof(DeleteLabel));
+    }
+
+    public bool HasSelection => SelectedRows.Count > 0 || SelectedRow is not null;
+    public string DeleteLabel => SelectedRows.Count > 1 ? $"Delete {SelectedRows.Count} selected" : "Delete";
+
     public bool Namespaced => Kind.Namespaced;
 
     private static string Plural(string kind) => kind.EndsWith("s") ? kind : kind.EndsWith("y") ? kind[..^1] + "ies" : kind + "s";

@@ -6,26 +6,23 @@
              x:Class="Kubism.Desktop.Views.ResourceListView"
              x:DataType="vm:ResourceListViewModel">
   <Grid RowDefinitions="Auto,Auto,*">
-    <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="12,10,12,6">
-      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-        <TextBlock Text="{Binding Title}" Classes="h1" />
-        <TextBlock Text="{Binding CountText}" Classes="muted" VerticalAlignment="Bottom" />
+    <!-- Two rows that wrap: Refresh/Delete must stay reachable when the details panel narrows the list. -->
+    <StackPanel Grid.Row="0" Margin="12,10,12,6" Spacing="6">
+      <StackPanel Orientation="Horizontal" Spacing="10">
+        <TextBlock Text="{Binding Title}" Classes="h1" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding CountText}" Classes="muted" VerticalAlignment="Center" />
+        <Ellipse Width="9" Height="9" Fill="{DynamicResource KubismOkBrush}" IsVisible="{Binding IsLive}" VerticalAlignment="Center" />
+        <Ellipse Width="9" Height="9" Fill="{DynamicResource KubismWarnBrush}" IsVisible="{Binding IsReconnecting}" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding StateText}" Classes="muted" VerticalAlignment="Center" />
       </StackPanel>
-      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-        <v:NamespacePicker DataContext="{Binding Workspace.Namespaces}" IsVisible="{Binding $parent[v:ResourceListView].((vm:ResourceListViewModel)DataContext).Namespaced}" />
-        <TextBox Text="{Binding Filter}" PlaceholderText="Filter (name, key=value)" Width="220" AutomationProperties.Name="Filter" />
-      </StackPanel>
-      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" Margin="12,0,0,0" VerticalAlignment="Center">
-        <Ellipse Width="9" Height="9" Fill="{DynamicResource KubismOkBrush}" IsVisible="{Binding IsLive}" />
-        <Ellipse Width="9" Height="9" Fill="{DynamicResource KubismWarnBrush}" IsVisible="{Binding IsReconnecting}" />
-        <TextBlock Text="{Binding StateText}" Classes="muted" />
-      </StackPanel>
-      <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="12,0,0,0">
-        <CheckBox Content="All columns" IsChecked="{Binding ShowAllColumns}" ToolTip.Tip="Columns…" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
-        <Button Content="Delete" Command="{Binding DeleteSelectedCommand}" />
-      </StackPanel>
-    </Grid>
+      <WrapPanel>
+        <v:NamespacePicker DataContext="{Binding Workspace.Namespaces}" IsVisible="{Binding $parent[v:ResourceListView].((vm:ResourceListViewModel)DataContext).Namespaced}" Margin="0,0,8,4" />
+        <TextBox Text="{Binding Filter}" PlaceholderText="Filter (name, key=value)" Width="220" Margin="0,0,8,4" AutomationProperties.Name="Filter" />
+        <CheckBox Content="All columns" IsChecked="{Binding ShowAllColumns}" ToolTip.Tip="Columns…" Margin="0,0,8,4" />
+        <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,4" />
+        <Button Content="{Binding DeleteLabel}" Command="{Binding DeleteSelectedCommand}" IsEnabled="{Binding HasSelection}" Foreground="{DynamicResource KubismErrorBrush}" Margin="0,0,8,4" AutomationProperties.Name="Delete selected" />
+      </WrapPanel>
+    </StackPanel>
     <Border Grid.Row="1" IsVisible="{Binding ErrorText, Converter={x:Static app:Converters.NotNull}}" Background="{DynamicResource KubismSidebarBrush}" Padding="12,6">
       <TextBlock Text="{Binding ErrorText}" Foreground="{DynamicResource KubismErrorBrush}" TextWrapping="Wrap" />
     </Border>
