@@ -21,6 +21,7 @@ public partial class WorkspaceView : UserControl
         }
     }
 
+    private double _dragStartX, _dragStartWidth;
     private double _dragStartY, _dragStartHeight;
 
     public WorkspaceView()
@@ -32,6 +33,15 @@ public partial class WorkspaceView : UserControl
             w.Details.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(DetailsViewModel.IsOpen)) SyncDetailsColumn(w); };
             SyncDetailsColumn(w);
         };
+        // Own drag handle (not a GridSplitter): the splitter turns the star column into a fixed width, which left a gap when the panel closed.
+        DetailsHandle.PointerPressed += (_, e) => { _dragStartX = e.GetPosition(this).X; _dragStartWidth = DetailsColumn.Width.Value; e.Pointer.Capture(DetailsHandle); e.Handled = true; };
+        DetailsHandle.PointerMoved += (_, e) =>
+        {
+            if (!ReferenceEquals(e.Pointer.Captured, DetailsHandle)) return;
+            var max = Math.Max(300, Bounds.Width - MainGrid.ColumnDefinitions[0].ActualWidth - 260);
+            DetailsColumn.Width = new GridLength(Math.Clamp(_dragStartWidth - (e.GetPosition(this).X - _dragStartX), 280, Math.Min(900, max)));
+        };
+        DetailsHandle.PointerReleased += (_, e) => e.Pointer.Capture(null);
         DockHandle.PointerPressed += (_, e) =>
         {
             if (DataContext is not WorkspaceViewModel ws) return;

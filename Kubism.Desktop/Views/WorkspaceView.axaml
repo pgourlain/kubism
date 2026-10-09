@@ -56,7 +56,7 @@
         <Border Name="DockHandle" Grid.Row="1" Height="6" Cursor="SizeNorthSouth" IsVisible="{Binding Dock.IsOpen}" Background="{DynamicResource KubismBorderBrush}" AutomationProperties.Name="Resize bottom panel" />
         <v:DockView Grid.Row="2" DataContext="{Binding Dock}" IsVisible="{Binding IsOpen}" Height="{Binding Height, Mode=TwoWay}" />
       </Grid>
-      <GridSplitter Grid.Column="3" Width="5" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" IsVisible="{Binding Details.IsOpen}" Background="{DynamicResource KubismBorderBrush}" Cursor="SizeWestEast" AutomationProperties.Name="Resize details panel" />
+      <Border x:Name="DetailsHandle" Grid.Column="3" Width="6" Cursor="SizeWestEast" IsVisible="{Binding Details.IsOpen}" Background="{DynamicResource KubismBorderBrush}" AutomationProperties.Name="Resize details panel" />
       <v:DetailsView Grid.Column="4" DataContext="{Binding Details}" IsVisible="{Binding IsOpen}" />
     </Grid>
   </Grid>

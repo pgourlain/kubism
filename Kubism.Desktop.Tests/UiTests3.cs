@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using Avalonia.LogicalTree;
 using Kubism.Core;
 using Kubism.Core.Api;
 using Kubism.Core.Forward;
@@ -256,7 +257,7 @@ public class UiDetailsResizeTests
         await UiHarness.WaitFor(() => ws.Details.IsOpen);
         UiHarness.Pump();
         Assert.Equal(420, col.Width.Value);
-        var splitter = h.Find<Avalonia.Controls.GridSplitter>(g => Avalonia.Automation.AutomationProperties.GetName(g) == "Resize details panel")!;
+        var splitter = h.Find<Avalonia.Controls.Border>(g => Avalonia.Automation.AutomationProperties.GetName(g) == "Resize details panel")!;
         var p = Avalonia.VisualExtensions.TranslatePoint(splitter, new Avalonia.Point(2, 50), h.Window)!.Value;
         h.Window.MouseDown(p, Avalonia.Input.MouseButton.Left);
         h.Window.MouseMove(new Avalonia.Point(p.X - 120, p.Y));
@@ -269,6 +270,13 @@ public class UiDetailsResizeTests
         ws.Details.CloseCommand.Execute(null);
         UiHarness.Pump();
         Assert.Equal(0, col.Width.Value);
+        // With nothing selected the centre fills everything right of the sidebar (no leftover fixed width).
+        var workspace = h.Find<Kubism.Desktop.Views.WorkspaceView>()!;
+        var grid = workspace.FindDescendantOfType<Avalonia.Controls.Grid>()!;
+        var centre = h.Find<Kubism.Desktop.Views.ResourceListView>()!;
+        var centreRight = Avalonia.VisualExtensions.TranslatePoint(centre, new Avalonia.Point(centre.Bounds.Width, 0), h.Window)!.Value.X;
+        Assert.True(centreRight >= h.Window.Bounds.Width - 2, $"centre ends at {centreRight}, window is {h.Window.Bounds.Width}");
+        h.Screenshot("29-no-selection-full-width");
         list.SelectedRow = list.Rows[1];
         await UiHarness.WaitFor(() => ws.Details.IsOpen);
         UiHarness.Pump();
