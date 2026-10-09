@@ -299,6 +299,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         finally { IsBusy = false; BusyText = ""; _busyCts = null; }
     }
 
+    [RelayCommand]
+    public Task ShowAboutAsync()
+    {
+        var v = typeof(MainViewModel).Assembly.GetName().Version;
+        return Dialogs.ShowAboutAsync(new AboutInfo("Kubism", "Inspect. Steer. Monitor.", v is null ? "0.1.0" : $"{v.Major}.{v.Minor}.{v.Build}",
+            $".NET {Environment.Version}", System.Runtime.InteropServices.RuntimeInformation.OSDescription, "MIT licensed", "https://github.com/pgourlain/kubism", DiagnosticsText()));
+    }
+
     public string DiagnosticsText()
     {
         var sb = new System.Text.StringBuilder();
@@ -314,8 +322,10 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        foreach (var w in Workspaces.ToList()) await w.DisposeAsync();
+        // In parallel: each workspace cancels its session first, so sockets, watches and forwards stop together.
+        var all = Workspaces.ToList();
         Workspaces.Clear();
+        await Task.WhenAll(all.Select(async w => { try { await w.DisposeAsync(); } catch { } }));
         await _sessions.DisposeAsync();
     }
 }

@@ -41,7 +41,7 @@ public static class MenuSpecs
             new("Copy diagnostics".T(), () => _ = vm.Clipboard.SetTextAsync(vm.DiagnosticsText())),
             new("Check for updates", () => _ = vm.CheckForUpdatesAsync(true)),
             MenuSpec.Sep(),
-            new("About Kubism".T(), () => _ = vm.Dialogs.ShowTextAsync("About Kubism", $"Kubism — Kubernetes Interface for Supervising Multi-clusters\nInspect. Steer. Monitor.\n\nVersion {typeof(MenuSpecs).Assembly.GetName().Version}\n.NET {Environment.Version}\n\nMIT licensed.")),
+            new("About Kubism".T(), () => _ = vm.ShowAboutAsync()),
         ]),
     ];
 

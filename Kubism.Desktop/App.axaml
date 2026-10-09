@@ -3,6 +3,7 @@
              xmlns:vm="using:Kubism.Desktop.ViewModels"
              xmlns:v="using:Kubism.Desktop.Views"
              x:Class="Kubism.Desktop.App"
+             Name="Kubism"
              RequestedThemeVariant="Default">
   <Application.DataTemplates>
     <DataTemplate DataType="vm:OverviewViewModel"><v:OverviewView /></DataTemplate>
@@ -21,30 +22,36 @@
     <ResourceDictionary>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
-          <SolidColorBrush x:Key="KubismSidebarBrush" Color="#F3F4F6" />
-          <SolidColorBrush x:Key="KubismCatalogBrush" Color="#E5E7EB" />
+          <SolidColorBrush x:Key="KubismBgBrush" Color="#F6F7F9" />
+          <SolidColorBrush x:Key="KubismCatalogBrush" Color="#E9ECF0" />
           <SolidColorBrush x:Key="KubismPanelBrush" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="KubismBorderBrush" Color="#D1D5DB" />
-          <SolidColorBrush x:Key="KubismMutedBrush" Color="#4B5563" />
-          <SolidColorBrush x:Key="KubismOkBrush" Color="#047857" />
-          <SolidColorBrush x:Key="KubismWarnBrush" Color="#B45309" />
-          <SolidColorBrush x:Key="KubismErrorBrush" Color="#B91C1C" />
-          <SolidColorBrush x:Key="KubismAccentBrush" Color="#2563EB" />
-          <SolidColorBrush x:Key="KubismNewRowBrush" Color="#DBEAFE" />
+          <SolidColorBrush x:Key="KubismSidebarBrush" Color="#F0F2F5" />
+          <SolidColorBrush x:Key="KubismBorderBrush" Color="#DDE1E7" />
+          <SolidColorBrush x:Key="KubismMutedBrush" Color="#5B6778" />
+          <SolidColorBrush x:Key="KubismOkBrush" Color="#1A7F37" />
+          <SolidColorBrush x:Key="KubismWarnBrush" Color="#8A5A00" />
+          <SolidColorBrush x:Key="KubismErrorBrush" Color="#CF222E" />
+          <SolidColorBrush x:Key="KubismAccentBrush" Color="#0A7066" />
+          <SolidColorBrush x:Key="KubismAccentSoftBrush" Color="#1A0A7066" />
+          <SolidColorBrush x:Key="KubismOnAccentBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="KubismNewRowBrush" Color="#1A0A7066" />
           <SolidColorBrush x:Key="KubismProductionBrush" Color="#B91C1C" />
           <SolidColorBrush x:Key="KubismReadOnlyBrush" Color="#6B21A8" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="KubismSidebarBrush" Color="#1F2937" />
-          <SolidColorBrush x:Key="KubismCatalogBrush" Color="#111827" />
-          <SolidColorBrush x:Key="KubismPanelBrush" Color="#18202F" />
-          <SolidColorBrush x:Key="KubismBorderBrush" Color="#374151" />
-          <SolidColorBrush x:Key="KubismMutedBrush" Color="#9CA3AF" />
-          <SolidColorBrush x:Key="KubismOkBrush" Color="#34D399" />
-          <SolidColorBrush x:Key="KubismWarnBrush" Color="#FBBF24" />
-          <SolidColorBrush x:Key="KubismErrorBrush" Color="#F87171" />
-          <SolidColorBrush x:Key="KubismAccentBrush" Color="#60A5FA" />
-          <SolidColorBrush x:Key="KubismNewRowBrush" Color="#1E3A5F" />
+          <SolidColorBrush x:Key="KubismBgBrush" Color="#0E1116" />
+          <SolidColorBrush x:Key="KubismCatalogBrush" Color="#0A0D12" />
+          <SolidColorBrush x:Key="KubismPanelBrush" Color="#151A21" />
+          <SolidColorBrush x:Key="KubismSidebarBrush" Color="#1B222B" />
+          <SolidColorBrush x:Key="KubismBorderBrush" Color="#262E39" />
+          <SolidColorBrush x:Key="KubismMutedBrush" Color="#8A96A6" />
+          <SolidColorBrush x:Key="KubismOkBrush" Color="#3FB950" />
+          <SolidColorBrush x:Key="KubismWarnBrush" Color="#D29922" />
+          <SolidColorBrush x:Key="KubismErrorBrush" Color="#F85149" />
+          <SolidColorBrush x:Key="KubismAccentBrush" Color="#2DD4BF" />
+          <SolidColorBrush x:Key="KubismAccentSoftBrush" Color="#1F2DD4BF" />
+          <SolidColorBrush x:Key="KubismOnAccentBrush" Color="#06201C" />
+          <SolidColorBrush x:Key="KubismNewRowBrush" Color="#1F2DD4BF" />
           <SolidColorBrush x:Key="KubismProductionBrush" Color="#DC2626" />
           <SolidColorBrush x:Key="KubismReadOnlyBrush" Color="#7E22CE" />
         </ResourceDictionary>
@@ -53,10 +60,60 @@
   </Application.Resources>
 
   <Application.Styles>
-    <FluentTheme />
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Light" Accent="#0A7066" RegionColor="#F6F7F9" />
+        <ColorPaletteResources x:Key="Dark" Accent="#2DD4BF" RegionColor="#0E1116" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
     <Style Selector="TabItem"><Setter Property="FontSize" Value="14" /><Setter Property="Padding" Value="10,6" /></Style>
+    <Style Selector="Window"><Setter Property="Background" Value="{DynamicResource KubismBgBrush}" /></Style>
+    <Style Selector="Button">
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12,6" />
+      <Setter Property="Background" Value="{DynamicResource KubismSidebarBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KubismBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource KubismAccentSoftBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KubismAccentBrush}" />
+    </Style>
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource KubismAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource KubismOnAccentBrush}" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TextBox"><Setter Property="CornerRadius" Value="8" /><Setter Property="Background" Value="{DynamicResource KubismBgBrush}" /></Style>
+    <Style Selector="TreeViewItem">
+      <Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" />
+      <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource KubismAccentSoftBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:selected /template/ ContentPresenter#PART_HeaderPresenter">
+      <Setter Property="Foreground" Value="{DynamicResource KubismAccentBrush}" />
+    </Style>
+    <Style Selector="TreeViewItem:selected:focus /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource KubismAccentSoftBrush}" />
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource KubismAccentSoftBrush}" />
+    </Style>
+    <Style Selector="DataGrid">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource KubismBorderBrush}" />
+      <Setter Property="RowBackground" Value="Transparent" />
+    </Style>
+    <Style Selector="DataGridColumnHeader"><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /><Setter Property="Background" Value="Transparent" /><Setter Property="FontWeight" Value="Medium" /></Style>
+    <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle"><Setter Property="Fill" Value="{DynamicResource KubismAccentSoftBrush}" /></Style>
+    <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle"><Setter Property="Fill" Value="{DynamicResource KubismSidebarBrush}" /></Style>
+    <Style Selector="TabItem:selected"><Setter Property="Foreground" Value="{DynamicResource KubismAccentBrush}" /></Style>
+    <Style Selector="Border.rail"><Setter Property="Background" Value="{DynamicResource KubismCatalogBrush}" /></Style>
     <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /></Style>
     <Style Selector="TextBlock.h1"><Setter Property="FontSize" Value="20" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
     <Style Selector="TextBlock.h2"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
@@ -64,8 +121,8 @@
       <Setter Property="Background" Value="{DynamicResource KubismPanelBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource KubismBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="6" />
-      <Setter Property="Padding" Value="12" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="14" />
     </Style>
     <Style Selector="Border.chip">
       <Setter Property="Background" Value="{DynamicResource KubismSidebarBrush}" />

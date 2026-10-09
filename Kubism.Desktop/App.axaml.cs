@@ -12,6 +12,7 @@ namespace Kubism.Desktop;
 public partial class App : Application
 {
     private DemoEnvironment? _demo;
+    private readonly List<IDisposable> _signals = [];
 
     public static ServiceProvider? Services { get; private set; }
 
@@ -49,12 +50,32 @@ public partial class App : Application
             Shell.ShellEnvironmentSetup.Apply();
             var vm = Services.GetRequiredService<MainViewModel>();
             vm.ApplySettings();
+            if (OperatingSystem.IsMacOS())
+            {
+                // macOS application menu (named after Application.Name): About and Settings live here.
+                var appMenu = new Avalonia.Controls.NativeMenu();
+                var about = new Avalonia.Controls.NativeMenuItem("About Kubism"); about.Click += (_, _) => _ = vm.ShowAboutAsync();
+                var prefs = new Avalonia.Controls.NativeMenuItem("Settings…") { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.OemComma, Avalonia.Input.KeyModifiers.Meta) };
+                prefs.Click += (_, _) => _ = vm.EditSettingsAsync();
+                appMenu.Items.Add(about); appMenu.Items.Add(new Avalonia.Controls.NativeMenuItemSeparator()); appMenu.Items.Add(prefs);
+                Avalonia.Controls.NativeMenu.SetMenu(this, appMenu);
+            }
             desktop.MainWindow = new MainWindow { DataContext = vm };
+            // SIGTERM/SIGINT (kill, Ctrl+C, logout) quit through the same fast path as the menu.
+            foreach (var sig in new[] { System.Runtime.InteropServices.PosixSignal.SIGTERM, System.Runtime.InteropServices.PosixSignal.SIGINT })
+                _signals.Add(System.Runtime.InteropServices.PosixSignalRegistration.Create(sig, ctx => { ctx.Cancel = true; Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()); }));
             if (Services.GetRequiredService<ISettingsStore>().Current.CheckForUpdates) _ = vm.CheckForUpdatesAsync();
             desktop.Exit += (_, _) =>
             {
-                try { vm.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3)); } catch { }
-                try { _demo?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3)); } catch { }
+                // Quit must feel instant: give the clean shutdown under a second, then leave regardless
+                // (cluster connections and local listeners die with the process anyway).
+                var cleanup = Task.Run(async () =>
+                {
+                    try { await vm.DisposeAsync(); } catch { }
+                    try { if (_demo is not null) await _demo.DisposeAsync(); } catch { }
+                });
+                cleanup.Wait(TimeSpan.FromMilliseconds(800));
+                Environment.Exit(0);
             };
         }
         base.OnFrameworkInitializationCompleted();

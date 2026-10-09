@@ -20,6 +20,8 @@ public sealed class FakeDialogService : IDialogService
     public Task<bool> ConfirmAsync(ConfirmRequest r) { Shown.Add($"confirm:{r.Title}:{r.Message}"); return Task.FromResult(ConfirmResult); }
     public Task<string?> ConfirmTypedAsync(string title, string message, string expected) { Shown.Add($"typed:{title}:{expected}"); return Task.FromResult(TypedResponse(expected)); }
     public Task ShowErrorAsync(string title, string message) { Shown.Add($"error:{title}:{message}"); return Task.CompletedTask; }
+    public AboutInfo? About { get; private set; }
+    public Task ShowAboutAsync(AboutInfo info) { About = info; Shown.Add("about"); return Task.CompletedTask; }
     public Task ShowTextAsync(string title, string text) { Shown.Add($"text:{title}:{text}"); return Task.CompletedTask; }
     public Task<string?> PromptAsync(string title, string message, string? initial = null) { Shown.Add($"prompt:{title}"); return Task.FromResult(PromptResponse?.Invoke(initial ?? "") ?? initial); }
     public Task<string?> ChooseAsync(string title, IReadOnlyList<string> options) { Shown.Add($"choose:{title}"); return Task.FromResult(ChooseResponse(options)); }

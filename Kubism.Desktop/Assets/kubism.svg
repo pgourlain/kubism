@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1B2430"/><stop offset="1" stop-color="#0A0D12"/></linearGradient>
+  </defs>
+  <rect x="40" y="40" width="944" height="944" rx="212" fill="url(#bg)"/>
+  <!-- cube seen from three angles: Inspect, Steer, Monitor -->
+  <polygon points="512,176 800,340 512,504 224,340" fill="#5EEAD4"/>
+  <polygon points="224,340 512,504 512,848 224,684" fill="#14B8A6"/>
+  <polygon points="800,340 512,504 512,848 800,684" fill="#0F766E"/>
+  <polygon points="512,176 656,258 512,340 368,258" fill="#CCFBF1" opacity="0.9"/>
+  <path d="M512 504 V848 M224 340 L512 504 L800 340" stroke="#0A0D12" stroke-width="14" fill="none" stroke-linejoin="round"/>
+</svg>

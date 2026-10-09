@@ -192,8 +192,8 @@ public class UiRightSizingAndHelmTests
         ws.Navigate(ws.FindNav(NavTarget.Helm)!);
         await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel);
         var vm = (HelmViewModel)ws.CurrentContent!;
-        await UiHarness.WaitFor(() => vm.Releases.Count == 1, what: "releases");
-        vm.Selected = vm.Releases[0];
+        await UiHarness.WaitFor(() => vm.Releases.Any(r => r.Name == "nginx"), what: "releases");
+        vm.Selected = vm.Releases.First(r => r.Name == "nginx");
         Assert.Equal(2, vm.Selected.Revision);
         Assert.Contains("replicas: 3", vm.ValuesText);
         await UiHarness.WaitFor(() => vm.History.Count == 2, what: "history");
@@ -229,12 +229,13 @@ public class UiHelmDiagnosisTests
         var ws = await h.ConnectAsync();
         ws.Namespaces.SelectAll();
         ws.Navigate(ws.FindNav(NavTarget.Helm)!);
-        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Count == 2);
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Any(r => r.Name == "fine"));
         var vm = (HelmViewModel)ws.CurrentContent!;
-        // The failing release is selected automatically and the Diagnostics tab is shown first.
+        vm.Selected = vm.Releases.First(r => r.Name == "broken");
         await UiHarness.WaitFor(() => vm.Selected?.Name == "broken" && !vm.DiagLoading && vm.DiagPods.Count > 0, what: "diagnosis");
         Assert.True(vm.HasFailing);
         Assert.Contains("broken", vm.FailingSummary);
+        Assert.Contains("payments", vm.FailingSummary); // the demo's own failed release
         Assert.Equal(0, vm.Tab);
         Assert.Contains("timed out", vm.DiagHeadline);
         Assert.Contains(vm.DiagPods, p => p.Name == "crashy-0" && p.Status == "CrashLoopBackOff");
@@ -258,5 +259,30 @@ public class UiHelmDiagnosisTests
         Assert.True(Core.Helm.HelmDiagnostics.IsProblem(R("failed", 0), now));
         Assert.False(Core.Helm.HelmDiagnostics.IsProblem(R("deployed", 999), now));
         Assert.Contains("--wait timeout", Core.Helm.HelmDiagnostics.Headline(R("pending-install", 9), now));
+    }
+}
+
+public class UiDemoHelmTests
+{
+    [AvaloniaFact]
+    public async Task Demo_cluster_has_healthy_failed_and_stuck_helm_releases()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Helm)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Count == 4, what: "demo releases");
+        var vm = (HelmViewModel)ws.CurrentContent!;
+        Assert.Equal(["cert-manager", "ingress-nginx", "payments", "reporting"], vm.Releases.Select(r => r.Name));
+        Assert.Equal(3, vm.Releases.First(r => r.Name == "ingress-nginx").Revision);
+        Assert.Equal(["payments", "reporting"], vm.Failing.Select(r => r.Name).OrderBy(x => x));
+        await UiHarness.WaitFor(() => vm.Selected is not null && !vm.DiagLoading && vm.DiagPods.Count > 0);
+        Assert.Equal("payments", vm.Selected!.Name);   // first failing one is picked
+        Assert.Contains(vm.DiagEvents, e => e.Reason == "BackOff");
+        vm.Selected = vm.Releases.First(r => r.Name == "ingress-nginx");
+        Assert.Contains("replicaCount: 3", vm.ValuesText);
+        await UiHarness.WaitFor(() => vm.History.Count == 3);
+        vm.Selected = vm.Releases.First(r => r.Name == "reporting");
+        await UiHarness.WaitFor(() => vm.DiagHeadline.Contains("Stuck in pending-upgrade"));
     }
 }

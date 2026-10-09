@@ -28,11 +28,13 @@ case "$RID" in
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleExecutable</key><string>Kubism</string>
+  <key>CFBundleIconFile</key><string>Kubism.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+    cp Kubism.Desktop/Assets/Kubism.icns "$APP/Contents/Resources/Kubism.icns"
     chmod +x "$APP/Contents/MacOS/Kubism"
     if command -v hdiutil >/dev/null; then
       hdiutil create -quiet -volname Kubism -srcfolder "$APP" -ov -format UDZO "$OUT/Kubism-$VERSION-$RID.dmg"
@@ -44,6 +46,7 @@ PLIST
     STAGE="$OUT/kubism-$VERSION"
     rm -rf "$STAGE"; mkdir -p "$STAGE/opt/kubism" "$STAGE/usr/share/applications"
     cp -R "$PUB"/. "$STAGE/opt/kubism/"
+    cp Kubism.Desktop/Assets/kubism.png "$STAGE/opt/kubism/kubism.png"
     cp packaging/kubism.desktop "$STAGE/usr/share/applications/kubism.desktop"
     cp packaging/PKGBUILD "$OUT/PKGBUILD" 2>/dev/null || true
     tar -C "$OUT" -czf "$OUT/Kubism-$VERSION-$RID.tar.gz" "kubism-$VERSION"

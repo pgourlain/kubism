@@ -10,18 +10,21 @@
     <!-- In-window menu (non-macOS); macOS gets a NativeMenu built from the same MenuSpec records. -->
     <Menu Name="MainMenu" Grid.Row="0" />
 
-    <Grid Grid.Row="1" ColumnDefinitions="250,Auto,*">
-      <!-- Cluster catalog -->
-      <Grid Grid.Column="0" RowDefinitions="Auto,*" Background="{DynamicResource KubismCatalogBrush}">
-        <Grid ColumnDefinitions="*,Auto,Auto" Margin="12,10,8,6">
-          <TextBlock Text="Clusters" Classes="h2" VerticalAlignment="Center" />
-          <Button Grid.Column="1" Classes="link" Command="{Binding AddKubeconfigCommand}" ToolTip.Tip="Add kubeconfig file…" AutomationProperties.Name="Add kubeconfig file" Content="+" />
-          <Button Grid.Column="2" Classes="link" Command="{Binding ReloadCatalogCommand}" ToolTip.Tip="Reload" AutomationProperties.Name="Reload clusters" Content="⟳" />
-        </Grid>
-        <ListBox Name="CatalogList" Grid.Row="1" ItemsSource="{Binding Clusters}" SelectedItem="{Binding SelectedCluster}" Background="Transparent" AutomationProperties.Name="Cluster catalog">
+    <Grid Grid.Row="1" ColumnDefinitions="68,Auto,*">
+      <!-- Cluster rail: one tile per kubeconfig context -->
+      <Grid Grid.Column="0" RowDefinitions="*,Auto" Background="{DynamicResource KubismCatalogBrush}">
+        <ListBox Name="CatalogList" ItemsSource="{Binding Clusters}" SelectedItem="{Binding SelectedCluster}" Background="Transparent" Padding="0,10" AutomationProperties.Name="Cluster catalog">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:ClusterItemViewModel">
-              <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2">
+              <Grid Width="44" Height="44" HorizontalAlignment="Center" Background="Transparent">
+                <ToolTip.Tip>
+                  <StackPanel>
+                    <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Host}" Classes="muted" />
+                    <TextBlock Text="{Binding SafetyLabel}" IsVisible="{Binding SafetyLabel.Length}" />
+                    <TextBlock Text="{Binding StatusText}" />
+                  </StackPanel>
+                </ToolTip.Tip>
                 <Grid.ContextMenu>
                   <ContextMenu>
                     <MenuItem Header="Connect" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).ConnectCommand}" CommandParameter="{Binding}" />
@@ -33,27 +36,25 @@
                     <MenuItem Header="Move down" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).MoveDownCommand}" CommandParameter="{Binding}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <Border Width="30" Height="30" CornerRadius="15" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" Margin="0,0,10,0" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding Letter}" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <Border Width="40" Height="40" CornerRadius="12" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <TextBlock Text="{Binding Letter}" Foreground="White" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
-                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Text="{Binding Host}" Classes="muted" FontSize="11" TextTrimming="CharacterEllipsis" />
-                  <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasError}" Foreground="{DynamicResource KubismErrorBrush}" FontSize="11" TextWrapping="Wrap" MaxHeight="48" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                  <Border IsVisible="{Binding IsProduction}" Background="{DynamicResource KubismProductionBrush}" CornerRadius="3" Padding="4,0">
-                    <TextBlock Text="PROD" Foreground="White" FontSize="9" FontWeight="Bold" />
-                  </Border>
-                  <Border IsVisible="{Binding IsReadOnly}" Background="{DynamicResource KubismReadOnlyBrush}" CornerRadius="3" Padding="4,0">
-                    <TextBlock Text="RO" Foreground="White" FontSize="9" FontWeight="Bold" />
-                  </Border>
-                  <Ellipse Width="9" Height="9" Fill="{Binding State, Converter={x:Static app:Converters.StateBrush}}" ToolTip.Tip="{Binding StatusText}" />
-                </StackPanel>
+                <Ellipse Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" Stroke="{DynamicResource KubismCatalogBrush}" StrokeThickness="2"
+                         Fill="{Binding State, Converter={x:Static app:Converters.StateBrush}}" />
+                <Border IsVisible="{Binding IsProduction}" Background="{DynamicResource KubismProductionBrush}" CornerRadius="3" Padding="3,0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-4,-4,0,0">
+                  <TextBlock Text="PROD" Foreground="White" FontSize="8" FontWeight="Bold" />
+                </Border>
+                <Border IsVisible="{Binding IsReadOnly}" Background="{DynamicResource KubismReadOnlyBrush}" CornerRadius="3" Padding="3,0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-4,-4,0,0">
+                  <TextBlock Text="RO" Foreground="White" FontSize="8" FontWeight="Bold" />
+                </Border>
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,10" HorizontalAlignment="Center">
+          <Button Classes="link" Command="{Binding AddKubeconfigCommand}" ToolTip.Tip="Add kubeconfig file…" AutomationProperties.Name="Add kubeconfig file" Content="＋" FontSize="18" />
+          <Button Classes="link" Command="{Binding ReloadCatalogCommand}" ToolTip.Tip="Reload clusters" AutomationProperties.Name="Reload clusters" Content="⟳" FontSize="16" />
+        </StackPanel>
       </Grid>
       <GridSplitter Grid.Column="1" Width="1" Background="{DynamicResource KubismBorderBrush}" />
 

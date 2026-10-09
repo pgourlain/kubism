@@ -361,7 +361,7 @@ internal sealed class WebSocketAdapter(WebSocket ws) : IKubeSocket
         {
             if (ws.State == WebSocketState.Open)
             {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
                 await ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", cts.Token).ConfigureAwait(false);
             }
         }

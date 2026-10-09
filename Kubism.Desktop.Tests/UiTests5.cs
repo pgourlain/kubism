@@ -266,3 +266,58 @@ public class UiSignInTests
         Assert.Empty(h.Main.Workspaces);
     }
 }
+
+public class UiDialogTests
+{
+    private static async Task<T?> Drive<T>(Func<AvaloniaDialogService, Task<T>> show, string buttonText)
+    {
+        void OnOpened(Window w) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var b = w.GetVisualDescendants().OfType<Button>().First(x => x.Content as string == buttonText);
+            b.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        }, Avalonia.Threading.DispatcherPriority.Background);
+        AvaloniaDialogService.DialogOpened += OnOpened;
+        try { return await show(new AvaloniaDialogService()); }
+        finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
+    }
+
+    [AvaloniaFact]
+    public async Task Cancel_closes_confirm_and_returns_false_and_ok_returns_true()
+    {
+        Assert.False(await Drive(s => s.ConfirmAsync(new ConfirmRequest("t", "sure?", "Delete", true)), "Cancel"));
+        Assert.True(await Drive(s => s.ConfirmAsync(new ConfirmRequest("t", "sure?", "Delete", true)), "Delete"));
+    }
+
+    [AvaloniaFact]
+    public async Task Cancel_on_prompt_choose_and_typed_confirmation_returns_nothing()
+    {
+        Assert.Null(await Drive(s => s.PromptAsync("t", "name?", "x"), "Cancel"));
+        Assert.Equal("x", await Drive(s => s.PromptAsync("t", "name?", "x"), "OK"));
+        Assert.Null(await Drive(s => s.ChooseAsync("t", ["a", "b"]), "Cancel"));
+        Assert.Equal("a", await Drive(s => s.ChooseAsync("t", ["a", "b"]), "OK"));
+        Assert.Null(await Drive(s => s.ConfirmTypedAsync("t", "m", "name"), "Cancel"));
+    }
+
+    [AvaloniaFact]
+    public async Task About_dialog_shows_name_and_version_and_closes()
+    {
+        var info = new AboutInfo("Kubism", "Inspect. Steer. Monitor.", "1.2.3", ".NET 10", "macOS", "MIT", "https://example.test", "diag");
+        string? text = null;
+        void OnOpened(Window w) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { text = string.Join("|", w.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)); w.Close(true); }, Avalonia.Threading.DispatcherPriority.Background);
+        AvaloniaDialogService.DialogOpened += OnOpened;
+        try { await new AvaloniaDialogService().ShowAboutAsync(info); } finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
+        Assert.Contains("Kubism", text); Assert.Contains("Version 1.2.3", text); Assert.Contains("Inspect. Steer. Monitor.", text);
+    }
+
+    [AvaloniaFact]
+    public async Task About_menu_entry_exists_and_opens_the_about_dialog()
+    {
+        await using var h = await UiHarness.StartAsync();
+        await h.Main.ShowAboutAsync();
+        Assert.NotNull(h.Dialogs.About);
+        Assert.Equal("Kubism", h.Dialogs.About!.Name);
+        var spec = MenuSpecs.Build(h.Main, h.Window);
+        Assert.Contains(spec.First(m => m.Header == "Help").Children!, m => m.Header == "About Kubism");
+        Assert.Equal("Kubism", Application.Current!.Name);
+    }
+}

@@ -15,22 +15,28 @@ public sealed class AvaloniaDialogService : IDialogService
 {
     private static Window? Owner => WindowHelper.MainWindow;
 
-    private static Window Make(string title, double width, double height, Control content, bool resizable = false)
+    /// <summary>Configures <paramref name="w"/>, the same window the dialog buttons close (a separate instance made Cancel do nothing).</summary>
+    private static Window Make(Window w, string title, double width, double height, Control content, bool resizable = false)
     {
-        var w = new Window
-        {
-            Title = title, Width = width, Height = height, CanResize = resizable, Content = content,
-            WindowStartupLocation = Owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner,
-            ShowInTaskbar = false,
-        };
+        w.Title = title; w.Width = width; w.Height = height; w.CanResize = resizable; w.Content = content;
+        w.WindowStartupLocation = Owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner;
+        w.ShowInTaskbar = false;
+        w.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Escape) { CloseWith(w, null); e.Handled = true; } };
         return w;
     }
 
+    /// <summary>Raised when a dialog window opens (UI tests drive the buttons).</summary>
+    public static event Action<Window>? DialogOpened;
+
+    /// <summary>Remembers the result on the window so the ownerless fallback (before the main window exists, and in tests) returns it too.</summary>
+    private static void CloseWith(Window w, object? result) { w.Tag = result; w.Close(result); }
+
     private static async Task<T?> ShowAsync<T>(Window w)
     {
+        DialogOpened?.Invoke(w);
         if (Owner is { } o) return await w.ShowDialog<T?>(o);
         var tcs = new TaskCompletionSource<T?>();
-        w.Closed += (_, _) => tcs.TrySetResult(default);
+        w.Closed += (_, _) => tcs.TrySetResult(w.Tag is T t ? t : default);
         w.Show();
         return await tcs.Task;
     }
@@ -41,13 +47,13 @@ public sealed class AvaloniaDialogService : IDialogService
         if (cancel)
         {
             var c = new Button { Content = "Cancel".T(), MinWidth = 80 };
-            c.Click += (_, _) => w.Close(null);
+            c.Click += (_, _) => CloseWith(w, null);
             panel.Children.Add(c);
         }
         var b = new Button { Content = ok, MinWidth = 80, IsEnabled = okEnabled, IsDefault = true };
         if (destructive) b.Background = new SolidColorBrush(Color.Parse("#B91C1C")) { };
         if (destructive) b.Foreground = Brushes.White;
-        b.Click += (_, _) => w.Close(okResult ?? true);
+        b.Click += (_, _) => CloseWith(w, okResult ?? true);
         panel.Children.Add(b);
         if (okOut is not null) { }
         return panel;
@@ -59,7 +65,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 8 };
         panel.Children.Add(new TextBlock { Text = r.Message, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(Buttons(w, r.ConfirmText, destructive: r.Destructive));
-        var win = Make(r.Title, 420, 180, panel);
+        var win = Make(w, r.Title, 420, 180, panel);
         return await ShowAsync<bool?>(win) == true;
     }
 
@@ -75,7 +81,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var ok = (Button)okPanel.Children[^1];
         box.TextChanged += (_, _) => ok.IsEnabled = box.Text == expected;
         panel.Children.Add(okPanel);
-        var win = Make(title, 460, 240, panel);
+        var win = Make(w, title, 460, 240, panel);
         ok.Click -= null;
         var result = await ShowAsync<bool?>(win);
         return result == true && box.Text == expected ? box.Text : null;
@@ -87,7 +93,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 8 };
         panel.Children.Add(new TextBox { Text = message, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MaxHeight = 220, BorderThickness = new Thickness(0) });
         panel.Children.Add(Buttons(w, "OK", cancel: false));
-        await ShowAsync<bool?>(Make(title, 520, 240, panel, true));
+        await ShowAsync<bool?>(Make(w, title, 520, 240, panel, true));
     }
 
     public async Task ShowTextAsync(string title, string text)
@@ -98,7 +104,38 @@ public sealed class AvaloniaDialogService : IDialogService
         var b = Buttons(w, "OK", cancel: false);
         Grid.SetRow(b, 1);
         grid.Children.Add(b);
-        await ShowAsync<bool?>(Make(title, 640, 420, grid, true));
+        await ShowAsync<bool?>(Make(w, title, 640, 420, grid, true));
+    }
+
+    public async Task ShowAboutAsync(AboutInfo info)
+    {
+        var w = new Window();
+        var root = new StackPanel { Margin = new Thickness(28), Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center };
+        try
+        {
+            root.Children.Add(new Image
+            {
+                Width = 96, Height = 96, Margin = new Thickness(0, 0, 0, 6),
+                Source = new Avalonia.Media.Imaging.Bitmap(Avalonia.Platform.AssetLoader.Open(new Uri("avares://Kubism/Assets/kubism.png"))),
+            });
+        }
+        catch (Exception) { /* icon is decoration */ }
+        root.Children.Add(new TextBlock { Text = info.Name, FontSize = 24, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center });
+        root.Children.Add(new TextBlock { Text = info.Tagline, Opacity = 0.7, HorizontalAlignment = HorizontalAlignment.Center });
+        root.Children.Add(new TextBlock { Text = $"Version {info.Version}", Margin = new Thickness(0, 10, 0, 0), HorizontalAlignment = HorizontalAlignment.Center });
+        root.Children.Add(new TextBlock { Text = $"{info.Runtime} · {info.Os}", Opacity = 0.6, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
+        root.Children.Add(new TextBlock { Text = info.License, Opacity = 0.6, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
+        var link = new Button { Content = info.Url, Classes = { "link" }, HorizontalAlignment = HorizontalAlignment.Center };
+        link.Click += (_, _) => new SystemBrowserLauncher().Open(info.Url);
+        root.Children.Add(link);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 0) };
+        var copy = new Button { Content = "Copy diagnostics" };
+        copy.Click += async (_, _) => await new AvaloniaClipboardService().SetTextAsync(info.Diagnostics);
+        var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
+        ok.Click += (_, _) => CloseWith(w, true);
+        row.Children.Add(copy); row.Children.Add(ok);
+        root.Children.Add(row);
+        await ShowAsync<bool?>(Make(w, $"About {info.Name}", 420, 430, root));
     }
 
     public async Task<string?> PromptAsync(string title, string message, string? initial = null)
@@ -109,7 +146,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var box = new TextBox { Text = initial ?? "" };
         panel.Children.Add(box);
         panel.Children.Add(Buttons(w, "OK"));
-        var win = Make(title, 420, 190, panel);
+        var win = Make(w, title, 420, 190, panel);
         win.Opened += (_, _) => { box.Focus(); box.SelectAll(); };
         return await ShowAsync<bool?>(win) == true ? box.Text : null;
     }
@@ -121,7 +158,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 8 };
         panel.Children.Add(list);
         panel.Children.Add(Buttons(w, "OK"));
-        var win = Make(title, 380, 360, panel);
+        var win = Make(w, title, 380, 360, panel);
         list.DoubleTapped += (_, _) => win.Close(true);
         return await ShowAsync<bool?>(win) == true ? list.SelectedItem as string : null;
     }
@@ -163,7 +200,7 @@ public sealed class AvaloniaDialogService : IDialogService
         Grid.SetRow(buttons, row); Grid.SetColumnSpan(buttons, 2);
         grid.Children.Add(buttons);
         var scroll = new ScrollViewer { Content = grid };
-        return await ShowAsync<bool?>(Make("Cluster settings", 560, 560, scroll, true)) == true ? vm : null;
+        return await ShowAsync<bool?>(Make(w, "Cluster settings", 560, 560, scroll, true)) == true ? vm : null;
     }
 
     public async Task<SettingsEditorViewModel?> EditSettingsAsync(SettingsEditorViewModel vm)
@@ -197,7 +234,7 @@ public sealed class AvaloniaDialogService : IDialogService
         grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
         Grid.SetRow(buttons, row); Grid.SetColumnSpan(buttons, 2);
         grid.Children.Add(buttons);
-        return await ShowAsync<bool?>(Make("Settings", 600, 560, new ScrollViewer { Content = grid }, true)) == true ? vm : null;
+        return await ShowAsync<bool?>(Make(w, "Settings", 600, 560, new ScrollViewer { Content = grid }, true)) == true ? vm : null;
     }
 
     public async Task<string?> PickFileAsync(string title)
@@ -235,7 +272,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var cancel = new Button { Content = "Cancel".T(), HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 8, 0, 0) };
         cancel.Click += (_, _) => { cts.Cancel(); w.Close(); };
         Grid.SetRow(cancel, 2); grid.Children.Add(cancel);
-        var win = Make("Sign in", 560, 300, grid, true);
+        var win = Make(w, "Sign in", 560, 300, grid, true);
         if (Owner is { } o) win.Show(o); else win.Show();
         return new SignInHandle(line => Dispatcher.UIThread.Post(() => log.Text += line + "\n"), cts.Token, () => Dispatcher.UIThread.Post(win.Close));
     }

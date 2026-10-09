@@ -29,6 +29,8 @@ public interface IBrowserLauncher
 
 public sealed record ConfirmRequest(string Title, string Message, string ConfirmText = "OK", bool Destructive = false);
 
+public sealed record AboutInfo(string Name, string Tagline, string Version, string Runtime, string Os, string License, string Url, string Diagnostics);
+
 public sealed record SignInHandle(Action<string> OnLine, CancellationToken Token, Action Close);
 
 /// <summary>Dialogs. Tests use <c>FakeDialogService</c>.</summary>
@@ -39,6 +41,7 @@ public interface IDialogService
     Task<string?> ConfirmTypedAsync(string title, string message, string expected);
     Task ShowErrorAsync(string title, string message);
     Task ShowTextAsync(string title, string text);
+    Task ShowAboutAsync(AboutInfo info);
     Task<string?> PromptAsync(string title, string message, string? initial = null);
     Task<ViewModels.SettingsEditorViewModel?> EditSettingsAsync(ViewModels.SettingsEditorViewModel editor);
     Task<string?> ChooseAsync(string title, IReadOnlyList<string> options);

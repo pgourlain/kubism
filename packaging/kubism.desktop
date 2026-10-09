@@ -4,6 +4,7 @@ Name=Kubism
 GenericName=Kubernetes client
 Comment=Inspect. Steer. Monitor. Multi-cluster Kubernetes desktop
 Exec=/opt/kubism/Kubism
+Icon=/opt/kubism/kubism.png
 Terminal=false
 Categories=Development;System;
 StartupNotify=true
