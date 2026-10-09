@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Kubism
+GenericName=Kubernetes client
+Comment=Inspect. Steer. Monitor. Multi-cluster Kubernetes desktop
+Exec=/opt/kubism/Kubism
+Terminal=false
+Categories=Development;System;
+StartupNotify=true

@@ -6,7 +6,7 @@
              x:DataType="vm:LogViewModel">
   <Grid RowDefinitions="Auto,*">
     <WrapPanel Margin="6,4">
-      <TextBox Text="{Binding Search}" Watermark="Search" Width="200" Margin="0,0,6,0" AutomationProperties.Name="Search logs" />
+      <TextBox Text="{Binding Search}" PlaceholderText="Search" Width="200" Margin="0,0,6,0" AutomationProperties.Name="Search logs" />
       <CheckBox Content="Regex" IsChecked="{Binding UseRegex}" />
       <Button Content="◀" Click="OnPrev" ToolTip.Tip="Previous match" AutomationProperties.Name="Previous match" />
       <Button Content="▶" Click="OnNext" ToolTip.Tip="Next match" AutomationProperties.Name="Next match" />

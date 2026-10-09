@@ -1,0 +1,19 @@
+# Maintainer: Kubism contributors
+pkgname=kubism-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Kubism: multi-cluster Kubernetes desktop (Inspect. Steer. Monitor.)"
+arch=('x86_64')
+url="https://github.com/pgourlain/kubism"
+license=('MIT')
+depends=('fontconfig' 'libx11' 'libice' 'libsm')
+options=('!strip')
+source=("Kubism-$pkgver-linux-x64.tar.gz::$url/releases/download/v$pkgver/Kubism-$pkgver-linux-x64.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cp -r "$srcdir/kubism-$pkgver/opt" "$pkgdir/opt"
+  cp -r "$srcdir/kubism-$pkgver/usr" "$pkgdir/usr"
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/kubism/Kubism "$pkgdir/usr/bin/kubism"
+}

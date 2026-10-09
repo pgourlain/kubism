@@ -10,7 +10,7 @@
           <Button Content="All namespaces" Command="{Binding SelectAllCommand}" HorizontalAlignment="Stretch" />
           <TextBlock Text="Listing namespaces is forbidden: type the ones you can use." IsVisible="{Binding IsForbidden}" TextWrapping="Wrap" Foreground="{DynamicResource KubismWarnBrush}" FontSize="11" />
           <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsForbidden}">
-            <TextBox Text="{Binding ManualText}" Watermark="namespace" />
+            <TextBox Text="{Binding ManualText}" PlaceholderText="namespace" />
             <Button Grid.Column="1" Content="Add" Command="{Binding AddManualCommand}" />
           </Grid>
           <ListBox ItemsSource="{Binding Choices}" MaxHeight="300" SelectionMode="Multiple,Toggle">

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build Kubism.slnx --configuration Debug
+      - name: Test (all but integration)
+        shell: bash
+        run: |
+          for p in Kubism.Core.Tests Kubism.Kube.Tests Kubism.Desktop.Tests Kubism.Mcp.Tests; do
+            dotnet test --project $p --no-build --configuration Debug
+          done
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-${{ runner.os }}
+          path: Kubism.Desktop.Tests/bin/Debug/net10.0/screenshots/
+          if-no-files-found: ignore
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: kubism-it
+      - name: Integration tests
+        env:
+          KUBISM_IT_KUBECONFIG: ~/.kube/config
+        run: dotnet test --project Kubism.Integration.Tests --configuration Debug

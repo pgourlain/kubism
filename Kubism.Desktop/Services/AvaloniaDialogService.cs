@@ -69,7 +69,7 @@ public sealed class AvaloniaDialogService : IDialogService
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 8 };
         panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
         panel.Children.Add(new TextBlock { Text = $"Type \"{expected}\" to confirm:", FontWeight = FontWeight.SemiBold });
-        var box = new TextBox { Watermark = expected };
+        var box = new TextBox { PlaceholderText = expected };
         panel.Children.Add(box);
         var okPanel = Buttons(w, "Confirm", okEnabled: false, destructive: true);
         var ok = (Button)okPanel.Children[^1];
@@ -139,7 +139,7 @@ public sealed class AvaloniaDialogService : IDialogService
             grid.Children.Add(t); grid.Children.Add(c);
             row++;
         }
-        TextBox Box(string value, Action<string> set, string? watermark = null) { var b = new TextBox { Text = value, Watermark = watermark }; b.TextChanged += (_, _) => set(b.Text ?? ""); return b; }
+        TextBox Box(string value, Action<string> set, string? watermark = null) { var b = new TextBox { Text = value, PlaceholderText = watermark }; b.TextChanged += (_, _) => set(b.Text ?? ""); return b; }
         Add("Context", new TextBlock { Text = vm.ContextName, Classes = { "muted" } });
         Add("Display name", Box(vm.Label, s => vm.Label = s));
         Add("Icon letter", Box(vm.IconLetter, s => vm.IconLetter = s));

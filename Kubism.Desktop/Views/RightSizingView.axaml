@@ -43,7 +43,7 @@
     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
       <ComboBox ItemsSource="{Binding VerdictFilters}" SelectedItem="{Binding VerdictFilter}" AutomationProperties.Name="Verdict filter" />
       <ComboBox ItemsSource="{Binding SortChoices}" SelectedItem="{Binding SortBy}" AutomationProperties.Name="Sort by" />
-      <TextBox Text="{Binding KindFilter}" Watermark="Namespace / kind / name" Width="220" />
+      <TextBox Text="{Binding KindFilter}" PlaceholderText="Namespace / kind / name" Width="220" />
       <TextBlock Text="Min waste (cores)" VerticalAlignment="Center" Classes="muted" />
       <NumericUpDown Value="{Binding MinWasteCores}" Minimum="0" Increment="0.05" FormatString="0.00" Width="140" />
       <ProgressBar IsIndeterminate="True" Width="80" IsVisible="{Binding IsLoading}" />

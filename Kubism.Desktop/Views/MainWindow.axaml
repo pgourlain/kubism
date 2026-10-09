@@ -93,7 +93,7 @@
     <Border Grid.RowSpan="3" IsVisible="{Binding PaletteOpen}" Background="#66000000" PointerPressed="OnPaletteBackdrop">
       <Border Classes="card" Width="560" MaxHeight="440" VerticalAlignment="Top" Margin="0,80,0,0" Padding="8">
         <Grid RowDefinitions="Auto,*">
-          <TextBox Name="PaletteBox" Text="{Binding Palette.Query, Mode=TwoWay}" Watermark="Jump to a kind, namespace or cluster…" AutomationProperties.Name="Command palette" />
+          <TextBox Name="PaletteBox" Text="{Binding Palette.Query, Mode=TwoWay}" PlaceholderText="Jump to a kind, namespace or cluster…" AutomationProperties.Name="Command palette" />
           <ListBox Name="PaletteList" Grid.Row="1" ItemsSource="{Binding Palette.Results}" SelectedItem="{Binding Palette.Selected}" Margin="0,6,0,0" DoubleTapped="OnPaletteDoubleTapped">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:PaletteItem">
