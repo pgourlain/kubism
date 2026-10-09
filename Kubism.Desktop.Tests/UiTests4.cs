@@ -286,3 +286,37 @@ public class UiDemoHelmTests
         await UiHarness.WaitFor(() => vm.DiagHeadline.Contains("Stuck in pending-upgrade"));
     }
 }
+
+public class UiRightSizingOverviewTests
+{
+    [AvaloniaFact]
+    public async Task Top_shows_capacity_usage_requests_limits_then_only_the_misconfigured_containers()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.RightSizing)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is RightSizingViewModel v && !v.IsLoading && v.CpuCard is not null && v.Problems.Count > 0, what: "overview");
+        var vm = (RightSizingViewModel)ws.CurrentContent!;
+        // 1) what is available, 2) used now, 3) requests and limits against it
+        Assert.Equal(7.84, vm.CpuCard!.Capacity, 2);            // 2 nodes × 3920m allocatable
+        Assert.True(vm.CpuCard.UsedNow > 0);                   // metrics-server sums of the demo pods
+        Assert.True(vm.CpuCard.Requested > 0 && vm.CpuCard.Limits > 0);
+        Assert.Contains("available", vm.CpuCard.Summary); Assert.Contains("used now", vm.CpuCard.Summary);
+        Assert.True(vm.MemoryCard!.Capacity > 0 && vm.MemoryCard.Requested > 0);
+        // 4) misconfigured only, worst first, each with a plain sentence and a suggestion
+        Assert.All(vm.Problems, p => Assert.True(p.IsProblem));
+        Assert.DoesNotContain(vm.Problems, p => p.Verdict == "OK");
+        Assert.True(vm.Problems.Count < vm.Rows.Count + 1);
+        var first = vm.Problems[0];
+        Assert.Equal("Under-provisioned", first.Verdict);
+        Assert.False(string.IsNullOrWhiteSpace(first.Problem));
+        var noReq = vm.Problems.First(p => p.Workload == "Pod/crashy-0");
+        Assert.Contains("no CPU request", noReq.Problem);
+        var over = vm.Problems.First(p => p.Workload == "Deployment/web");
+        Assert.Contains("CPU request", over.Problem); Assert.Contains("uses", over.Problem);
+        Assert.StartsWith("CPU", over.Fix);
+        Assert.Contains("misconfigured", vm.ProblemsTitle);
+        h.Screenshot("30-rightsizing-overview");
+    }
+}

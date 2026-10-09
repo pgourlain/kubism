@@ -176,6 +176,7 @@ public sealed class RightSizingEngine(IRightSizingStrategy strategy, RightSizing
         return new RightSizingReport(history.SourceName, history.Window, history.Coverage, history.DataHours, Strategy.Name, workloads, rollups,
             rollups.Sum(r => r.CpuRequested), rollups.Sum(r => r.CpuUsedP95), rollups.Sum(r => r.MemoryRequested), rollups.Sum(r => r.MemoryUsedP95),
             rollups.Sum(r => r.WasteCpu), rollups.Sum(r => r.WasteMemory), monthly,
-            all.Count(c => c.Primary == Verdict.UnderProvisioned), all.Count(c => c.Primary == Verdict.NoRequest), nodeCpu, nodeMem);
+            all.Count(c => c.Primary == Verdict.UnderProvisioned), all.Count(c => c.Primary == Verdict.NoRequest), nodeCpu, nodeMem,
+            all.Sum(c => (c.CpuLimit ?? 0) * c.Replicas), all.Sum(c => (c.MemoryLimit ?? 0) * c.Replicas));
     }
 }

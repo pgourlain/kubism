@@ -15,7 +15,10 @@ public sealed class UsageBar : Control
     public static readonly StyledProperty<double> P95Property = AvaloniaProperty.Register<UsageBar, double>(nameof(P95));
     public static readonly StyledProperty<double> MaxProperty = AvaloniaProperty.Register<UsageBar, double>(nameof(Max));
 
-    static UsageBar() => AffectsRender<UsageBar>(RequestProperty, LimitProperty, P95Property, MaxProperty);
+    public static readonly StyledProperty<double> CapacityProperty = AvaloniaProperty.Register<UsageBar, double>(nameof(Capacity));
+    static UsageBar() => AffectsRender<UsageBar>(RequestProperty, LimitProperty, P95Property, MaxProperty, CapacityProperty);
+    /// <summary>Total available (node allocatable): the track ends here; anything beyond is over-commitment.</summary>
+    public double Capacity { get => GetValue(CapacityProperty); set => SetValue(CapacityProperty, value); }
 
     public double Request { get => GetValue(RequestProperty); set => SetValue(RequestProperty, value); }
     public double Limit { get => GetValue(LimitProperty); set => SetValue(LimitProperty, value); }
@@ -27,7 +30,7 @@ public sealed class UsageBar : Control
     public override void Render(DrawingContext ctx)
     {
         var w = Bounds.Width; var h = Bounds.Height;
-        var scale = new[] { Request, Limit, P95, Max }.Max();
+        var scale = new[] { Request, Limit, P95, Max, Capacity }.Max();
         if (scale <= 0 || w <= 0) { ctx.DrawRectangle(Converters.Brush("KubismSidebarBrush"), null, new Rect(0, 4, w, h - 8)); return; }
         scale *= 1.1;
         double X(double v) => Math.Clamp(v / scale, 0, 1) * w;
@@ -37,6 +40,7 @@ public sealed class UsageBar : Control
         var err = Converters.Brush("KubismErrorBrush") ?? Brushes.Red;
         var fg = Converters.Brush("KubismMutedBrush") ?? Brushes.Gray;
         ctx.DrawRectangle(track, null, new Rect(0, 4, w, h - 8), 2, 2);
+        if (Capacity > 0 && X(Capacity) < w - 1) ctx.DrawLine(new Pen(Converters.Brush("KubismMutedBrush"), 2), new Point(X(Capacity), 0), new Point(X(Capacity), h));
         var maxBrush = new SolidColorBrush(((accent as ISolidColorBrush)?.Color ?? Colors.SteelBlue), 0.35);
         ctx.DrawRectangle(maxBrush, null, new Rect(0, 4, X(Max), h - 8), 2, 2);
         var over = Request > 0 && P95 > Request;

@@ -10,6 +10,21 @@ using Kubism.Core.Views;
 
 namespace Kubism.Desktop.ViewModels;
 
+/// <summary>One resource (CPU or memory): what the nodes offer, what is used now and how requests and limits compare.</summary>
+public sealed record ResourceCard(string Title, double Capacity, double UsedNow, double UsedP95, double Requested, double Limits, Func<double, string> Format)
+{
+    public string CapacityText => Capacity > 0 ? Format(Capacity) : "unknown";
+    public string UsedNowText => Pct(UsedNow);
+    public string RequestedText => Pct(Requested);
+    public string LimitsText => Limits > 0 ? Pct(Limits) : "none set";
+    public string UsedP95Text => Pct(UsedP95);
+    public bool OverCommitted => Capacity > 0 && Requested > Capacity;
+    public bool LimitsOver => Capacity > 0 && Limits > Capacity;
+    public string Summary =>
+        $"{Format(Capacity)} available · {UsedNowText} used now · {RequestedText} requested · limits {LimitsText}";
+    private string Pct(double v) => Capacity > 0 ? $"{Format(v)} ({v / Capacity:P0})" : Format(v);
+}
+
 public sealed record SourceChoice(string Name, Func<IUsageHistorySource> Create);
 
 public sealed partial class ContainerRowViewModel(ContainerReport r) : ViewModelBase
@@ -51,6 +66,26 @@ public sealed partial class ContainerRowViewModel(ContainerReport r) : ViewModel
     public double MemMaxV => Report.MemoryMax;
     public string Waste => Report.WasteCpuCores > 0 || Report.WasteMemoryBytes > 0 ? $"{Quantities.FormatCpu(Report.WasteCpuCores)} · {Quantities.FormatBytes(Report.WasteMemoryBytes)}" : "";
     public string? GitOps => Report.GitOpsManager;
+    public bool IsProblem => Report.Primary is Core.RightSizing.Verdict.UnderProvisioned or Core.RightSizing.Verdict.LimitTooTight or Core.RightSizing.Verdict.NoRequest or Core.RightSizing.Verdict.OverProvisioned;
+
+    /// <summary>The misconfiguration in one plain sentence.</summary>
+    public string Problem
+    {
+        get
+        {
+            var r = Report; var p = new List<string>();
+            if (r.CpuVerdict == Core.RightSizing.Verdict.NoRequest) p.Add("no CPU request");
+            if (r.MemoryVerdict == Core.RightSizing.Verdict.NoRequest) p.Add("no memory request");
+            if (r.CpuVerdict == Core.RightSizing.Verdict.UnderProvisioned) p.Add(r.ThrottledRatio > 0.1 ? $"CPU throttled {r.ThrottledRatio:P0}" : $"CPU p95 {CpuP95} is above its request {CpuRequest}");
+            if (r.MemoryVerdict == Core.RightSizing.Verdict.UnderProvisioned) p.Add(r.OomKills > 0 ? $"OOMKilled {r.OomKills}×" : $"memory p95 {MemoryP95} is above its request {MemoryRequest}");
+            if (r.MemoryVerdict == Core.RightSizing.Verdict.LimitTooTight && r.MemoryLimit is > 0) p.Add($"memory peak {MemoryMax} is {r.MemoryMax / r.MemoryLimit.Value:P0} of the limit {MemoryLimit}");
+            if (r.CpuVerdict == Core.RightSizing.Verdict.OverProvisioned) p.Add($"CPU request {CpuRequest}, uses {CpuP95}");
+            if (r.MemoryVerdict == Core.RightSizing.Verdict.OverProvisioned) p.Add($"memory request {MemoryRequest}, uses {MemoryP95}");
+            return string.Join(" · ", p);
+        }
+    }
+
+    public string Fix => Report.Recommended is null ? "" : $"CPU {RecCpu} · memory {RecMemory}";
     public double Risk => Report.Primary switch { Core.RightSizing.Verdict.UnderProvisioned => 3, Core.RightSizing.Verdict.LimitTooTight => 2, Core.RightSizing.Verdict.NoRequest => 1, _ => 0 };
 }
 
@@ -77,6 +112,11 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
     public int[] WindowChoices { get; } = [1, 7, 14, 30];
     public ObservableCollection<SourceChoice> Sources { get; } = [];
     public ObservableCollection<ContainerRowViewModel> Rows { get; } = [];
+    /// <summary>The misconfigured containers only, worst first: the default view.</summary>
+    public ObservableCollection<ContainerRowViewModel> Problems { get; } = [];
+    [ObservableProperty] private ResourceCard? _cpuCard;
+    [ObservableProperty] private ResourceCard? _memoryCard;
+    [ObservableProperty] private string _problemsTitle = "";
     public ObservableCollection<NamespaceRollup> Rollups { get; } = [];
     public string[] VerdictFilters { get; } = ["All", "Over-provisioned", "Under-provisioned", "No request", "Limit too tight", "Not enough data", "OK"];
     public string[] SortChoices { get; } = ["Waste", "Risk", "Name"];
@@ -184,11 +224,25 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
             SourceInfo = $"{history.SourceName} · {WindowDays} d window · coverage {history.Coverage:P0} ({history.DataHours:0.#} h of data)" + (history.Note is null ? "" : $" · {history.Note}");
             StrategyInfo = $"Strategy: {_report.Strategy}";
             Summarize(_report);
+            await BuildCardsAsync(_report, ct);
             ApplyView();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Error = ex.Message; _report = null; Rows.Clear(); }
         finally { IsLoading = false; }
+    }
+
+    private async Task BuildCardsAsync(RightSizingReport r, CancellationToken ct)
+    {
+        var m = _ws.Session.Metrics;
+        double cpuNow = 0, memNow = 0;
+        if (m is not null)
+        {
+            try { await m.PollOnceAsync(ct); } catch (Exception) { /* metrics-server missing: card shows no live usage */ }
+            cpuNow = m.Pods.Values.Sum(p => p.CpuCores); memNow = m.Pods.Values.Sum(p => p.MemoryBytes);
+        }
+        CpuCard = new ResourceCard("CPU", r.NodeCpuAllocatable, cpuNow, r.CpuUsed, r.CpuRequested, r.CpuLimits, Quantities.FormatCpu);
+        MemoryCard = new ResourceCard("Memory", r.NodeMemoryAllocatable, memNow, r.MemoryUsed, r.MemoryRequested, r.MemoryLimits, Quantities.FormatBytes);
     }
 
     private void Summarize(RightSizingReport r)
@@ -214,8 +268,11 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
             "Name" => q.OrderBy(r => r.Namespace).ThenBy(r => r.Workload),
             _ => q.OrderByDescending(r => r.Report.WasteCpuCores).ThenByDescending(r => r.Report.WasteMemoryBytes),
         };
-        Rows.Clear();
+        Rows.Clear(); Problems.Clear();
         foreach (var r in q) { r.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(ContainerRowViewModel.IsSelected)) UpdateSelection(); }; Rows.Add(r); }
+        // Worst first: under-provisioned, tight limits, no request, then wasteful.
+        foreach (var r in Rows.Where(r => r.IsProblem).OrderByDescending(r => r.Risk).ThenByDescending(r => r.Report.WasteCpuCores)) Problems.Add(r);
+        ProblemsTitle = Problems.Count == 0 ? "Nothing misconfigured" : $"{Problems.Count} misconfigured container(s)";
         UpdateSelection();
     }
 

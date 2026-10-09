@@ -25,17 +25,30 @@
       </StackPanel>
     </Grid>
 
-    <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
-      <Border Classes="card"><StackPanel><TextBlock Text="CPU" Classes="muted" /><TextBlock Text="{Binding CpuKpi}" TextWrapping="Wrap" FontWeight="SemiBold" /></StackPanel></Border>
-      <Border Classes="card" Grid.Column="1"><StackPanel><TextBlock Text="Memory" Classes="muted" /><TextBlock Text="{Binding MemoryKpi}" TextWrapping="Wrap" FontWeight="SemiBold" /></StackPanel></Border>
-      <Border Classes="card" Grid.Column="2"><StackPanel><TextBlock Text="Waste (requested − p95 used)" Classes="muted" /><TextBlock Text="{Binding WasteKpi}" TextWrapping="Wrap" FontWeight="SemiBold" /><TextBlock Text="{Binding CostKpi}" Classes="muted" /></StackPanel></Border>
-      <Border Classes="card" Grid.Column="3">
-        <StackPanel>
-          <TextBlock Text="Attention" Classes="muted" />
-          <StackPanel Orientation="Horizontal" Spacing="14">
-            <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="{Binding UnderCount}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource KubismErrorBrush}" /><TextBlock Text="under-provisioned" VerticalAlignment="Bottom" Classes="muted" /></StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="{Binding NoRequestCount}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource KubismWarnBrush}" /><TextBlock Text="without requests" VerticalAlignment="Bottom" Classes="muted" /></StackPanel>
-          </StackPanel>
+    <!-- 1-3: what the nodes offer, what is used now, how requests and limits compare -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="12">
+      <Border Classes="card" IsVisible="{Binding CpuCard, Converter={x:Static app:Converters.NotNull}}">
+        <StackPanel Spacing="6">
+          <TextBlock Text="CPU" Classes="sectionTitle" />
+          <c:UsageBar Height="18" Capacity="{Binding CpuCard.Capacity}" P95="{Binding CpuCard.UsedNow}" Max="{Binding CpuCard.UsedP95}" Request="{Binding CpuCard.Requested}" Limit="{Binding CpuCard.Limits}" />
+          <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Text="Available" Classes="muted" /><TextBlock Grid.Column="1" Text="{Binding CpuCard.CapacityText}" />
+            <TextBlock Grid.Row="1" Text="Used now" Classes="muted" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CpuCard.UsedNowText}" Foreground="{DynamicResource KubismAccentBrush}" />
+            <TextBlock Grid.Row="2" Text="Requested" Classes="muted" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CpuCard.RequestedText}" Foreground="{DynamicResource KubismWarnBrush}" />
+            <TextBlock Grid.Row="3" Text="Limits" Classes="muted" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CpuCard.LimitsText}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+      <Border Grid.Column="1" Classes="card" IsVisible="{Binding MemoryCard, Converter={x:Static app:Converters.NotNull}}">
+        <StackPanel Spacing="6">
+          <TextBlock Text="MEMORY" Classes="sectionTitle" />
+          <c:UsageBar Height="18" Capacity="{Binding MemoryCard.Capacity}" P95="{Binding MemoryCard.UsedNow}" Max="{Binding MemoryCard.UsedP95}" Request="{Binding MemoryCard.Requested}" Limit="{Binding MemoryCard.Limits}" />
+          <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Text="Available" Classes="muted" /><TextBlock Grid.Column="1" Text="{Binding MemoryCard.CapacityText}" />
+            <TextBlock Grid.Row="1" Text="Used now" Classes="muted" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MemoryCard.UsedNowText}" Foreground="{DynamicResource KubismAccentBrush}" />
+            <TextBlock Grid.Row="2" Text="Requested" Classes="muted" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MemoryCard.RequestedText}" Foreground="{DynamicResource KubismWarnBrush}" />
+            <TextBlock Grid.Row="3" Text="Limits" Classes="muted" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding MemoryCard.LimitsText}" />
+          </Grid>
         </StackPanel>
       </Border>
     </Grid>
@@ -52,7 +65,33 @@
     </StackPanel>
 
     <TabControl Grid.Row="3">
-      <TabItem Header="Containers">
+      <TabItem Header="Misconfigured">
+        <Grid RowDefinitions="Auto,*">
+          <TextBlock Text="{Binding ProblemsTitle}" FontWeight="SemiBold" Margin="2,6,0,6" />
+          <DataGrid Grid.Row="1" Name="ProblemsGrid" ItemsSource="{Binding Problems}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Misconfigured containers">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Width="44">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ContainerRowViewModel"><CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" HorizontalAlignment="Center" AutomationProperties.Name="Select container" /></DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Verdict" Width="150">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ContainerRowViewModel">
+                    <Border Classes="pill" Margin="4" HorizontalAlignment="Left" BorderBrush="{Binding VerdictSeverity, Converter={x:Static app:Converters.SeverityBrush}}">
+                      <TextBlock Text="{Binding Verdict}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding VerdictSeverity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Workload" Binding="{Binding Workload}" x:DataType="vm:ContainerRowViewModel" Width="1.2*" MinWidth="160" />
+              <DataGridTextColumn Header="What is wrong" Binding="{Binding Problem}" x:DataType="vm:ContainerRowViewModel" Width="2.2*" MinWidth="240" />
+              <DataGridTextColumn Header="Suggested" Binding="{Binding Fix}" x:DataType="vm:ContainerRowViewModel" Width="1.4*" MinWidth="170" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="All containers">
         <Grid>
           <DataGrid Name="ContainersGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Containers">
             <DataGrid.Columns>

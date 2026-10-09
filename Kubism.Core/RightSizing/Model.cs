@@ -97,7 +97,8 @@ public sealed record RightSizingReport(
     string Source, TimeSpan Window, double Coverage, double DataHours, string Strategy,
     IReadOnlyList<WorkloadReport> Workloads, IReadOnlyList<NamespaceRollup> Namespaces,
     double CpuRequested, double CpuUsed, double MemoryRequested, double MemoryUsed, double WasteCpu, double WasteMemory,
-    double? WasteCostPerMonth, int UnderProvisioned, int WithoutRequests, double NodeCpuAllocatable, double NodeMemoryAllocatable)
+    double? WasteCostPerMonth, int UnderProvisioned, int WithoutRequests, double NodeCpuAllocatable, double NodeMemoryAllocatable,
+    double CpuLimits = 0, double MemoryLimits = 0)
 {
     public IEnumerable<ContainerReport> Containers => Workloads.SelectMany(w => w.Containers);
 }
