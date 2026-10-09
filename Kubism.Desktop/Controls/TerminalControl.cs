@@ -64,14 +64,15 @@ public sealed class TerminalControl : Control, ITerminalView
     protected override Size ArrangeOverride(Size finalSize)
     {
         var s = base.ArrangeOverride(finalSize);
-        CheckSize();
+        CheckSize(finalSize);
         return s;
     }
 
-    private void CheckSize()
+    private void CheckSize(Size? size = null)
     {
-        if (Bounds.Width <= 0 || Bounds.Height <= 0 || _buffer is null) return;
-        var cols = Math.Max(10, (int)(Bounds.Width / _cw)); var rows = Math.Max(3, (int)(Bounds.Height / _ch));
+        var sz = size ?? Bounds.Size;   // Bounds is updated only after arrange, so use the size being arranged
+        if (sz.Width <= 0 || sz.Height <= 0 || _buffer is null) return;
+        var cols = Math.Max(10, (int)(sz.Width / _cw)); var rows = Math.Max(3, (int)(sz.Height / _ch));
         if (cols == _cols && rows == _rows) return;
         _cols = cols; _rows = rows;
         _buffer.Resize(cols, rows);

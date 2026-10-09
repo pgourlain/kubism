@@ -1,6 +1,8 @@
 using System.Text.Json.Nodes;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Kubism.Core;
 using Kubism.Core.Api;
 using Kubism.Core.Forward;
@@ -205,5 +207,31 @@ public class UiKeepForwardTests
         await UiHarness.WaitFor(() => pfvm.Items.Count == 1);
         await pfvm.Items[0].StopCommand.ExecuteAsync(null);
         Assert.Empty(ws2.Session.Metadata.KeptForwards);
+    }
+}
+
+public class UiDockResizeTests
+{
+    [AvaloniaFact]
+    public async Task Dragging_the_handle_resizes_the_bottom_panel_and_the_terminal_follows()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        await ws.OpenShellAsync(new KubeObject(h.Demo.Server.Get(Gvr.Pods, "default", "crashy-0")!), "main");
+        UiHarness.Pump();
+        var term = ws.Dock.Selected as TerminalViewModel;
+        await UiHarness.WaitFor(() => term!.Buffer.Rows > 3);
+        var handle = h.Find<Avalonia.Controls.Border>(b => b.Name == "DockHandle");
+        Assert.NotNull(handle);
+        var start = ws.Dock.Height; var rowsBefore = term!.Buffer.Rows;
+        var p = Avalonia.VisualExtensions.TranslatePoint(handle!, new Avalonia.Point(5, 3), h.Window)!.Value;
+        h.Window.MouseDown(p, Avalonia.Input.MouseButton.Left);
+        h.Window.MouseMove(new Avalonia.Point(p.X, p.Y - 150));
+        h.Window.MouseUp(new Avalonia.Point(p.X, p.Y - 150), Avalonia.Input.MouseButton.Left);
+        UiHarness.Pump();
+        Assert.True(ws.Dock.Height > start + 100, $"height {ws.Dock.Height} vs {start}");
+        UiHarness.Pump();
+        await UiHarness.WaitFor(() => term.Buffer.Rows > rowsBefore, what: "terminal resized");
+        h.Screenshot("25-dock-resized");
     }
 }
