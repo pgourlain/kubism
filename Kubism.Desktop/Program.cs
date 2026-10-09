@@ -9,7 +9,10 @@ public static class Program
     {
         // `Kubism --mcp` runs headless over stdio: nothing may be written to stdout outside the protocol.
         if (args.Contains("--mcp"))
-            return await Mcp.McpHost.RunAsync(args);
+        {
+            Kube.ShellEnvironment.ApplyLoginPath();
+            return await Mcp.McpHost.RunAsync(args, new Kube.KubeTransportFactory(), new Kube.HelmCliRunnerFactory(), new Kube.AzureCliTokenProvider());
+        }
 
         AppOptions.Current = AppOptions.Parse(args);
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);

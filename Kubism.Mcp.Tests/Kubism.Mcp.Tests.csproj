@@ -12,5 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Kubism.Mcp\Kubism.Mcp.csproj" />
     <ProjectReference Include="..\Kubism.Testing\Kubism.Testing.csproj" />
+    <ProjectReference Include="..\Kubism.Desktop\Kubism.Desktop.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 </Project>

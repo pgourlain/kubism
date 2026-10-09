@@ -119,20 +119,9 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
         SelectedSource = Sources[0].Name.StartsWith("Prometheus (in-cluster") && !meta.LocalSampling ? Sources[0] : meta.LocalSampling && string.IsNullOrWhiteSpace(meta.PrometheusUrl) ? Sources[^1] : Sources[0];
     }
 
-    private IUsageHistorySource AutoDetectPrometheus()
-    {
-        var t = _ws.Session.Transport;
-        var list = t.ListAsync(Gvr.Services, null, new ListOptions(), _cts.Token).GetAwaiter().GetResult();
-        foreach (var s in list.Items.Select(i => new KubeObject(i)))
-        {
-            var n = s.Name;
-            if (!n.Contains("prometheus", StringComparison.OrdinalIgnoreCase)) continue;
-            if (new[] { "alertmanager", "operator", "exporter", "node", "kube-state", "pushgateway", "grafana", "adapter" }.Any(x => n.Contains(x, StringComparison.OrdinalIgnoreCase))) continue;
-            var port = (s.At("spec", "ports") as System.Text.Json.Nodes.JsonArray ?? []).OfType<System.Text.Json.Nodes.JsonObject>().Select(p => p["port"]?.ToString()).FirstOrDefault(p => p == "9090") ?? "9090";
-            return new PrometheusUsageSource(new ProxyPromClient(t, s.Namespace ?? "default", $"{n}:{port}"), $"Prometheus ({s.Namespace}/{n})");
-        }
-        throw new InvalidOperationException("No in-cluster Prometheus found. Set a Prometheus URL in the cluster settings, or use local sampling.");
-    }
+    private IUsageHistorySource AutoDetectPrometheus() =>
+        PrometheusDiscovery.FindAsync(_ws.Session.Transport, _cts.Token).GetAwaiter().GetResult()
+        ?? throw new InvalidOperationException("No in-cluster Prometheus found. Set a Prometheus URL in the cluster settings, or use local sampling.");
 
     partial void OnWindowDaysChanged(int value) { if (_started) _ = LoadAsync(); }
     partial void OnSelectedSourceChanged(SourceChoice? value) { if (_started) _ = LoadAsync(); }

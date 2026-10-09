@@ -194,3 +194,23 @@ public sealed class VpaRecommendationSource(IKubeTransport transport) : IUsageHi
         return new UsageHistory { SourceName = Name, Window = q.Window, Vpa = vpas, Coverage = 0, DataHours = 0, Note = "VPA targets only: no usage series" };
     }
 }
+
+/// <summary>Finds an in-cluster Prometheus service (kube-prometheus-stack, prometheus-operated…) reachable through the API server proxy.</summary>
+public static class PrometheusDiscovery
+{
+    private static readonly string[] Excluded = ["alertmanager", "operator", "exporter", "node", "kube-state", "pushgateway", "grafana", "adapter"];
+
+    public static async Task<IUsageHistorySource?> FindAsync(IKubeTransport transport, CancellationToken ct)
+    {
+        var list = await transport.ListAsync(Gvr.Services, null, new ListOptions(), ct).ConfigureAwait(false);
+        foreach (var s in list.Items.Select(i => new KubeObject(i)))
+        {
+            var n = s.Name;
+            if (!n.Contains("prometheus", StringComparison.OrdinalIgnoreCase)) continue;
+            if (Excluded.Any(x => n.Contains(x, StringComparison.OrdinalIgnoreCase))) continue;
+            var port = (s.At("spec", "ports") as JsonArray ?? []).OfType<JsonObject>().Select(p => p["port"]?.ToString()).FirstOrDefault(p => p == "9090") ?? "9090";
+            return new PrometheusUsageSource(new ProxyPromClient(transport, s.Namespace ?? "default", $"{n}:{port}"), $"Prometheus ({s.Namespace}/{n})");
+        }
+        return null;
+    }
+}
