@@ -47,6 +47,11 @@ public static class Converters
 
     public static readonly IValueConverter SidebarColumn = new FuncConverter<bool, GridLength>(compact => compact ? new GridLength(0) : new GridLength(230));
 
+    public static readonly IValueConverter HelmHealth = new FuncConverter<Core.Helm.HelmRelease, string>(r => Core.Helm.HelmDiagnostics.IsProblem(r, DateTimeOffset.UtcNow) ? "⚠ " + r.Status : r.Status);
+
+    public static readonly IValueConverter ProblemBrush = new FuncConverter<bool, IBrush?>(p => Brush(p ? "KubismErrorBrush" : "KubismOkBrush"));
+    public static readonly IValueConverter PreviousLabel = new FuncConverter<bool, string>(p => p ? "  (previous, crashed run)" : "  (current)");
+
     public static readonly IValueConverter Icon = new FuncConverter<string?, Geometry?>(k => k is not null && Icons.Paths.TryGetValue(k, out var p) ? Geometry.Parse(p) : null);
 
     private sealed class FuncConverter<TIn, TOut>(Func<TIn, TOut> f) : IValueConverter

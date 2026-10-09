@@ -88,7 +88,16 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     [ObservableProperty] private string _userValuesText = "";
     [ObservableProperty] private string _manifestText = "";
     [ObservableProperty] private string _notesText = "";
-    [ObservableProperty] private int _tab;
+    [ObservableProperty] private int _tab = 1;
+    [ObservableProperty] private string _diagHeadline = "";
+    [ObservableProperty] private bool _diagIsProblem;
+    [ObservableProperty] private bool _diagLoading;
+    [ObservableProperty] private string _failingSummary = "";
+    [ObservableProperty] private bool _hasFailing;
+    public ObservableCollection<DiagEvent> DiagEvents { get; } = [];
+    public ObservableCollection<DiagPod> DiagPods { get; } = [];
+    public ObservableCollection<HelmRelease> Failing { get; } = [];
+    private CancellationTokenSource? _diagCts;
     public bool CanWrite => _ws.Session.Actions.CanRunHelm;
     public string WriteTooltip => CanWrite ? "" : "The helm binary was not found on PATH: rollback and uninstall are disabled";
 
@@ -100,6 +109,12 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         {
             var all = await new HelmReleases(_ws.Session.Transport).ListAsync(_ws.Namespaces.IsAll ? null : _ws.Namespaces.Selected[0], _cts.Token);
             Releases.Clear(); foreach (var r in all) Releases.Add(r);
+            var now = DateTimeOffset.UtcNow;
+            Failing.Clear(); foreach (var r in all.Where(r => HelmDiagnostics.IsProblem(r, now))) Failing.Add(r);
+            HasFailing = Failing.Count > 0;
+            FailingSummary = HasFailing ? $"{Failing.Count} release(s) failed or stuck: {string.Join(", ", Failing.Select(f => f.Name))}" : "";
+            // One glance: jump straight to the first failing release and its diagnosis.
+            if (Selected is null && Failing.Count > 0) Selected = Failing[0];
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Error = ex.Message; }
@@ -114,7 +129,33 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         UserValuesText = YamlJson.ToYaml(value.UserValues ?? new JsonObject());
         ManifestText = value.Manifest ?? ""; NotesText = value.Notes ?? "";
         _ = LoadHistoryAsync(value);
+        _ = LoadDiagnosisAsync(value);
     }
+
+    private async Task LoadDiagnosisAsync(HelmRelease r)
+    {
+        _diagCts?.Cancel(); _diagCts = new CancellationTokenSource();
+        var ct = CancellationTokenSource.CreateLinkedTokenSource(_diagCts.Token, _ws.Session.SessionToken).Token;
+        var problem = HelmDiagnostics.IsProblem(r, DateTimeOffset.UtcNow);
+        DiagIsProblem = problem; DiagHeadline = HelmDiagnostics.Headline(r, DateTimeOffset.UtcNow);
+        Tab = problem ? 0 : 1;
+        DiagEvents.Clear(); DiagPods.Clear();
+        if (!problem) { DiagHeadline = $"Release {r.Status}: no problem detected."; return; }
+        DiagLoading = true;
+        try
+        {
+            var d = await HelmDiagnostics.CollectAsync(_ws.Session.Transport, r, ct);
+            if (Selected != r) return;
+            foreach (var e in d.Events) DiagEvents.Add(e);
+            foreach (var p in d.Pods) DiagPods.Add(p);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { DiagHeadline += $"  (diagnosis failed: {ex.Message})"; }
+        finally { DiagLoading = false; }
+    }
+
+    [RelayCommand]
+    private Task RefreshDiagnosis() => Selected is { } r ? LoadDiagnosisAsync(r) : Task.CompletedTask;
 
     private async Task LoadHistoryAsync(HelmRelease r)
     {

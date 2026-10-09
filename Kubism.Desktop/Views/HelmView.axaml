@@ -2,10 +2,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Kubism.Desktop.ViewModels"
              xmlns:h="using:Kubism.Core.Helm"
+             xmlns:app="using:Kubism.Desktop"
              x:Class="Kubism.Desktop.Views.HelmView"
              x:DataType="vm:HelmViewModel">
-  <Grid ColumnDefinitions="*,Auto,1.2*" Margin="16">
-    <Grid RowDefinitions="Auto,*">
+  <Grid ColumnDefinitions="1.3*,Auto,*" Margin="16">
+    <Grid RowDefinitions="Auto,Auto,*">
       <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
         <StackPanel>
           <TextBlock Text="Helm releases" Classes="h1" />
@@ -13,20 +14,81 @@
         </StackPanel>
         <Button Grid.Column="1" Content="Refresh" Command="{Binding LoadCommand}" VerticalAlignment="Top" />
       </Grid>
-      <DataGrid Grid.Row="1" ItemsSource="{Binding Releases}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
+      <Border Grid.Row="1" IsVisible="{Binding HasFailing}" Background="{DynamicResource KubismErrorBrush}" Padding="8,4" Margin="0,0,0,6" CornerRadius="4">
+        <TextBlock Text="{Binding FailingSummary}" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap" />
+      </Border>
+      <DataGrid Grid.Row="2" ItemsSource="{Binding Releases}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
         <DataGrid.Columns>
-          <DataGridTextColumn Header="Name" Binding="{Binding Name}" x:DataType="h:HelmRelease" Width="*" />
+          <DataGridTextColumn Header="Name" Binding="{Binding Name}" x:DataType="h:HelmRelease" Width="*" MinWidth="110" />
           <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="h:HelmRelease" />
           <DataGridTextColumn Header="Chart" Binding="{Binding Chart}" x:DataType="h:HelmRelease" />
           <DataGridTextColumn Header="Version" Binding="{Binding ChartVersion}" x:DataType="h:HelmRelease" />
           <DataGridTextColumn Header="App" Binding="{Binding AppVersion}" x:DataType="h:HelmRelease" />
           <DataGridTextColumn Header="Rev" Binding="{Binding Revision}" x:DataType="h:HelmRelease" />
-          <DataGridTextColumn Header="Status" Binding="{Binding Status}" x:DataType="h:HelmRelease" />
+          <DataGridTextColumn Header="Status" Binding="{Binding ., Converter={x:Static app:Converters.HelmHealth}}" x:DataType="h:HelmRelease" MinWidth="120" />
         </DataGrid.Columns>
       </DataGrid>
     </Grid>
     <GridSplitter Grid.Column="1" Width="6" />
-    <TabControl Grid.Column="2">
+    <TabControl Grid.Column="2" SelectedIndex="{Binding Tab, Mode=TwoWay}">
+      <TabItem Header="Diagnostics">
+        <ScrollViewer>
+          <StackPanel Spacing="8" Margin="4,8,12,8">
+            <Border Classes="card">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding DiagHeadline}" TextWrapping="Wrap" FontWeight="SemiBold"
+                           Foreground="{Binding DiagIsProblem, Converter={x:Static app:Converters.ProblemBrush}}" />
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding DiagLoading}" Height="4" />
+                <Button Content="Refresh diagnosis" Command="{Binding RefreshDiagnosisCommand}" HorizontalAlignment="Left" IsVisible="{Binding DiagIsProblem}" />
+              </StackPanel>
+            </Border>
+            <Border Classes="card" IsVisible="{Binding DiagEvents.Count}">
+              <StackPanel Spacing="4">
+                <TextBlock Text="Warning events" Classes="h2" />
+                <ItemsControl ItemsSource="{Binding DiagEvents}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="h:DiagEvent">
+                      <StackPanel Margin="0,0,0,4">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding Reason}" FontWeight="SemiBold" Foreground="{DynamicResource KubismWarnBrush}" />
+                          <TextBlock Text="{Binding Object}" />
+                          <TextBlock Text="{Binding Age}" Classes="muted" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Classes="muted" FontSize="12" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+            <ItemsControl ItemsSource="{Binding DiagPods}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="h:DiagPod">
+                  <Border Classes="card" Margin="0,0,0,8">
+                    <StackPanel Spacing="4">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Status}" Foreground="{DynamicResource KubismErrorBrush}" />
+                        <TextBlock Text="{Binding Restarts, StringFormat='{}{0} restarts'}" Classes="muted" />
+                      </StackPanel>
+                      <ItemsControl ItemsSource="{Binding Logs}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="h:DiagLog">
+                            <StackPanel Margin="0,2">
+                              <TextBlock Classes="muted" FontSize="11"><Run Text="{Binding Container}" /><Run Text="{Binding Previous, Converter={x:Static app:Converters.PreviousLabel}}" /></TextBlock>
+                              <TextBox Text="{Binding Text}" IsReadOnly="True" AcceptsReturn="True" MaxHeight="180" FontFamily="Menlo,Consolas,monospace" FontSize="11" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
       <TabItem Header="Values">
         <TextBox Text="{Binding ValuesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
       </TabItem>

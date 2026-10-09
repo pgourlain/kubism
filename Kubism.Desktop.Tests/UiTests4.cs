@@ -203,3 +203,60 @@ public class UiRightSizingAndHelmTests
         h.Screenshot("19-helm");
     }
 }
+
+public class UiHelmDiagnosisTests
+{
+    private static JsonObject ReleaseSecret(string name, int rev, string status, string description, DateTimeOffset updated) => new()
+    {
+        ["apiVersion"] = "v1", ["kind"] = "Secret",
+        ["metadata"] = new JsonObject { ["name"] = $"sh.helm.release.v1.{name}.v{rev}", ["namespace"] = "default", ["labels"] = new JsonObject { ["owner"] = "helm", ["name"] = name } },
+        ["type"] = "helm.sh/release.v1",
+        ["data"] = new JsonObject { ["release"] = HelmCompat.Encode(name, rev, status, description, updated) },
+    };
+
+    [AvaloniaFact]
+    public async Task Failed_release_shows_events_and_crashed_container_logs_at_a_glance()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var crashy = h.Demo.Server.Get(Gvr.Pods, "default", "crashy-0")!;
+        crashy["metadata"]!["labels"]!["app.kubernetes.io/instance"] = "broken";
+        h.Demo.Server.Upsert(crashy);
+        var ev = h.Demo.Server.Get(Gvr.Events, "default", "crashy-0.1")!;
+        ev["lastTimestamp"] = DateTimeOffset.UtcNow.AddMinutes(-3).ToString("O");
+        h.Demo.Server.Upsert(ev);
+        h.Demo.Server.Upsert(ReleaseSecret("broken", 1, "failed", "Helm upgrade failed: timed out waiting for the condition", DateTimeOffset.UtcNow.AddMinutes(-10)));
+        h.Demo.Server.Upsert(ReleaseSecret("fine", 1, "deployed", "Install complete", DateTimeOffset.UtcNow.AddHours(-3)));
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Helm)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Count == 2);
+        var vm = (HelmViewModel)ws.CurrentContent!;
+        // The failing release is selected automatically and the Diagnostics tab is shown first.
+        await UiHarness.WaitFor(() => vm.Selected?.Name == "broken" && !vm.DiagLoading && vm.DiagPods.Count > 0, what: "diagnosis");
+        Assert.True(vm.HasFailing);
+        Assert.Contains("broken", vm.FailingSummary);
+        Assert.Equal(0, vm.Tab);
+        Assert.Contains("timed out", vm.DiagHeadline);
+        Assert.Contains(vm.DiagPods, p => p.Name == "crashy-0" && p.Status == "CrashLoopBackOff");
+        var logs = vm.DiagPods.First(p => p.Name == "crashy-0").Logs;
+        Assert.Contains(logs, l => l.Previous && l.Text.Contains("previous container crashed"));
+        Assert.Contains(vm.DiagEvents, e => e.Reason == "BackOff");
+        h.Screenshot("24-helm-failed-diagnosis");
+        vm.Selected = vm.Releases.First(r => r.Name == "fine");
+        await UiHarness.WaitFor(() => !vm.DiagIsProblem);
+        Assert.Contains("no problem", vm.DiagHeadline);
+        Assert.Empty(vm.DiagPods);
+    }
+
+    [Fact]
+    public void Pending_release_counts_as_a_timeout_only_after_five_minutes()
+    {
+        var now = DateTimeOffset.UtcNow;
+        Core.Helm.HelmRelease R(string status, int minutes) => new("x", "d", 1, status, "c", "1", null, now.AddMinutes(-minutes), null, null, null, null, null);
+        Assert.False(Core.Helm.HelmDiagnostics.IsProblem(R("pending-upgrade", 2), now));
+        Assert.True(Core.Helm.HelmDiagnostics.IsProblem(R("pending-upgrade", 9), now));
+        Assert.True(Core.Helm.HelmDiagnostics.IsProblem(R("failed", 0), now));
+        Assert.False(Core.Helm.HelmDiagnostics.IsProblem(R("deployed", 999), now));
+        Assert.Contains("--wait timeout", Core.Helm.HelmDiagnostics.Headline(R("pending-install", 9), now));
+    }
+}
