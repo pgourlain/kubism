@@ -288,6 +288,17 @@ public class UiMultiSelectTests
         var right = Avalonia.VisualExtensions.TranslatePoint(del, new Avalonia.Point(del.Bounds.Width, 0), listView)!.Value.X;
         Assert.True(right <= listView.Bounds.Width + 1, $"delete button ends at {right}, list is {listView.Bounds.Width} wide");
         h.Screenshot("26-multi-select");
+        // With the details panel open (single selection) nothing of the list may extend underneath it.
+        h.Window.Width = 1000; // narrow window: the case where the details panel used to cover the toolbar
+        list.SelectedRow = victims[0];
+        await UiHarness.WaitFor(() => ws.Details.IsOpen);
+        UiHarness.Pump();
+        var details = h.Find<Kubism.Desktop.Views.DetailsView>(d => d.IsVisible)!;
+        var refresh = h.Find<Avalonia.Controls.Button>(b => b.Content as string == "Refresh" && b.IsEffectivelyVisible)!;
+        var refreshRight = Avalonia.VisualExtensions.TranslatePoint(refresh, new Avalonia.Point(refresh.Bounds.Width, 0), h.Window)!.Value.X;
+        var detailsLeft = Avalonia.VisualExtensions.TranslatePoint(details, new Avalonia.Point(0, 0), h.Window)!.Value.X;
+        Assert.True(refreshRight <= detailsLeft + 1, $"Refresh ends at {refreshRight}, details start at {detailsLeft}");
+        h.Screenshot("27-details-open-toolbar");
         await del.Command!.ExecuteAsyncIfPossible();
         foreach (var v in victims) await UiHarness.WaitFor(() => h.Demo.Server.Get(Gvr.Pods, "default", v.Name) is null, what: "deleted");
     }

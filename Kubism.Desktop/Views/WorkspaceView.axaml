@@ -51,7 +51,7 @@
       <GridSplitter Grid.Column="1" Width="1" IsVisible="{Binding !IsCompact}" Background="{DynamicResource KubismBorderBrush}" />
 
       <!-- Content + dock -->
-      <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto">
+      <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto" ClipToBounds="True">
         <ContentControl Grid.Row="0" Content="{Binding CurrentContent}" />
         <Border Name="DockHandle" Grid.Row="1" Height="6" Cursor="SizeNorthSouth" IsVisible="{Binding Dock.IsOpen}" Background="{DynamicResource KubismBorderBrush}" AutomationProperties.Name="Resize bottom panel" />
         <v:DockView Grid.Row="2" DataContext="{Binding Dock}" IsVisible="{Binding IsOpen}" Height="{Binding Height, Mode=TwoWay}" />

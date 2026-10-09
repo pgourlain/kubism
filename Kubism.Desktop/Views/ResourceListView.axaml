@@ -5,7 +5,8 @@
              xmlns:app="using:Kubism.Desktop"
              x:Class="Kubism.Desktop.Views.ResourceListView"
              x:DataType="vm:ResourceListViewModel">
-  <Grid RowDefinitions="Auto,Auto,*">
+  <!-- Star column + clip: the grid's minimum column widths must never stretch the toolbar under the details panel. -->
+  <Grid RowDefinitions="Auto,Auto,*" ColumnDefinitions="*" ClipToBounds="True">
     <!-- Two rows that wrap: Refresh/Delete must stay reachable when the details panel narrows the list. -->
     <StackPanel Grid.Row="0" Margin="12,10,12,6" Spacing="6">
       <StackPanel Orientation="Horizontal" Spacing="10">
