@@ -12,13 +12,13 @@
     </Border>
     <Border Grid.Row="0" IsVisible="{Binding !HasBanner}" Height="3" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" />
 
-    <Grid Grid.Row="1">
+    <Grid x:Name="MainGrid" Grid.Row="1">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="{Binding IsCompact, Converter={x:Static app:Converters.SidebarColumn}}" />
         <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" MinWidth="240" />
         <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="0" MinWidth="0" MaxWidth="900" />
       </Grid.ColumnDefinitions>
       <!-- Sidebar -->
       <Grid Background="{DynamicResource KubismPanelBrush}" RowDefinitions="Auto,*">
@@ -56,8 +56,8 @@
         <Border Name="DockHandle" Grid.Row="1" Height="6" Cursor="SizeNorthSouth" IsVisible="{Binding Dock.IsOpen}" Background="{DynamicResource KubismBorderBrush}" AutomationProperties.Name="Resize bottom panel" />
         <v:DockView Grid.Row="2" DataContext="{Binding Dock}" IsVisible="{Binding IsOpen}" Height="{Binding Height, Mode=TwoWay}" />
       </Grid>
-      <GridSplitter Grid.Column="3" Width="4" IsVisible="{Binding Details.IsOpen}" Background="{DynamicResource KubismBorderBrush}" />
-      <v:DetailsView Grid.Column="4" Width="420" DataContext="{Binding Details}" IsVisible="{Binding IsOpen}" />
+      <GridSplitter Grid.Column="3" Width="5" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" IsVisible="{Binding Details.IsOpen}" Background="{DynamicResource KubismBorderBrush}" Cursor="SizeWestEast" AutomationProperties.Name="Resize details panel" />
+      <v:DetailsView Grid.Column="4" DataContext="{Binding Details}" IsVisible="{Binding IsOpen}" />
     </Grid>
   </Grid>
 </UserControl>

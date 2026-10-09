@@ -6,11 +6,32 @@ namespace Kubism.Desktop.Views;
 
 public partial class WorkspaceView : UserControl
 {
+    public ColumnDefinition DetailsColumn => MainGrid.ColumnDefinitions[4];
+    private ColumnDefinition DetailsCol => DetailsColumn;
+    private double _detailsWidth = 420;
+
+    /// <summary>The details column is a real, user-resizable column: remembered width when open, zero when closed.</summary>
+    private void SyncDetailsColumn(WorkspaceViewModel w)
+    {
+        if (w.Details.IsOpen) DetailsCol.Width = new GridLength(_detailsWidth);
+        else
+        {
+            if (DetailsCol.Width.IsAbsolute && DetailsCol.Width.Value > 0) _detailsWidth = DetailsCol.Width.Value;
+            DetailsCol.Width = new GridLength(0);
+        }
+    }
+
     private double _dragStartY, _dragStartHeight;
 
     public WorkspaceView()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) =>
+        {
+            if (DataContext is not WorkspaceViewModel w) return;
+            w.Details.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(DetailsViewModel.IsOpen)) SyncDetailsColumn(w); };
+            SyncDetailsColumn(w);
+        };
         DockHandle.PointerPressed += (_, e) =>
         {
             if (DataContext is not WorkspaceViewModel ws) return;

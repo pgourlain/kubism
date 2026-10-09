@@ -235,3 +235,43 @@ public class UiDockResizeTests
         h.Screenshot("25-dock-resized");
     }
 }
+
+public class UiDetailsResizeTests
+{
+    [AvaloniaFact]
+    public async Task Details_panel_is_a_real_resizable_column_with_no_gap_and_collapses_when_closed()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.Select("default");
+        ws.OpenKind(ws.Session.Discovery.FindByName("pods")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Rows.Count > 0);
+        var list = (ResourceListViewModel)ws.CurrentContent!;
+        var view = h.Find<Kubism.Desktop.Views.DetailsView>()!;
+        UiHarness.Pump();
+        Assert.False(view.IsVisible);
+        var col = h.Find<Kubism.Desktop.Views.WorkspaceView>()!.DetailsColumn;
+        Assert.Equal(0, col.Width.Value);
+        list.SelectedRow = list.Rows[0];
+        await UiHarness.WaitFor(() => ws.Details.IsOpen);
+        UiHarness.Pump();
+        Assert.Equal(420, col.Width.Value);
+        var splitter = h.Find<Avalonia.Controls.GridSplitter>(g => Avalonia.Automation.AutomationProperties.GetName(g) == "Resize details panel")!;
+        var p = Avalonia.VisualExtensions.TranslatePoint(splitter, new Avalonia.Point(2, 50), h.Window)!.Value;
+        h.Window.MouseDown(p, Avalonia.Input.MouseButton.Left);
+        h.Window.MouseMove(new Avalonia.Point(p.X - 120, p.Y));
+        h.Window.MouseUp(new Avalonia.Point(p.X - 120, p.Y), Avalonia.Input.MouseButton.Left);
+        UiHarness.Pump();
+        Assert.True(col.Width.Value > 500, $"column {col.Width.Value}");
+        // The panel fills its column: no blank band between the list and the panel.
+        Assert.True(Math.Abs(view.Bounds.Width - col.ActualWidth) < 1.5, $"view {view.Bounds.Width} vs column {col.ActualWidth}");
+        h.Screenshot("28-details-resized");
+        ws.Details.CloseCommand.Execute(null);
+        UiHarness.Pump();
+        Assert.Equal(0, col.Width.Value);
+        list.SelectedRow = list.Rows[1];
+        await UiHarness.WaitFor(() => ws.Details.IsOpen);
+        UiHarness.Pump();
+        Assert.True(col.Width.Value > 500, "the resized width is remembered");
+    }
+}

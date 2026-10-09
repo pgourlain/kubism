@@ -60,6 +60,8 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
         OnPropertyChanged(nameof(HasSelection)); OnPropertyChanged(nameof(DeleteLabel));
     }
 
+    partial void OnSelectedRowChanged(ResourceRowViewModel? value) => NotifySelectionChanged();
+
     public bool HasSelection => SelectedRows.Count > 0 || SelectedRow is not null;
     public string DeleteLabel => SelectedRows.Count > 1 ? $"Delete {SelectedRows.Count} selected" : "Delete";
 
