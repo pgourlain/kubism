@@ -32,7 +32,33 @@ public sealed class ExecSession : IAsyncDisposable
     public ExecResult? Result { get; private set; }
     public bool IsRunning => _socket is not null && Result is null;
     /// <summary>Raised for stdout/stderr (channel 1/2) data.</summary>
-    public event Action<byte[], int>? Output;
+    private readonly object _outLock = new();
+    private Action<byte[], int>? _output;
+    private List<(byte[] data, int channel)>? _early = [];
+
+    /// <summary>Output that arrives before anyone subscribes (the shell prompt) is held and delivered to the first subscriber.</summary>
+    public event Action<byte[], int>? Output
+    {
+        add
+        {
+            List<(byte[] data, int channel)>? flush;
+            lock (_outLock) { _output += value; flush = _early; _early = null; }
+            if (flush is not null) foreach (var (d, c) in flush) value?.Invoke(d, c);
+        }
+        remove { lock (_outLock) _output -= value; }
+    }
+
+    private void RaiseOutput(byte[] data, int channel)
+    {
+        Action<byte[], int>? h;
+        lock (_outLock)
+        {
+            if (_early is not null && _output is null) { _early.Add((data, channel)); return; }
+            h = _output;
+        }
+        h?.Invoke(data, channel);
+    }
+
     public event Action<ExecResult>? Exited;
 
     public static string BuildPath(string ns, string pod, string? container, IReadOnlyList<string> command, bool tty, bool stdin = true)
@@ -65,7 +91,7 @@ public sealed class ExecSession : IAsyncDisposable
                 if (msg.Length == 0) continue;
                 var channel = msg[0];
                 var payload = msg.AsSpan(1).ToArray();
-                if (channel is 1 or 2) Output?.Invoke(payload, channel);
+                if (channel is 1 or 2) RaiseOutput(payload, channel);
                 else if (channel == 3) { Finish(ParseStatus(payload)); return; }
             }
         }

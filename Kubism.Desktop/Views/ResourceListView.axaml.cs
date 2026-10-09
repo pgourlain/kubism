@@ -99,7 +99,7 @@ public partial class ResourceListView : UserControl
             {
                 Header = def.Name, Tag = idx, CanUserSort = true,
                 Width = WidthFor(def),
-                MinWidth = 50,
+                MinWidth = def.Name is "Name" ? 170 : def.Name == "Message" ? 200 : 50,
                 CellTemplate = new FuncDataTemplate<ResourceRowViewModel>((_, _) => new CellTextBlock(idx, colored)),
             });
         }
@@ -107,12 +107,12 @@ public partial class ResourceListView : UserControl
 
     private static DataGridLength WidthFor(ColumnDef def) => def.Name switch
     {
-        "Name" => new DataGridLength(2, DataGridLengthUnitType.Star, 170, double.PositiveInfinity),
+        "Name" => new DataGridLength(2, DataGridLengthUnitType.Star),
         "Namespace" => new DataGridLength(130),
         "Status" or "Phase" or "Type" => new DataGridLength(130),
         "Age" or "Ready" or "Restarts" or "Desired" or "Current" or "Available" or "Up-to-date" => new DataGridLength(85),
         "CPU" or "Memory" or "CPU usage" or "Memory usage" => new DataGridLength(120),
-        "Message" => new DataGridLength(3, DataGridLengthUnitType.Star, 200, double.PositiveInfinity),
+        "Message" => new DataGridLength(3, DataGridLengthUnitType.Star),
         _ => new DataGridLength(120),
     };
 

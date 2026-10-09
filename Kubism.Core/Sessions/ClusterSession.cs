@@ -167,5 +167,9 @@ public sealed class ClusterSession : IAsyncDisposable
         cts?.Dispose();
     }
 
-    public async ValueTask DisposeAsync() => await TearDownAsync().ConfigureAwait(false);
+    public async ValueTask DisposeAsync()
+    {
+        await TearDownAsync().ConfigureAwait(false);
+        if (State != SessionState.Disconnected) SetState(SessionState.Disconnected);
+    }
 }

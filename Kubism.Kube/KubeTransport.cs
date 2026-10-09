@@ -63,12 +63,13 @@ public sealed class KubeTransport : IKubeTransport
             var spec = new ExecSpec(exec.Command, exec.Arguments?.ToList() ?? [], env, null, true);
             handlers.Add(new ExecAuthHandler(new ExecCredentialProvider(spec, observer)));
             user!.UserCredentials.ExternalExecution = null;
+            user.UserCredentials.Token = "exec-plugin"; // placeholder so the library accepts the context; our handler sets the real token
         }
         try
         {
             var config = KubernetesClientConfiguration.BuildConfigFromConfigObject(cfg, entry.ContextName);
             // The client library never sends credentials over plain HTTP; the fake API server (tests, --demo) needs them.
-            if (config.Host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(config.AccessToken))
+            if (exec is null && config.Host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(config.AccessToken))
                 handlers.Add(new StaticBearerHandler(config.AccessToken));
             return (config, [.. handlers]);
         }

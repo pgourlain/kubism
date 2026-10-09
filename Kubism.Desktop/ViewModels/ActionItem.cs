@@ -9,8 +9,11 @@ public sealed partial class ActionItem : ViewModelBase
 {
     public ActionItem(string header, Func<Task> execute, string? gesture = null, bool destructive = false)
     {
-        Header = header; Command = new AsyncRelayCommand(execute, () => IsEnabled); Gesture = gesture; IsDestructive = destructive;
+        Header = header; _execute = execute; Command = new AsyncRelayCommand(execute, () => IsEnabled); Gesture = gesture; IsDestructive = destructive;
     }
+
+    private readonly Func<Task>? _execute;
+    public Task ExecuteAsync() => _execute?.Invoke() ?? Task.CompletedTask;
 
     private ActionItem() { Header = ""; Command = new RelayCommand(() => { }); IsSeparator = true; }
     public static ActionItem Separator() => new();
