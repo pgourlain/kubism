@@ -43,6 +43,7 @@ internal sealed class CellTextBlock : TextBlock
     private void Update()
     {
         Text = _row is not null && _index < _row.Cells.Length ? _row.Cells[_index] : "";
+        ToolTip.SetTip(this, string.IsNullOrEmpty(Text) ? null : Text);
         if (_colored && _row is not null)
             Foreground = _row.Severity is Severity.Neutral ? null : Converters.Brush(_row.Severity switch { Severity.Ok => "KubismOkBrush", Severity.Warning => "KubismWarnBrush", _ => "KubismErrorBrush" });
     }

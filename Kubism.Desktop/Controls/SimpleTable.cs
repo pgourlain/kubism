@@ -62,6 +62,7 @@ public sealed class SimpleTable : Border
             for (var c = 0; c < t.Rows[r].Count && c < t.Headers.Count; c++)
             {
                 var tb = new TextBlock { Text = t.Rows[r][c], Margin = new Thickness(0, 1, 14, 1), TextWrapping = c == t.Headers.Count - 1 ? TextWrapping.Wrap : TextWrapping.NoWrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 300 };
+                ToolTip.SetTip(tb, t.Rows[r][c]);
                 Grid.SetRow(tb, r + 1); Grid.SetColumn(tb, c); grid.Children.Add(tb);
             }
         }

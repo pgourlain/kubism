@@ -321,3 +321,28 @@ public class UiDialogTests
         Assert.Equal("Kubism", Application.Current!.Name);
     }
 }
+
+public class UiTooltipTests
+{
+    [AvaloniaFact]
+    public async Task Grid_cells_show_their_full_text_in_a_tooltip()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.SelectAll();
+        ws.OpenKind(ws.Session.Discovery.FindByName("pods")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Rows.Count > 5);
+        UiHarness.Pump();
+        var cells = h.Window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Parent is not null && t.GetVisualAncestors().OfType<Avalonia.Controls.DataGridCell>().Any() && !string.IsNullOrEmpty(t.Text)).ToList();
+        Assert.NotEmpty(cells);
+        Assert.All(cells, c => Assert.Equal(c.Text, ToolTip.GetTip(c)));
+        // Other grids (activity log) get the same behaviour from the global style.
+        ws.Navigate(ws.FindNav(NavTarget.Activity)!);
+        await ws.Session.Actions.ScaleAsync(Gvr.Deployments, "default", "web", 4, default);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ActivityViewModel a && a.Entries.Count > 0);
+        UiHarness.Pump();
+        var act = h.Window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.GetVisualAncestors().OfType<Avalonia.Controls.DataGridCell>().Any() && t.Text == "Scale").ToList();
+        Assert.NotEmpty(act);
+        Assert.All(act, c => Assert.Equal("Scale", ToolTip.GetTip(c)));
+    }
+}

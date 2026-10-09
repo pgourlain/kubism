@@ -118,6 +118,11 @@
       <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource KubismBorderBrush}" />
       <Setter Property="RowBackground" Value="Transparent" />
     </Style>
+    <!-- Every grid cell: trimmed text shows its full content in a tooltip. -->
+    <Style Selector="DataGridCell TextBlock">
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="ToolTip.Tip" Value="{ReflectionBinding $self.Text}" />
+    </Style>
     <Style Selector="DataGridColumnHeader"><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /><Setter Property="Background" Value="Transparent" /><Setter Property="FontWeight" Value="Medium" /></Style>
     <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle"><Setter Property="Fill" Value="{DynamicResource KubismAccentSoftBrush}" /></Style>
     <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle"><Setter Property="Fill" Value="{DynamicResource KubismSidebarBrush}" /></Style>
