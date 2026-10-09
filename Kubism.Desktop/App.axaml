@@ -5,6 +5,15 @@
              x:Class="Kubism.Desktop.App"
              Name="Kubism"
              RequestedThemeVariant="Default">
+  <!-- macOS application menu: this About replaces Avalonia's default "About Avalonia". -->
+  <NativeMenu.Menu>
+    <NativeMenu>
+      <NativeMenuItem Header="About Kubism" Click="OnAbout" />
+      <NativeMenuItemSeparator />
+      <NativeMenuItem Header="Settings…" Gesture="Cmd+OemComma" Click="OnSettings" />
+    </NativeMenu>
+  </NativeMenu.Menu>
+
   <Application.DataTemplates>
     <DataTemplate DataType="vm:OverviewViewModel"><v:OverviewView /></DataTemplate>
     <DataTemplate DataType="vm:ResourceListViewModel"><v:ResourceListView /></DataTemplate>

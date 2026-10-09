@@ -16,6 +16,10 @@ public partial class App : Application
 
     public static ServiceProvider? Services { get; private set; }
 
+    private MainViewModel? Vm => Services?.GetService<MainViewModel>();
+    private void OnAbout(object? sender, EventArgs e) => _ = Vm?.ShowAboutAsync();
+    private void OnSettings(object? sender, EventArgs e) => _ = Vm?.EditSettingsAsync();
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
@@ -50,16 +54,6 @@ public partial class App : Application
             Shell.ShellEnvironmentSetup.Apply();
             var vm = Services.GetRequiredService<MainViewModel>();
             vm.ApplySettings();
-            if (OperatingSystem.IsMacOS())
-            {
-                // macOS application menu (named after Application.Name): About and Settings live here.
-                var appMenu = new Avalonia.Controls.NativeMenu();
-                var about = new Avalonia.Controls.NativeMenuItem("About Kubism"); about.Click += (_, _) => _ = vm.ShowAboutAsync();
-                var prefs = new Avalonia.Controls.NativeMenuItem("Settings…") { Gesture = new Avalonia.Input.KeyGesture(Avalonia.Input.Key.OemComma, Avalonia.Input.KeyModifiers.Meta) };
-                prefs.Click += (_, _) => _ = vm.EditSettingsAsync();
-                appMenu.Items.Add(about); appMenu.Items.Add(new Avalonia.Controls.NativeMenuItemSeparator()); appMenu.Items.Add(prefs);
-                Avalonia.Controls.NativeMenu.SetMenu(this, appMenu);
-            }
             desktop.MainWindow = new MainWindow { DataContext = vm };
             // SIGTERM/SIGINT (kill, Ctrl+C, logout) quit through the same fast path as the menu.
             foreach (var sig in new[] { System.Runtime.InteropServices.PosixSignal.SIGTERM, System.Runtime.InteropServices.PosixSignal.SIGINT })
