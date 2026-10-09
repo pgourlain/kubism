@@ -1,0 +1,158 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             xmlns:cv="using:Kubism.Core.Views"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.DetailsView"
+             x:DataType="vm:DetailsViewModel">
+  <Border Background="{DynamicResource KubismPanelBrush}" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="1,0,0,0">
+    <Grid RowDefinitions="Auto,Auto,*">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,10,8,4">
+        <StackPanel>
+          <TextBlock Text="{Binding Title}" Classes="h1" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding Subtitle}" Classes="muted" />
+        </StackPanel>
+        <Button Grid.Column="1" Classes="link" Content="✕" Command="{Binding CloseCommand}" AutomationProperties.Name="Close details" VerticalAlignment="Top" />
+      </Grid>
+      <ItemsControl Grid.Row="1" ItemsSource="{Binding Actions}" Margin="8,0,8,6">
+        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ActionItem">
+            <Button Content="{Binding Header}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tooltip}" Margin="2" IsVisible="{Binding !IsSeparator}" Padding="8,3" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TabControl Grid.Row="2" SelectedIndex="{Binding SelectedTab, Mode=TwoWay}">
+        <TabItem Header="Overview">
+          <ScrollViewer>
+            <StackPanel Spacing="10" Margin="4,8,12,12">
+              <ItemsControl ItemsSource="{Binding Sections}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DetailSection">
+                    <Border Classes="card" Margin="0,0,0,8">
+                      <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding Title}" Classes="h2" />
+                        <ItemsControl ItemsSource="{Binding Rows}" IsVisible="{Binding HasRows}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DetailRow">
+                              <Grid ColumnDefinitions="110,*">
+                                <TextBlock Text="{Binding Label}" Classes="muted" />
+                                <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding Chips}" IsVisible="{Binding HasChips}">
+                          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String"><Border Classes="chip"><TextBlock Text="{Binding}" FontSize="11" /></Border></DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <c:SimpleTable Table="{Binding Table}" IsVisible="{Binding HasTable}" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Border Classes="card" IsVisible="{Binding IsSecret}">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Data (values are hidden until revealed)" Classes="h2" />
+                  <ItemsControl ItemsSource="{Binding SecretKeys}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SecretKeyViewModel">
+                        <Grid ColumnDefinitions="140,*,Auto,Auto">
+                          <TextBlock Text="{Binding Key}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                          <SelectableTextBlock Grid.Column="1" Text="{Binding Display}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                          <Button Grid.Column="2" Classes="link" Content="{Binding Revealed, Converter={x:Static app:Converters.RevealLabel}}" Command="{Binding ToggleCommand}" />
+                          <Button Grid.Column="3" Classes="link" Content="Copy" IsVisible="{Binding Revealed}" Command="{Binding $parent[UserControl].((vm:DetailsViewModel)DataContext).CopySecretValueCommand}" CommandParameter="{Binding}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+              <Border Classes="card" IsVisible="{Binding Annotations.Count}">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Annotations" Classes="h2" />
+                  <ItemsControl ItemsSource="{Binding Annotations}">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String"><Border Classes="chip"><TextBlock Text="{Binding}" FontSize="11" /></Border></DataTemplate></ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+        <TabItem Header="YAML">
+          <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4">
+              <CheckBox Content="managedFields" IsChecked="{Binding ShowManagedFields}" IsVisible="{Binding !IsEditing}" />
+              <Button Content="Edit" Command="{Binding BeginEditCommand}" IsVisible="{Binding !IsEditing}" />
+              <Button Content="Copy" Command="{Binding CopyYamlCommand}" IsVisible="{Binding !IsEditing}" />
+              <Button Content="Download" Command="{Binding DownloadYamlCommand}" IsVisible="{Binding !IsEditing}" />
+              <Button Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding IsEditing}" />
+              <Button Content="Cancel" Command="{Binding CancelEditCommand}" IsVisible="{Binding IsEditing}" />
+            </StackPanel>
+            <Border Grid.Row="1" Background="{DynamicResource KubismSidebarBrush}" Padding="8,6" IsVisible="{Binding EditError, Converter={x:Static app:Converters.NotNull}}">
+              <TextBlock Text="{Binding EditError}" Foreground="{DynamicResource KubismErrorBrush}" TextWrapping="Wrap" />
+            </Border>
+            <Border Grid.Row="2" Classes="card" IsVisible="{Binding HasConflict}" Margin="0,4">
+              <StackPanel Spacing="6">
+                <TextBlock Text="Conflict: diff between your text (-) and the server (+)" Classes="h2" />
+                <TextBox Text="{Binding ConflictDiff}" IsReadOnly="True" AcceptsReturn="True" MaxHeight="160" FontFamily="Menlo,Consolas,monospace" FontSize="11" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Button Content="Reload and reapply my changes" Command="{Binding ReloadAndReapplyCommand}" />
+                  <Button Content="Discard mine" Command="{Binding DiscardMineCommand}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+            <c:YamlEditor Grid.Row="3" Name="ViewEditor" Text="{Binding YamlText}" IsReadOnly="True" IsVisible="{Binding !IsEditing}" />
+            <c:YamlEditor Grid.Row="3" Name="EditEditor" Text="{Binding EditText, Mode=TwoWay}" IsReadOnly="False" IsVisible="{Binding IsEditing}" />
+          </Grid>
+        </TabItem>
+        <TabItem Header="Events">
+          <ScrollViewer>
+            <StackPanel Margin="4,8">
+              <TextBlock Text="No events" Classes="muted" IsVisible="{Binding !Events.Count}" />
+              <ItemsControl ItemsSource="{Binding Events}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:EventRow">
+                    <Border Classes="card" Margin="0,0,0,6" Padding="8">
+                      <StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <TextBlock Text="{Binding Type}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Reason}" />
+                          <TextBlock Text="{Binding Age}" Classes="muted" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+        <TabItem Header="Related">
+          <ScrollViewer>
+            <StackPanel Margin="4,8">
+              <TextBlock Text="No related objects" Classes="muted" IsVisible="{Binding !RelatedItems.Count}" />
+              <ItemsControl ItemsSource="{Binding RelatedItems}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="cv:RelatedItem">
+                    <Grid ColumnDefinitions="80,120,*" Margin="0,2">
+                      <TextBlock Text="{Binding Relation}" Classes="muted" />
+                      <TextBlock Grid.Column="1" Text="{Binding Kind}" />
+                      <TextBlock Grid.Column="2" Text="{Binding Name}" FontWeight="SemiBold" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+        </TabItem>
+      </TabControl>
+    </Grid>
+  </Border>
+</UserControl>

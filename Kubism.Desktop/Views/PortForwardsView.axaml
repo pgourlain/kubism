@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             x:Class="Kubism.Desktop.Views.PortForwardsView"
+             x:DataType="vm:PortForwardsViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="12" Spacing="8">
+      <TextBlock Text="No active port forwards. Use “Forward port…” on a pod or service." Classes="muted" IsVisible="{Binding IsEmpty}" />
+      <ItemsControl ItemsSource="{Binding Items}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:PortForwardRow">
+            <Border Classes="card" Margin="0,0,0,6" Padding="8">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel>
+                  <TextBlock Text="{Binding Local}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Target}" />
+                  <TextBlock Text="{Binding Info}" Classes="muted" FontSize="11" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <Button Content="Open" Command="{Binding OpenCommand}" />
+                  <Button Content="Copy URL" Command="{Binding CopyUrlCommand}" />
+                  <Button Content="Stop" Command="{Binding StopCommand}" />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

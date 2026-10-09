@@ -1,0 +1,84 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:v="using:Kubism.Desktop.Views"
+             x:Class="Kubism.Desktop.App"
+             RequestedThemeVariant="Default">
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:OverviewViewModel"><v:OverviewView /></DataTemplate>
+    <DataTemplate DataType="vm:ResourceListViewModel"><v:ResourceListView /></DataTemplate>
+    <DataTemplate DataType="vm:RightSizingViewModel"><v:RightSizingView /></DataTemplate>
+    <DataTemplate DataType="vm:HelmViewModel"><v:HelmView /></DataTemplate>
+    <DataTemplate DataType="vm:ActivityViewModel"><v:ActivityView /></DataTemplate>
+    <DataTemplate DataType="vm:CreateYamlViewModel"><v:CreateYamlView /></DataTemplate>
+    <DataTemplate DataType="vm:LogViewModel"><v:LogView /></DataTemplate>
+    <DataTemplate DataType="vm:TerminalViewModel"><v:TerminalView /></DataTemplate>
+    <DataTemplate DataType="vm:PortForwardsViewModel"><v:PortForwardsView /></DataTemplate>
+    <DataTemplate DataType="vm:WorkspaceViewModel"><v:WorkspaceView /></DataTemplate>
+  </Application.DataTemplates>
+
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="KubismSidebarBrush" Color="#F3F4F6" />
+          <SolidColorBrush x:Key="KubismCatalogBrush" Color="#E5E7EB" />
+          <SolidColorBrush x:Key="KubismPanelBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="KubismBorderBrush" Color="#D1D5DB" />
+          <SolidColorBrush x:Key="KubismMutedBrush" Color="#6B7280" />
+          <SolidColorBrush x:Key="KubismOkBrush" Color="#047857" />
+          <SolidColorBrush x:Key="KubismWarnBrush" Color="#B45309" />
+          <SolidColorBrush x:Key="KubismErrorBrush" Color="#B91C1C" />
+          <SolidColorBrush x:Key="KubismAccentBrush" Color="#2563EB" />
+          <SolidColorBrush x:Key="KubismNewRowBrush" Color="#DBEAFE" />
+          <SolidColorBrush x:Key="KubismProductionBrush" Color="#B91C1C" />
+          <SolidColorBrush x:Key="KubismReadOnlyBrush" Color="#6B21A8" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="KubismSidebarBrush" Color="#1F2937" />
+          <SolidColorBrush x:Key="KubismCatalogBrush" Color="#111827" />
+          <SolidColorBrush x:Key="KubismPanelBrush" Color="#18202F" />
+          <SolidColorBrush x:Key="KubismBorderBrush" Color="#374151" />
+          <SolidColorBrush x:Key="KubismMutedBrush" Color="#9CA3AF" />
+          <SolidColorBrush x:Key="KubismOkBrush" Color="#34D399" />
+          <SolidColorBrush x:Key="KubismWarnBrush" Color="#FBBF24" />
+          <SolidColorBrush x:Key="KubismErrorBrush" Color="#F87171" />
+          <SolidColorBrush x:Key="KubismAccentBrush" Color="#60A5FA" />
+          <SolidColorBrush x:Key="KubismNewRowBrush" Color="#1E3A5F" />
+          <SolidColorBrush x:Key="KubismProductionBrush" Color="#DC2626" />
+          <SolidColorBrush x:Key="KubismReadOnlyBrush" Color="#7E22CE" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+    <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+    <Style Selector="TabItem"><Setter Property="FontSize" Value="14" /><Setter Property="Padding" Value="10,6" /></Style>
+    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /></Style>
+    <Style Selector="TextBlock.h1"><Setter Property="FontSize" Value="20" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+    <Style Selector="TextBlock.h2"><Setter Property="FontSize" Value="14" /><Setter Property="FontWeight" Value="SemiBold" /></Style>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="{DynamicResource KubismPanelBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KubismBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Border.chip">
+      <Setter Property="Background" Value="{DynamicResource KubismSidebarBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource KubismBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="8,1" />
+      <Setter Property="Margin" Value="0,0,4,4" />
+    </Style>
+    <Style Selector="DataGridRow.newrow"><Setter Property="Background" Value="{DynamicResource KubismNewRowBrush}" /></Style>
+    <Style Selector="DataGridRow.deleting"><Setter Property="Opacity" Value="0.4" /></Style>
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="0" /><Setter Property="Padding" Value="4,2" />
+    </Style>
+  </Application.Styles>
+</Application>

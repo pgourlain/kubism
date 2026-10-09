@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:act="using:Kubism.Core.Actions"
+             x:Class="Kubism.Desktop.Views.ActivityView"
+             x:DataType="vm:ActivityViewModel">
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <StackPanel>
+        <TextBlock Text="Activity" Classes="h1" />
+        <TextBlock Text="What this app did on the cluster in this session. Secret values are never recorded." Classes="muted" />
+      </StackPanel>
+      <Button Grid.Column="1" Content="Export…" Command="{Binding ExportCommand}" VerticalAlignment="Top" />
+    </Grid>
+    <DataGrid Grid.Row="1" ItemsSource="{Binding Entries}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="Time" Binding="{Binding Time, StringFormat='{}{0:HH:mm:ss}'}" x:DataType="act:ActivityEntry" />
+        <DataGridTextColumn Header="Action" Binding="{Binding Action}" x:DataType="act:ActivityEntry" />
+        <DataGridTextColumn Header="Target" Binding="{Binding Target}" x:DataType="act:ActivityEntry" Width="*" />
+        <DataGridTextColumn Header="Result" Binding="{Binding Success}" x:DataType="act:ActivityEntry" />
+        <DataGridTextColumn Header="Message" Binding="{Binding Message}" x:DataType="act:ActivityEntry" Width="2*" />
+      </DataGrid.Columns>
+    </DataGrid>
+  </Grid>
+</UserControl>

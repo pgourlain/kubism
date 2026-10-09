@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.CreateYamlView"
+             x:DataType="vm:CreateYamlViewModel">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="16">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <StackPanel>
+        <TextBlock Text="Create from YAML" Classes="h1" />
+        <TextBlock Text="Multi-document, applied with server-side apply (fieldManager=kubism)." Classes="muted" />
+      </StackPanel>
+      <Button Grid.Column="1" Content="Apply" Command="{Binding ApplyCommand}" IsEnabled="{Binding !IsRunning}" VerticalAlignment="Top" />
+    </Grid>
+    <c:YamlEditor Grid.Row="1" Text="{Binding Yaml, Mode=TwoWay}" IsReadOnly="False" />
+    <ItemsControl Grid.Row="2" ItemsSource="{Binding Results}" Margin="0,8,0,0" MaxHeight="160">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:CreateResult">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding Success, Converter={x:Static app:Converters.OkMark}}" />
+            <TextBlock Text="{Binding Document}" FontWeight="SemiBold" />
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+          </StackPanel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Grid>
+</UserControl>

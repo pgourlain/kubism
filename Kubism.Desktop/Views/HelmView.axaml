@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:h="using:Kubism.Core.Helm"
+             x:Class="Kubism.Desktop.Views.HelmView"
+             x:DataType="vm:HelmViewModel">
+  <Grid ColumnDefinitions="*,Auto,1.2*" Margin="16">
+    <Grid RowDefinitions="Auto,*">
+      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+        <StackPanel>
+          <TextBlock Text="Helm releases" Classes="h1" />
+          <TextBlock Text="Read from release secrets; no helm binary needed to browse." Classes="muted" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="Refresh" Command="{Binding LoadCommand}" VerticalAlignment="Top" />
+      </Grid>
+      <DataGrid Grid.Row="1" ItemsSource="{Binding Releases}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Name" Binding="{Binding Name}" x:DataType="h:HelmRelease" Width="*" />
+          <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="h:HelmRelease" />
+          <DataGridTextColumn Header="Chart" Binding="{Binding Chart}" x:DataType="h:HelmRelease" />
+          <DataGridTextColumn Header="Version" Binding="{Binding ChartVersion}" x:DataType="h:HelmRelease" />
+          <DataGridTextColumn Header="App" Binding="{Binding AppVersion}" x:DataType="h:HelmRelease" />
+          <DataGridTextColumn Header="Rev" Binding="{Binding Revision}" x:DataType="h:HelmRelease" />
+          <DataGridTextColumn Header="Status" Binding="{Binding Status}" x:DataType="h:HelmRelease" />
+        </DataGrid.Columns>
+      </DataGrid>
+    </Grid>
+    <GridSplitter Grid.Column="1" Width="6" />
+    <TabControl Grid.Column="2">
+      <TabItem Header="Values">
+        <TextBox Text="{Binding ValuesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+      </TabItem>
+      <TabItem Header="User values">
+        <TextBox Text="{Binding UserValuesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+      </TabItem>
+      <TabItem Header="Manifest">
+        <TextBox Text="{Binding ManifestText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+      </TabItem>
+      <TabItem Header="Notes">
+        <TextBox Text="{Binding NotesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+      </TabItem>
+      <TabItem Header="History">
+        <Grid RowDefinitions="*,Auto">
+          <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" AutoGenerateColumns="False" SelectionMode="Single" Name="HistoryGrid">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Revision" Binding="{Binding Revision}" x:DataType="h:HelmRelease" />
+              <DataGridTextColumn Header="Status" Binding="{Binding Status}" x:DataType="h:HelmRelease" />
+              <DataGridTextColumn Header="Chart" Binding="{Binding ChartVersion}" x:DataType="h:HelmRelease" />
+              <DataGridTextColumn Header="Updated" Binding="{Binding Updated}" x:DataType="h:HelmRelease" />
+              <DataGridTextColumn Header="Description" Binding="{Binding Description}" x:DataType="h:HelmRelease" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+            <Button Content="Roll back to selected revision" Click="OnRollback" IsEnabled="{Binding CanWrite}" ToolTip.Tip="{Binding WriteTooltip}" />
+            <Button Content="Uninstall" Command="{Binding UninstallCommand}" IsEnabled="{Binding CanWrite}" ToolTip.Tip="{Binding WriteTooltip}" />
+          </StackPanel>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

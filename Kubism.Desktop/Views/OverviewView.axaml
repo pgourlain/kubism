@@ -1,0 +1,107 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.OverviewView"
+             x:DataType="vm:OverviewViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="16" Spacing="12">
+      <TextBlock Text="Overview" Classes="h1" />
+      <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+        <Border Classes="card">
+          <StackPanel>
+            <TextBlock Text="Nodes" Classes="muted" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding NodesReady}" FontSize="28" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding NodesTotal, StringFormat='/ {0} ready'}" Classes="muted" VerticalAlignment="Bottom" Margin="0,0,0,5" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Grid.Column="1">
+          <StackPanel>
+            <TextBlock Text="Kubernetes version" Classes="muted" />
+            <TextBlock Text="{Binding Version}" FontSize="22" FontWeight="SemiBold" />
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Grid.Column="2">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Pods by phase" Classes="muted" />
+            <ItemsControl ItemsSource="{Binding Phases}">
+              <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:PhaseCount">
+                  <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+                    <TextBlock Text="{Binding Count}" FontSize="22" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                    <TextBlock Text="{Binding Phase}" Classes="muted" VerticalAlignment="Bottom" Margin="0,0,0,4" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+        <Border Classes="card">
+          <StackPanel Spacing="4">
+            <TextBlock Text="CPU" Classes="h2" />
+            <Grid Height="10">
+              <ProgressBar Value="{Binding CpuRequestRatio}" Maximum="1" Height="10" Opacity="0.45" />
+              <ProgressBar Value="{Binding CpuUsageRatio}" Maximum="1" Height="10" IsVisible="{Binding MetricsAvailable}" />
+            </Grid>
+            <TextBlock Text="{Binding CpuText}" Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Grid.Column="1">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Memory" Classes="h2" />
+            <Grid Height="10">
+              <ProgressBar Value="{Binding MemoryRequestRatio}" Maximum="1" Height="10" Opacity="0.45" />
+              <ProgressBar Value="{Binding MemoryUsageRatio}" Maximum="1" Height="10" IsVisible="{Binding MetricsAvailable}" />
+            </Grid>
+            <TextBlock Text="{Binding MemoryText}" Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </Grid>
+      <TextBlock Text="{Binding MetricsMessage}" Foreground="{DynamicResource KubismWarnBrush}" IsVisible="{Binding MetricsMessage, Converter={x:Static app:Converters.NotNull}}" />
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+        <Border Classes="card">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Problem pods" Classes="h2" />
+            <TextBlock Text="None" Classes="muted" IsVisible="{Binding !Problems.Count}" />
+            <ItemsControl ItemsSource="{Binding Problems}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ProblemPod">
+                  <Grid ColumnDefinitions="*,Auto,50">
+                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Namespace}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Status}" Foreground="{DynamicResource KubismErrorBrush}" Margin="8,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Age}" Classes="muted" HorizontalAlignment="Right" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Grid.Column="1">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Recent warnings" Classes="h2" />
+            <TextBlock Text="None" Classes="muted" IsVisible="{Binding !Warnings.Count}" />
+            <ItemsControl ItemsSource="{Binding Warnings}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:WarningEvent">
+                  <StackPanel Margin="0,0,0,4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Reason}" FontWeight="SemiBold" Foreground="{DynamicResource KubismWarnBrush}" />
+                      <TextBlock Text="{Binding Object}" />
+                      <TextBlock Text="{Binding Age}" Classes="muted" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Classes="muted" FontSize="11" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -101,6 +101,7 @@ public sealed class ClusterSession : IAsyncDisposable
 
     public static string Describe(Exception ex) => ex switch
     {
+        AggregateException { InnerException: { } inner } => Describe(inner),
         OperationCanceledException => "Cancelled",
         KubeApiException { StatusCode: 401 } a => $"Authentication failed (401): {a.Message}",
         KubeApiException a => $"{a.StatusCode} {a.Reason}: {a.Message}",

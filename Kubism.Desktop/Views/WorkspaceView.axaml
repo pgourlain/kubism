@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:v="using:Kubism.Desktop.Views"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.WorkspaceView"
+             x:DataType="vm:WorkspaceViewModel">
+  <Grid RowDefinitions="Auto,*">
+    <!-- Safety banner: red strip for production, purple for read-only -->
+    <Border Grid.Row="0" IsVisible="{Binding HasBanner}" Background="{Binding IsProduction, Converter={x:Static app:Converters.SafetyBrush}}" Padding="10,3">
+      <TextBlock Text="{Binding BannerText}" Foreground="White" FontWeight="SemiBold" FontSize="12" />
+    </Border>
+    <Border Grid.Row="0" IsVisible="{Binding !HasBanner}" Height="3" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" />
+
+    <Grid Grid.Row="1" ColumnDefinitions="230,Auto,*,Auto,Auto">
+      <!-- Sidebar -->
+      <Grid Background="{DynamicResource KubismSidebarBrush}" RowDefinitions="Auto,*">
+        <Border Padding="10,8" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="0,0,0,1">
+          <StackPanel>
+            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding ServerVersion}" Classes="muted" FontSize="11" />
+              <TextBlock Text="degraded" IsVisible="{Binding IsDegraded}" Foreground="{DynamicResource KubismWarnBrush}" FontSize="11" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <TreeView Name="NavTree" Grid.Row="1" ItemsSource="{Binding NavRoots}" SelectedItem="{Binding SelectedNav}" Background="Transparent" AutomationProperties.Name="Navigation">
+          <TreeView.ItemContainerTheme>
+            <ControlTheme x:DataType="vm:NavNode" TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+              <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+              <Setter Property="MinHeight" Value="26" />
+            </ControlTheme>
+          </TreeView.ItemContainerTheme>
+          <TreeView.ItemTemplate>
+            <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:NavNode">
+              <StackPanel Orientation="Horizontal" Spacing="6" Opacity="{Binding IsDimmed, Converter={x:Static app:Converters.BoolToOpacityDim}}">
+                <PathIcon Width="13" Height="13" Data="{Binding IconKey, Converter={x:Static app:Converters.Icon}}" IsVisible="{Binding IconKey, Converter={x:Static app:Converters.NotNull}}" />
+                <TextBlock Text="{Binding Title}" FontWeight="{Binding IsGroup, Converter={x:Static app:Converters.GroupWeight}}" ToolTip.Tip="{Binding ShortNames}" />
+              </StackPanel>
+            </TreeDataTemplate>
+          </TreeView.ItemTemplate>
+        </TreeView>
+      </Grid>
+      <GridSplitter Grid.Column="1" Width="1" Background="{DynamicResource KubismBorderBrush}" />
+
+      <!-- Content + dock -->
+      <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto">
+        <ContentControl Grid.Row="0" Content="{Binding CurrentContent}" />
+        <GridSplitter Grid.Row="1" Height="4" HorizontalAlignment="Stretch" IsVisible="{Binding Dock.IsOpen}" Background="{DynamicResource KubismBorderBrush}" />
+        <v:DockView Grid.Row="2" DataContext="{Binding Dock}" IsVisible="{Binding IsOpen}" Height="{Binding Height, Mode=TwoWay}" />
+      </Grid>
+      <GridSplitter Grid.Column="3" Width="4" IsVisible="{Binding Details.IsOpen}" Background="{DynamicResource KubismBorderBrush}" />
+      <v:DetailsView Grid.Column="4" Width="420" DataContext="{Binding Details}" IsVisible="{Binding IsOpen}" />
+    </Grid>
+  </Grid>
+</UserControl>

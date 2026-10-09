@@ -1,0 +1,16 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             x:Class="Kubism.Desktop.Views.TerminalView"
+             x:DataType="vm:TerminalViewModel">
+  <Grid RowDefinitions="*,Auto">
+    <c:TerminalControl Name="Term" Buffer="{Binding Buffer}" AutomationProperties.Name="Terminal" />
+    <Border Grid.Row="1" IsVisible="{Binding Exited}" Background="{DynamicResource KubismSidebarBrush}" Padding="8,4">
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <TextBlock Text="{Binding ExitMessage}" VerticalAlignment="Center" TextWrapping="Wrap" />
+        <Button Content="Reconnect" Command="{Binding ReconnectCommand}" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

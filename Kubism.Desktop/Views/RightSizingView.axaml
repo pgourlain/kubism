@@ -1,0 +1,157 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             xmlns:rs="using:Kubism.Core.RightSizing"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.RightSizingView"
+             x:DataType="vm:RightSizingViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16" RowSpacing="8">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="Right-sizing" Classes="h1" />
+        <TextBlock Text="{Binding SourceInfo}" Classes="muted" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding StrategyInfo}" Classes="muted" FontSize="11" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <ComboBox ItemsSource="{Binding Sources}" SelectedItem="{Binding SelectedSource}" MinWidth="220" AutomationProperties.Name="Usage source">
+          <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:SourceChoice"><TextBlock Text="{Binding Name}" /></DataTemplate></ComboBox.ItemTemplate>
+        </ComboBox>
+        <ComboBox ItemsSource="{Binding WindowChoices}" SelectedItem="{Binding WindowDays}" AutomationProperties.Name="Window in days">
+          <ComboBox.ItemTemplate><DataTemplate x:DataType="x:Int32"><TextBlock Text="{Binding StringFormat='{}{0} d'}" /></DataTemplate></ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button Content="Test connection" Command="{Binding TestConnectionCommand}" />
+        <Button Content="Refresh" Command="{Binding LoadCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,*,*,*" ColumnSpacing="10">
+      <Border Classes="card"><StackPanel><TextBlock Text="CPU" Classes="muted" /><TextBlock Text="{Binding CpuKpi}" TextWrapping="Wrap" FontWeight="SemiBold" /></StackPanel></Border>
+      <Border Classes="card" Grid.Column="1"><StackPanel><TextBlock Text="Memory" Classes="muted" /><TextBlock Text="{Binding MemoryKpi}" TextWrapping="Wrap" FontWeight="SemiBold" /></StackPanel></Border>
+      <Border Classes="card" Grid.Column="2"><StackPanel><TextBlock Text="Waste (requested − p95 used)" Classes="muted" /><TextBlock Text="{Binding WasteKpi}" TextWrapping="Wrap" FontWeight="SemiBold" /><TextBlock Text="{Binding CostKpi}" Classes="muted" /></StackPanel></Border>
+      <Border Classes="card" Grid.Column="3">
+        <StackPanel>
+          <TextBlock Text="Attention" Classes="muted" />
+          <StackPanel Orientation="Horizontal" Spacing="14">
+            <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="{Binding UnderCount}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource KubismErrorBrush}" /><TextBlock Text="under-provisioned" VerticalAlignment="Bottom" Classes="muted" /></StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4"><TextBlock Text="{Binding NoRequestCount}" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource KubismWarnBrush}" /><TextBlock Text="without requests" VerticalAlignment="Bottom" Classes="muted" /></StackPanel>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+      <ComboBox ItemsSource="{Binding VerdictFilters}" SelectedItem="{Binding VerdictFilter}" AutomationProperties.Name="Verdict filter" />
+      <ComboBox ItemsSource="{Binding SortChoices}" SelectedItem="{Binding SortBy}" AutomationProperties.Name="Sort by" />
+      <TextBox Text="{Binding KindFilter}" Watermark="Namespace / kind / name" Width="220" />
+      <TextBlock Text="Min waste (cores)" VerticalAlignment="Center" Classes="muted" />
+      <NumericUpDown Value="{Binding MinWasteCores}" Minimum="0" Increment="0.05" FormatString="0.00" Width="110" />
+      <ProgressBar IsIndeterminate="True" Width="80" IsVisible="{Binding IsLoading}" />
+      <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding ConnectionResult}" Classes="muted" />
+    </StackPanel>
+
+    <TabControl Grid.Row="3">
+      <TabItem Header="Containers">
+        <Grid ColumnDefinitions="*,Auto">
+          <DataGrid Name="ContainersGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Containers">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Width="40">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ContainerRowViewModel"><CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" HorizontalAlignment="Center" AutomationProperties.Name="Select container" /></DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTextColumn Header="Workload" Binding="{Binding Workload}" x:DataType="vm:ContainerRowViewModel" Width="1.5*" />
+              <DataGridTextColumn Header="Container" Binding="{Binding Container}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTextColumn Header="Repl." Binding="{Binding Replicas}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTemplateColumn Header="CPU  (req | p95 | max)" Width="1.3*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ContainerRowViewModel">
+                    <StackPanel Margin="6,2" Spacing="1">
+                      <c:UsageBar Request="{Binding CpuRequestV}" Limit="{Binding CpuLimitV}" P95="{Binding CpuP95V}" Max="{Binding CpuMaxV}" />
+                      <TextBlock FontSize="10" Classes="muted"><Run Text="{Binding CpuRequest}" /><Run Text=" | " /><Run Text="{Binding CpuP95}" /><Run Text=" | " /><Run Text="{Binding CpuMax}" /></TextBlock>
+                    </StackPanel>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="CPU rec." Binding="{Binding RecCpu}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTemplateColumn Header="Memory  (req | p95 | max)" Width="1.3*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ContainerRowViewModel">
+                    <StackPanel Margin="6,2" Spacing="1">
+                      <c:UsageBar Request="{Binding MemRequestV}" Limit="{Binding MemLimitV}" P95="{Binding MemP95V}" Max="{Binding MemMaxV}" />
+                      <TextBlock FontSize="10" Classes="muted"><Run Text="{Binding MemoryRequest}" /><Run Text=" | " /><Run Text="{Binding MemoryP95}" /><Run Text=" | " /><Run Text="{Binding MemoryMax}" /></TextBlock>
+                    </StackPanel>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Mem rec." Binding="{Binding RecMemory}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTemplateColumn Header="Verdict">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:ContainerRowViewModel">
+                    <Border CornerRadius="9" Padding="8,1" Margin="4" HorizontalAlignment="Left" BorderThickness="1" BorderBrush="{Binding VerdictSeverity, Converter={x:Static app:Converters.SeverityBrush}}">
+                      <TextBlock Text="{Binding Verdict}" FontSize="11" Foreground="{Binding VerdictSeverity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Waste" Binding="{Binding Waste}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTextColumn Header="Managed by" Binding="{Binding GitOps}" x:DataType="vm:ContainerRowViewModel" />
+            </DataGrid.Columns>
+          </DataGrid>
+          <Border Grid.Column="1" Width="340" Classes="card" Margin="8,0,0,0" IsVisible="{Binding Selected, Converter={x:Static app:Converters.NotNull}}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding Selected.Workload}" Classes="h2" TextWrapping="Wrap" />
+              <TextBlock Text="{Binding Selected.Container}" Classes="muted" />
+              <TextBlock Text="CPU usage over the window (request in orange)" FontSize="11" Classes="muted" />
+              <c:Sparkline Height="70" Values="{Binding CpuSeries}" Request="{Binding Selected.CpuRequestV}" Limit="{Binding Selected.CpuLimitV}" />
+              <TextBlock Text="Memory working set (request in orange, limit dashed)" FontSize="11" Classes="muted" />
+              <c:Sparkline Height="70" Values="{Binding MemorySeries}" Request="{Binding Selected.MemRequestV}" Limit="{Binding Selected.MemLimitV}" />
+              <TextBlock FontSize="11" Classes="muted" TextWrapping="Wrap"><Run Text="OOMKills: " /><Run Text="{Binding Selected.Report.OomKills}" /><Run Text="  restarts: " /><Run Text="{Binding Selected.Report.Restarts}" /><Run Text="  throttled: " /><Run Text="{Binding Selected.Report.ThrottledRatio, StringFormat='{}{0:P0}'}" /></TextBlock>
+            </StackPanel>
+          </Border>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Namespaces">
+        <DataGrid ItemsSource="{Binding Rollups}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="rs:NamespaceRollup" Width="*" />
+            <DataGridTextColumn Header="CPU requested" Binding="{Binding CpuRequested, StringFormat='{}{0:0.###}'}" x:DataType="rs:NamespaceRollup" />
+            <DataGridTextColumn Header="CPU used (p95)" Binding="{Binding CpuUsedP95, StringFormat='{}{0:0.###}'}" x:DataType="rs:NamespaceRollup" />
+            <DataGridTextColumn Header="CPU waste" Binding="{Binding WasteCpu, StringFormat='{}{0:0.###}'}" x:DataType="rs:NamespaceRollup" />
+            <DataGridTextColumn Header="Memory requested" Binding="{Binding MemoryRequested, Converter={x:Static app:Converters.Bytes}}" x:DataType="rs:NamespaceRollup" />
+            <DataGridTextColumn Header="Memory used (p95)" Binding="{Binding MemoryUsedP95, Converter={x:Static app:Converters.Bytes}}" x:DataType="rs:NamespaceRollup" />
+            <DataGridTextColumn Header="Memory waste" Binding="{Binding WasteMemory, Converter={x:Static app:Converters.Bytes}}" x:DataType="rs:NamespaceRollup" />
+          </DataGrid.Columns>
+        </DataGrid>
+      </TabItem>
+      <TabItem Header="Patch preview">
+        <TextBox Text="{Binding PatchPreview}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+      </TabItem>
+    </TabControl>
+
+    <Border Grid.Row="4" Classes="card">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="{Binding SelectedCount, StringFormat='{}{0} selected'}" VerticalAlignment="Center" />
+            <Button Content="Select all" Command="{Binding SelectAllVisibleCommand}" />
+            <Button Content="Clear" Command="{Binding ClearSelectionCommand}" />
+            <CheckBox Content="Override GitOps / Helm protection" IsChecked="{Binding OverrideGitOps}" />
+          </StackPanel>
+          <TextBlock Text="{Binding ApplyBlockedReason}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" IsVisible="{Binding ApplyBlockedReason, Converter={x:Static app:Converters.NotNull}}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+          <Button Content="Apply…" Command="{Binding ApplyCommand}" IsEnabled="{Binding ApplyBlockedReason, Converter={x:Static app:Converters.IsNull}}" ToolTip.Tip="{Binding ApplyBlockedReason}" />
+          <Button Content="Copy YAML" Command="{Binding CopyYamlCommand}" />
+          <Button Content="Copy Helm values" Command="{Binding CopyHelmCommand}" />
+          <Button Content="Copy Kustomize patch" Command="{Binding CopyKustomizeCommand}" />
+          <Button Content="Create VPA (recommend only)" Command="{Binding CreateVpaCommand}" />
+          <Button Content="Export CSV…" Command="{Binding ExportCsvCommand}" />
+          <Button Content="Export Markdown…" Command="{Binding ExportMarkdownCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

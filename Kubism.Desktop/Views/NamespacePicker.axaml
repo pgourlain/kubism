@@ -1,0 +1,27 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             x:Class="Kubism.Desktop.Views.NamespacePicker"
+             x:DataType="vm:NamespaceSelectorViewModel">
+  <Button Content="{Binding Summary, StringFormat='Namespace: {0}'}" AutomationProperties.Name="Namespace selection">
+    <Button.Flyout>
+      <Flyout Placement="BottomEdgeAlignedLeft">
+        <StackPanel Width="260" Spacing="6">
+          <Button Content="All namespaces" Command="{Binding SelectAllCommand}" HorizontalAlignment="Stretch" />
+          <TextBlock Text="Listing namespaces is forbidden: type the ones you can use." IsVisible="{Binding IsForbidden}" TextWrapping="Wrap" Foreground="{DynamicResource KubismWarnBrush}" FontSize="11" />
+          <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsForbidden}">
+            <TextBox Text="{Binding ManualText}" Watermark="namespace" />
+            <Button Grid.Column="1" Content="Add" Command="{Binding AddManualCommand}" />
+          </Grid>
+          <ListBox ItemsSource="{Binding Choices}" MaxHeight="300" SelectionMode="Multiple,Toggle">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:NamespaceChoice">
+                <CheckBox Content="{Binding Name}" IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+      </Flyout>
+    </Button.Flyout>
+  </Button>
+</UserControl>

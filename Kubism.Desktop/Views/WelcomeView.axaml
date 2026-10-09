@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.WelcomeView"
+             x:DataType="vm:MainViewModel">
+  <ScrollViewer>
+    <StackPanel Margin="32" Spacing="16" MaxWidth="900" HorizontalAlignment="Left">
+      <StackPanel>
+        <TextBlock Text="Kubism" Classes="h1" FontSize="30" />
+        <TextBlock Text="Inspect. Steer. Monitor." Classes="muted" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="Add kubeconfig file…" Command="{Binding AddKubeconfigCommand}" />
+        <Button Content="Add folder…" Command="{Binding AddFolderCommand}" />
+      </StackPanel>
+      <ItemsControl ItemsSource="{Binding CatalogErrors}" IsVisible="{Binding HasCatalogErrors}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:KubeconfigErrorRow">
+            <TextBlock Text="{Binding Text}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Text="Contexts" Classes="h2" />
+      <TextBlock Text="No clusters found. Add a kubeconfig file or folder." Classes="muted" IsVisible="{Binding !Clusters.Count}" />
+      <ItemsControl ItemsSource="{Binding Clusters}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ClusterItemViewModel">
+            <Border Classes="card" Margin="0,0,0,8">
+              <Grid ColumnDefinitions="Auto,*,Auto">
+                <Border Width="36" Height="36" CornerRadius="18" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" Margin="0,0,12,0">
+                  <TextBlock Text="{Binding Letter}" Foreground="White" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Host}" Classes="muted" />
+                  <TextBlock Text="{Binding FilePath}" Classes="muted" FontSize="11" />
+                  <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasError}" Foreground="{DynamicResource KubismErrorBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <Button Content="Settings…" Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).EditClusterCommand}" CommandParameter="{Binding}" />
+                  <Button Content="Connect" Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).ConnectCommand}" CommandParameter="{Binding}" />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

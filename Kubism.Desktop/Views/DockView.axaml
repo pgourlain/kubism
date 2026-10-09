@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             x:Class="Kubism.Desktop.Views.DockView"
+             x:DataType="vm:DockViewModel">
+  <Border Background="{DynamicResource KubismPanelBrush}" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="0,1,0,0">
+    <Grid RowDefinitions="Auto,*">
+      <ListBox Name="Tabs" ItemsSource="{Binding Items}" SelectedItem="{Binding Selected}" Background="{DynamicResource KubismSidebarBrush}" AutomationProperties.Name="Dock tabs">
+        <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:DockItemViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding Kind}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+              <Button Classes="link" Content="×" Click="OnCloseTab" AutomationProperties.Name="Close tab" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <ContentControl Grid.Row="1" Content="{Binding Selected}" />
+    </Grid>
+  </Border>
+</UserControl>
