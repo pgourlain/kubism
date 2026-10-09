@@ -62,6 +62,7 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
     private CancellationTokenSource _cts = new();
     private RightSizingReport? _report;
     private UsageHistory? _history;
+    private bool _started;
 
     public RightSizingViewModel(WorkspaceViewModel ws)
     {
@@ -69,6 +70,7 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
         var s = ws.Main.Settings.Current;
         WindowDays = s.RightSizingWindowDays;
         ResetSources();
+        _started = true;
         _ = LoadAsync();
     }
 
@@ -132,8 +134,8 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
         throw new InvalidOperationException("No in-cluster Prometheus found. Set a Prometheus URL in the cluster settings, or use local sampling.");
     }
 
-    partial void OnWindowDaysChanged(int value) { if (_report is not null) _ = LoadAsync(); }
-    partial void OnSelectedSourceChanged(SourceChoice? value) { if (_report is not null) _ = LoadAsync(); }
+    partial void OnWindowDaysChanged(int value) { if (_started) _ = LoadAsync(); }
+    partial void OnSelectedSourceChanged(SourceChoice? value) { if (_started) _ = LoadAsync(); }
     partial void OnVerdictFilterChanged(string value) => ApplyView();
     partial void OnSortByChanged(string value) => ApplyView();
     partial void OnKindFilterChanged(string value) => ApplyView();

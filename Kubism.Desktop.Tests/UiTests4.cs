@@ -1,0 +1,205 @@
+using System.Text.Json.Nodes;
+using Avalonia.Headless.XUnit;
+using Kubism.Core;
+using Kubism.Core.Api;
+using Kubism.Core.RightSizing;
+using Kubism.Desktop.ViewModels;
+using Xunit;
+
+namespace Kubism.Desktop.Tests;
+
+public class UiRightSizingAndHelmTests
+{
+    private static async Task<(UiHarness h, WorkspaceViewModel ws, RightSizingViewModel vm)> OpenAsync(string ctx = "demo-staging")
+    {
+        var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync(ctx);
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.RightSizing)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is RightSizingViewModel, what: "right-sizing vm");
+        var vm = (RightSizingViewModel)ws.CurrentContent!;
+        await UiHarness.WaitFor(() => !vm.IsLoading && (vm.Rows.Count > 0 || vm.Error is not null), what: "right-sizing load");
+        return (h, ws, vm);
+    }
+
+    [AvaloniaFact]
+    public async Task Dashboard_shows_verdicts_waste_and_recommendations_from_prometheus()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        Assert.Null(vm.Error);
+        Assert.Contains("Prometheus", vm.SourceInfo);
+        Assert.Contains("7 d", vm.SourceInfo);
+        var web = vm.Rows.Where(r => r.Workload == "Deployment/web").ToList();
+        Assert.Single(web);
+        Assert.Equal("Over-provisioned", web[0].Verdict);
+        Assert.NotEqual("—", web[0].RecCpu);
+        var checkout = vm.Rows.Single(r => r.Workload == "Deployment/checkout");
+        Assert.Equal("Under-provisioned", checkout.Verdict);   // p95 > request and throttled in the fake series
+        var crashy = vm.Rows.Single(r => r.Workload == "Pod/crashy-0");
+        Assert.Equal("No request", crashy.Verdict);
+        Assert.True(vm.UnderCount >= 1 && vm.NoRequestCount >= 1);
+        Assert.NotEmpty(vm.Rollups);
+        Assert.Contains("requested", vm.CpuKpi);
+        h.Screenshot("17-rightsizing");
+    }
+
+    [AvaloniaFact]
+    public async Task Filters_sorting_and_window_selector()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        vm.VerdictFilter = "Over-provisioned";
+        Assert.All(vm.Rows, r => Assert.Equal("Over-provisioned", r.Verdict));
+        vm.VerdictFilter = "All"; vm.KindFilter = "checkout";
+        Assert.All(vm.Rows, r => Assert.Contains("checkout", r.Workload));
+        vm.KindFilter = ""; vm.SortBy = "Waste";
+        Assert.True(vm.Rows[0].Report.WasteCpuCores >= vm.Rows[^1].Report.WasteCpuCores);
+        vm.MinWasteCores = 0.1;
+        Assert.All(vm.Rows, r => Assert.True(r.Report.WasteCpuCores >= 0.1));
+        vm.MinWasteCores = 0;
+        var queriesBefore = h.Demo.Prometheus.Queries.Count;
+        vm.WindowDays = 14;
+        await UiHarness.WaitFor(() => h.Demo.Prometheus.Queries.Count > queriesBefore, what: "requery");
+        await UiHarness.WaitFor(() => !vm.IsLoading && vm.SourceInfo.Contains("14 d"));
+    }
+
+    [AvaloniaFact]
+    public async Task Selecting_containers_gives_a_patch_preview_and_copyable_snippets()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        var web = vm.Rows.Single(r => r.Workload == "Deployment/web");
+        web.IsSelected = true;
+        Assert.Equal(1, vm.SelectedCount);
+        Assert.Contains("-   requests.cpu: 100m", vm.PatchPreview);
+        Assert.Contains("+   requests.cpu:", vm.PatchPreview);
+        Assert.Null(vm.ApplyBlockedReason);
+        await vm.CopyYamlCommand.ExecuteAsync(null);
+        Assert.Contains("kind: Deployment", h.Clipboard.Text);
+        await vm.CopyHelmCommand.ExecuteAsync(null);
+        Assert.Contains("resources:", h.Clipboard.Text);
+        await vm.CopyKustomizeCommand.ExecuteAsync(null);
+        Assert.Contains("patch: |-", h.Clipboard.Text);
+        vm.Selected = web;
+        await UiHarness.WaitFor(() => vm.CpuSeries.Count > 10, what: "series");
+        h.Screenshot("18-rightsizing-selection");
+    }
+
+    [AvaloniaFact]
+    public async Task Apply_patches_the_workload_after_confirmation_and_triggers_reload()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        var web = vm.Rows.Single(r => r.Workload == "Deployment/web");
+        var rec = web.Report.Recommended!;
+        web.IsSelected = true;
+        await vm.ApplyCommand.ExecuteAsync(null);
+        Assert.Contains(h.Dialogs.Shown, s => s.StartsWith("confirm:Apply right-sizing") && s.Contains("rollout"));
+        var res = h.Demo.Server.Get(Gvr.Deployments, "default", "web")!["spec"]!["template"]!["spec"]!["containers"]![0]!["resources"]!;
+        Assert.Equal(Core.Views.Quantities.FormatCpu(rec.CpuRequest), res["requests"]!["cpu"]!.GetValue<string>());
+        Assert.Contains(ws.Session.Activity.Entries, e => e.Action == "SetResources" && e.Success);
+    }
+
+    [AvaloniaFact]
+    public async Task Gitops_managed_workload_refuses_direct_apply_and_offers_the_snippet()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var dep = h.Demo.Server.Get(Gvr.Deployments, "default", "web")!;
+        dep["metadata"]!["labels"]!["argocd.argoproj.io/instance"] = "web-app";
+        h.Demo.Server.Upsert(dep);
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.RightSizing)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is RightSizingViewModel);
+        var vm = (RightSizingViewModel)ws.CurrentContent!;
+        await UiHarness.WaitFor(() => vm.Rows.Count > 0);
+        var web = vm.Rows.Single(r => r.Workload == "Deployment/web");
+        Assert.Equal("Argo CD", web.GitOps);
+        web.IsSelected = true;
+        Assert.Contains("reverted by Argo CD", vm.ApplyBlockedReason);
+        await vm.ApplyCommand.ExecuteAsync(null);
+        Assert.Contains(h.Dialogs.Shown, s => s.StartsWith("error:Cannot apply"));
+        Assert.Null(h.Demo.Server.Get(Gvr.Deployments, "default", "web")!["spec"]!["template"]!["spec"]!["containers"]![0]!["resources"]!["limits"]);
+        vm.OverrideGitOps = true;
+        Assert.Null(vm.ApplyBlockedReason);
+    }
+
+    [AvaloniaFact]
+    public async Task Production_apply_needs_typed_workload_name_and_read_only_blocks()
+    {
+        var (h, ws, vm) = await OpenAsync("demo-production");
+        await using var _ = h;
+        var checkout = vm.Rows.Single(r => r.Workload == "Deployment/checkout");
+        checkout.IsSelected = true;
+        await vm.ApplyCommand.ExecuteAsync(null);
+        Assert.Contains(h.Dialogs.Shown, s => s.StartsWith("typed:") && s.EndsWith("checkout"));
+        var m = h.Main.Settings.GetMetadata(ws.Id); m.SafetyMode = Core.Catalog.SafetyMode.ReadOnly; h.Main.Settings.SetMetadata(ws.Id, m);
+        await UiHarness.WaitFor(() => !vm.IsLoading, what: "reload after apply");
+        checkout = vm.Rows.Single(r => r.Workload == "Deployment/checkout");
+        checkout.IsSelected = true;
+        Assert.Contains("read-only", vm.ApplyBlockedReason);
+    }
+
+    [AvaloniaFact]
+    public async Task Export_writes_csv_and_markdown_and_create_vpa_goes_through_actions()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        h.Dialogs.SavePath = Path.Combine(h.DataDir, "report.csv");
+        await vm.ExportCsvCommand.ExecuteAsync(null);
+        Assert.StartsWith("cluster_source,namespace", File.ReadAllText(h.Dialogs.SavePath));
+        h.Dialogs.SavePath = Path.Combine(h.DataDir, "report.md");
+        await vm.ExportMarkdownCommand.ExecuteAsync(null);
+        var md = File.ReadAllText(h.Dialogs.SavePath);
+        Assert.Contains("# Right-sizing report", md); Assert.Contains("Strategy:", md); Assert.Contains("Window: 7 days", md);
+        vm.Rows.Single(r => r.Workload == "Deployment/web").IsSelected = true;
+        await vm.CreateVpaCommand.ExecuteAsync(null);
+        Assert.NotNull(h.Demo.Server.Get(new Gvr("autoscaling.k8s.io", "v1", "verticalpodautoscalers"), "default", "web"));
+    }
+
+    [AvaloniaFact]
+    public async Task Unreachable_prometheus_reports_the_error_and_test_connection_works()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        await h.Demo.Prometheus.DisposeAsync();
+        ws.Navigate(ws.FindNav(NavTarget.RightSizing)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is RightSizingViewModel);
+        var vm = (RightSizingViewModel)ws.CurrentContent!;
+        await UiHarness.WaitFor(() => vm.Error is not null, what: "error");
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+        Assert.False(string.IsNullOrEmpty(vm.ConnectionResult));
+        // Falling back to VPA source works without Prometheus.
+        vm.SelectedSource = vm.Sources.First(s => s.Name == "VPA recommender");
+        await UiHarness.WaitFor(() => !vm.IsLoading && vm.Error is null, what: "vpa source");
+    }
+
+    [AvaloniaFact]
+    public async Task Helm_view_lists_releases_with_values_and_history()
+    {
+        await using var h = await UiHarness.StartAsync();
+        foreach (var rev in new[] { 1, 2 })
+            h.Demo.Server.Upsert(new JsonObject
+            {
+                ["apiVersion"] = "v1", ["kind"] = "Secret",
+                ["metadata"] = new JsonObject { ["name"] = $"sh.helm.release.v1.nginx.v{rev}", ["namespace"] = "default", ["labels"] = new JsonObject { ["owner"] = "helm", ["name"] = "nginx" } },
+                ["type"] = "helm.sh/release.v1",
+                ["data"] = new JsonObject { ["release"] = HelmCompat.Encode("nginx", rev) },
+            });
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Helm)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel);
+        var vm = (HelmViewModel)ws.CurrentContent!;
+        await UiHarness.WaitFor(() => vm.Releases.Count == 1, what: "releases");
+        vm.Selected = vm.Releases[0];
+        Assert.Equal(2, vm.Selected.Revision);
+        Assert.Contains("replicas: 3", vm.ValuesText);
+        await UiHarness.WaitFor(() => vm.History.Count == 2, what: "history");
+        Assert.Equal([2, 1], vm.History.Select(r => r.Revision));
+        Assert.Contains("kind: Deployment", vm.ManifestText);
+        Assert.False(vm.CanWrite == false && vm.WriteTooltip.Length == 0);
+        h.Screenshot("19-helm");
+    }
+}
