@@ -51,9 +51,13 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <StackPanel Grid.Row="1" Spacing="4" Margin="0,0,0,10" HorizontalAlignment="Center">
-          <Button Classes="link" Command="{Binding AddKubeconfigCommand}" ToolTip.Tip="Add kubeconfig file…" AutomationProperties.Name="Add kubeconfig file" Content="＋" FontSize="18" />
-          <Button Classes="link" Command="{Binding ReloadCatalogCommand}" ToolTip.Tip="Reload clusters" AutomationProperties.Name="Reload clusters" Content="⟳" FontSize="16" />
+        <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,12" HorizontalAlignment="Center">
+          <Button Width="40" Height="40" Padding="0" CornerRadius="12" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Command="{Binding AddKubeconfigCommand}" ToolTip.Tip="Add kubeconfig file…" AutomationProperties.Name="Add kubeconfig file">
+            <Path Width="20" Height="20" Stretch="Uniform" Stroke="{DynamicResource KubismMutedBrush}" StrokeThickness="2.2" StrokeLineCap="Round" Data="M12,4 V20 M4,12 H20" />
+          </Button>
+          <Button Width="40" Height="40" Padding="0" CornerRadius="12" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Command="{Binding ReloadCatalogCommand}" ToolTip.Tip="Reload clusters" AutomationProperties.Name="Reload clusters">
+            <Path Width="20" Height="20" Stretch="Uniform" Stroke="{DynamicResource KubismMutedBrush}" StrokeThickness="2.2" StrokeLineCap="Round" StrokeJoin="Round" Data="M20,12 A8,8 0 1 1 16,5 M20,3 V9 H14" />
+          </Button>
         </StackPanel>
       </Grid>
       <GridSplitter Grid.Column="1" Width="1" Background="{DynamicResource KubismBorderBrush}" />
