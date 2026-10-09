@@ -25,6 +25,6 @@ We do **not** use the typed models or `Watch<T>`.
 
 | OS | Result |
 |---|---|
-| macOS arm64 | see `spikes/aot-client/RESULT-macos.md` (filled by the script) |
+| macOS arm64 | compiles (warnings only from KubernetesClient and YamlDotNet); link failed locally on `-lssl`, runtime not exercised: see `spikes/aot-client/RESULT-osx-arm64.md` |
 | Linux x64 | pending: run on Ubuntu 24.04 |
 | Windows x64 | pending |
