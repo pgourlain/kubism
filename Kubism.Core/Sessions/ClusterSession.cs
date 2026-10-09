@@ -23,15 +23,17 @@ public sealed class ClusterSession : IAsyncDisposable
     private Task? _healthLoop;
     private IKubeTransport? _transport;
     private IExecPluginObserver? _observer;
+    private readonly Helm.IHelmRunnerFactory? _helm;
 
     public ClusterSession(ClusterEntry entry, IKubeTransportFactory factory, IClusterEventsService events, ISettingsStore settings,
-        TimeSpan? healthInterval = null, IExecPluginObserver? observer = null)
+        TimeSpan? healthInterval = null, IExecPluginObserver? observer = null, Helm.IHelmRunnerFactory? helm = null)
     {
         Entry = entry;
         _factory = factory;
         _events = events;
         _settings = settings;
         _observer = observer;
+        _helm = helm;
         HealthInterval = healthInterval ?? TimeSpan.FromSeconds(30);
         Activity = new ActivityLog();
     }
@@ -83,6 +85,7 @@ public sealed class ClusterSession : IAsyncDisposable
             Metrics = new MetricsService(_transport);
             Actions = new ClusterActions(Entry.Id, Discovery, _transport, _events, Activity, () => Metadata.SafetyMode, () => PortForwards);
             Cache.HealthChanged += OnCacheHealth;
+            if (_helm is not null) Actions.Helm = _helm.Create(Entry);
             await Discovery.RefreshAsync(linked.Token).ConfigureAwait(false);
             SetState(SessionState.Connected);
             _healthLoop = Task.Run(() => HealthLoopAsync(token));

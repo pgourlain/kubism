@@ -13,7 +13,7 @@ public interface IClusterSessionManager : IAsyncDisposable
     event Action? SessionsChanged;
 }
 
-public sealed class ClusterSessionManager(IKubeTransportFactory factory, IClusterEventsService events, ISettingsStore settings) : IClusterSessionManager
+public sealed class ClusterSessionManager(IKubeTransportFactory factory, IClusterEventsService events, ISettingsStore settings, Helm.IHelmRunnerFactory? helm = null) : IClusterSessionManager
 {
     private readonly Dictionary<string, ClusterSession> _sessions = [];
     private readonly object _gate = new();
@@ -38,7 +38,7 @@ public sealed class ClusterSessionManager(IKubeTransportFactory factory, ICluste
         {
             if (_sessions.TryGetValue(entry.Id, out var existing) && existing.State is not (SessionState.Error or SessionState.Disconnected))
                 return existing;
-            session = new ClusterSession(entry, factory, events, settings, HealthInterval, observer);
+            session = new ClusterSession(entry, factory, events, settings, HealthInterval, observer, helm);
             _sessions[entry.Id] = session;
         }
         SessionsChanged?.Invoke();

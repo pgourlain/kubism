@@ -379,6 +379,7 @@ public static class KubeServiceExtensions
     public static IServiceCollection AddKubismKube(this IServiceCollection services)
     {
         services.AddSingleton<IKubeTransportFactory, KubeTransportFactory>();
+        services.AddSingleton<Kubism.Core.Helm.IHelmRunnerFactory, HelmCliRunnerFactory>();
         return services;
     }
 }

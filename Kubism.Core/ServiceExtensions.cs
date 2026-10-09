@@ -15,7 +15,7 @@ public static class ServiceExtensions
         services.AddSingleton<IKubeconfigCatalog>(sp => new KubeconfigCatalog(sp.GetRequiredService<ISettingsStore>(),
             sp.GetRequiredService<IClusterEventsService>(), watch: watchKubeconfig));
         services.AddSingleton<IClusterSessionManager>(sp => new ClusterSessionManager(sp.GetRequiredService<Api.IKubeTransportFactory>(),
-            sp.GetRequiredService<IClusterEventsService>(), sp.GetRequiredService<ISettingsStore>()));
+            sp.GetRequiredService<IClusterEventsService>(), sp.GetRequiredService<ISettingsStore>(), sp.GetService<Helm.IHelmRunnerFactory>()));
         return services;
     }
 }

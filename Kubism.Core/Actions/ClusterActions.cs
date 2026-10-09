@@ -4,6 +4,7 @@ using Kubism.Core.Catalog;
 using Kubism.Core.Discovery;
 using Kubism.Core.Events;
 using Kubism.Core.Exec;
+using Kubism.Core.Helm;
 using Kubism.Core.Forward;
 
 namespace Kubism.Core.Actions;
@@ -358,6 +359,24 @@ public sealed class ClusterActions
                 progress?.Report(new DrainProgress($"{pod.Namespace}/{pod.Name}", "evicted", done, pods.Count));
             }
         });
+
+    // ---------- helm (CLI) ----------
+
+    /// <summary>Helm write operations shell out to the helm binary; disabled when it isn't installed.</summary>
+    public IHelmRunner? Helm { get; set; }
+    public bool CanRunHelm => Helm is { IsAvailable: true };
+
+    [ClusterAction("HelmRollback")]
+    public Task RollbackHelmReleaseAsync(string ns, string release, int revision, CancellationToken ct, string? confirmation = null) =>
+        RunAsync("HelmRollback", $"helm/{ns}/{release}@{revision}", true, confirmation, release, () =>
+            (Helm is { IsAvailable: true } h ? h : throw new InvalidOperationException("helm was not found on PATH"))
+                .RunAsync(["rollback", release, revision.ToString(), "-n", ns], ct));
+
+    [ClusterAction("HelmUninstall")]
+    public Task UninstallHelmReleaseAsync(string ns, string release, CancellationToken ct, string? confirmation = null) =>
+        RunAsync("HelmUninstall", $"helm/{ns}/{release}", true, confirmation, release, () =>
+            (Helm is { IsAvailable: true } h ? h : throw new InvalidOperationException("helm was not found on PATH"))
+                .RunAsync(["uninstall", release, "-n", ns], ct));
 
     // ---------- exec, port-forward ----------
 
