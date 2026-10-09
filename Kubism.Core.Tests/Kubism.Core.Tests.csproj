@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+    <RootNamespace>Kubism.Core.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Kubism.Core\Kubism.Core.csproj" />
+    <ProjectReference Include="..\Kubism.Testing\Kubism.Testing.csproj" />
+    <ProjectReference Include="..\Kubism.Kube\Kubism.Kube.csproj" />
+  </ItemGroup>
+</Project>

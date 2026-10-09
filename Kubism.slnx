@@ -1,0 +1,12 @@
+<Solution>
+  <Project Path="Kubism.Core/Kubism.Core.csproj" />
+  <Project Path="Kubism.Kube/Kubism.Kube.csproj" />
+  <Project Path="Kubism.Mcp/Kubism.Mcp.csproj" />
+  <Project Path="Kubism.Desktop/Kubism.Desktop.csproj" />
+  <Project Path="Kubism.Testing/Kubism.Testing.csproj" />
+  <Project Path="Kubism.Core.Tests/Kubism.Core.Tests.csproj" />
+  <Project Path="Kubism.Kube.Tests/Kubism.Kube.Tests.csproj" />
+  <Project Path="Kubism.Desktop.Tests/Kubism.Desktop.Tests.csproj" />
+  <Project Path="Kubism.Mcp.Tests/Kubism.Mcp.Tests.csproj" />
+  <Project Path="Kubism.Integration.Tests/Kubism.Integration.Tests.csproj" />
+</Solution>

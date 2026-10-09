@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Kubism.Kube</RootNamespace>
+    <NoWarn>$(NoWarn);CS1591;IL2026;IL3050;IL2087;IL2067;IL2072;IL2075</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="KubernetesClient" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <ProjectReference Include="..\Kubism.Core\Kubism.Core.csproj" />
+  </ItemGroup>
+</Project>

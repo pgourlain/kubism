@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>Kubism</AssemblyName>
+    <RootNamespace>Kubism.Desktop</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <ProjectReference Include="..\Kubism.Core\Kubism.Core.csproj" />
+    <ProjectReference Include="..\Kubism.Kube\Kubism.Kube.csproj" />
+    <ProjectReference Include="..\Kubism.Mcp\Kubism.Mcp.csproj" />
+    <ProjectReference Include="..\Kubism.Testing\Kubism.Testing.csproj" />
+  </ItemGroup>
+</Project>
