@@ -3,6 +3,9 @@ using Kubism.Core.Events;
 
 namespace Kubism.Core.Cache;
 
+/// <summary>Raised when a cluster's informer budget (setting) is used up by views that are still open.</summary>
+public sealed class InformerBudgetException(int max) : InvalidOperationException($"This cluster already has {max} live lists open (informer budget). Close a view or raise the limit in settings.");
+
 /// <summary>A subscription to an informer. Dispose to release (the informer lingers 60 s, then stops).</summary>
 public sealed class InformerLease(Informer informer, IDisposable lease) : IDisposable
 {
@@ -47,7 +50,10 @@ public sealed class ResourceCache : IAsyncDisposable
             if (!_informers.TryGetValue(key, out inf!))
             {
                 if (MaxInformers > 0 && _informers.Count >= MaxInformers)
+                {
                     EvictIdle();
+                    if (_informers.Count >= MaxInformers) throw new InformerBudgetException(MaxInformers);
+                }
                 inf = new Informer(_transport, gvr, ns, Options);
                 inf.StateChanged += _ => UpdateHealth();
                 inf.Changes.Subscribe(c => _events?.Push(new CacheChanged(_clusterId, gvr, ns, c)));

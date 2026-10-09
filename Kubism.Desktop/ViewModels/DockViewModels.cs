@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Kubism.Core.Catalog;
 using Kubism.Core.Exec;
 using Kubism.Core.Forward;
 using Kubism.Core.Logs;
@@ -303,12 +304,26 @@ public sealed partial class PortForwardsViewModel : DockItemViewModel
 
     private void Rebuild()
     {
+        if (_ws.Session.PortForwards is not { } manager) return;   // session already torn down
         Items.Clear();
-        foreach (var f in _ws.Session.PortForwards.Forwards) Items.Add(new PortForwardRow(f, this));
+        foreach (var f in manager.Forwards) Items.Add(new PortForwardRow(f, this));
         OnPropertyChanged(nameof(IsEmpty));
     }
 
-    public async Task StopAsync(PortForward f) => await _ws.Session.PortForwards.StopAsync(f.Id);
+    public async Task StopAsync(PortForward f)
+    {
+        SetKeep(f, false);
+        await _ws.Session.PortForwards.StopAsync(f.Id);
+    }
+
+    /// <summary>"Keep" forwards are stored per cluster and restarted when the cluster is connected again.</summary>
+    public void SetKeep(PortForward f, bool keep)
+    {
+        var meta = _ws.Session.Metadata;
+        meta.KeptForwards.RemoveAll(k => k.Namespace == f.Target.Namespace && k.Name == f.Target.Name && k.RemotePort == f.Target.RemotePort && k.Kind == f.Target.Kind.ToString());
+        if (keep) meta.KeptForwards.Add(new KeptForward { Kind = f.Target.Kind.ToString(), Namespace = f.Target.Namespace, Name = f.Target.Name, RemotePort = f.Target.RemotePort, LocalPort = f.LocalPort });
+        _ws.Main.Settings.SetMetadata(_ws.Id, meta);
+    }
     public Task CopyUrlAsync(PortForward f) => _ws.Clipboard.SetTextAsync(f.Url);
     public void Open(PortForward f) => _ws.Main.Browser.Open(f.Url);
 
@@ -325,6 +340,11 @@ public sealed partial class PortForwardRow(PortForward forward, PortForwardsView
     public string Target => $"{Forward.Target.Kind.ToString().ToLowerInvariant()}/{Forward.Target.Namespace}/{Forward.Target.Name}:{Forward.Target.RemotePort}";
     public string Local => $"127.0.0.1:{Forward.LocalPort}";
     public string Info => Forward.LastError is { } e ? $"error: {e}" : $"{Forward.ActiveConnections} active, {Forward.TotalConnections} total" + (Forward.ResolvedPod is { } p ? $" → {p}" : "");
+    public bool Keep
+    {
+        get => Forward.Keep;
+        set { Forward.Keep = value; owner.SetKeep(Forward, value); OnPropertyChanged(); }
+    }
     [RelayCommand] private Task Stop() => owner.StopAsync(Forward);
     [RelayCommand] private Task CopyUrl() => owner.CopyUrlAsync(Forward);
     [RelayCommand] private void Open() => owner.Open(Forward);

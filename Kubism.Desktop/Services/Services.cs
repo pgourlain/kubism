@@ -40,6 +40,7 @@ public interface IDialogService
     Task ShowErrorAsync(string title, string message);
     Task ShowTextAsync(string title, string text);
     Task<string?> PromptAsync(string title, string message, string? initial = null);
+    Task<ViewModels.SettingsEditorViewModel?> EditSettingsAsync(ViewModels.SettingsEditorViewModel editor);
     Task<string?> ChooseAsync(string title, IReadOnlyList<string> options);
     Task<ViewModels.ClusterEditorViewModel?> EditClusterAsync(ViewModels.ClusterEditorViewModel editor);
     Task<string?> PickFileAsync(string title);

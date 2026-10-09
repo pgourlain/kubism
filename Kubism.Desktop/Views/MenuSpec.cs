@@ -24,18 +24,22 @@ public static class MenuSpecs
             new("Add kubeconfig…".T(), () => vm.AddKubeconfigCommand.Execute(null)),
             new("Add folder…".T(), () => vm.AddFolderCommand.Execute(null)),
             new("Reload clusters", () => vm.ReloadCatalogCommand.Execute(null)),
+            new("Settings…", () => _ = vm.EditSettingsAsync()),
             MenuSpec.Sep(),
             new("Quit".T(), () => window.Close(), new KeyGesture(Key.Q, Cmd)),
         ]),
         new("View".T(), Children:
         [
             new("Command palette".T(), () => vm.OpenPaletteCommand.Execute(null), new KeyGesture(Key.K, Cmd)),
+            new("Search all clusters…", () => vm.OpenGlobalSearchCommand.Execute(null), new KeyGesture(Key.F, Cmd | KeyModifiers.Shift)),
+            new("Close split view", () => vm.CloseSplitCommand.Execute(null)),
             new("Diagnostics".T(), () => _ = ShowDiagnostics(vm)),
         ]),
         new("Help".T(), Children:
         [
             new("Open Log Folder".T(), () => OpenLogFolder(vm)),
             new("Copy diagnostics".T(), () => _ = vm.Clipboard.SetTextAsync(vm.DiagnosticsText())),
+            new("Check for updates", () => _ = vm.CheckForUpdatesAsync(true)),
             MenuSpec.Sep(),
             new("About Kubism".T(), () => _ = vm.Dialogs.ShowTextAsync("About Kubism", $"Kubism — Kubernetes Interface for Supervising Multi-clusters\nInspect. Steer. Monitor.\n\nVersion {typeof(MenuSpecs).Assembly.GetName().Version}\n.NET {Environment.Version}\n\nMIT licensed.")),
         ]),

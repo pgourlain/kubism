@@ -25,7 +25,7 @@
           <SolidColorBrush x:Key="KubismCatalogBrush" Color="#E5E7EB" />
           <SolidColorBrush x:Key="KubismPanelBrush" Color="#FFFFFF" />
           <SolidColorBrush x:Key="KubismBorderBrush" Color="#D1D5DB" />
-          <SolidColorBrush x:Key="KubismMutedBrush" Color="#6B7280" />
+          <SolidColorBrush x:Key="KubismMutedBrush" Color="#4B5563" />
           <SolidColorBrush x:Key="KubismOkBrush" Color="#047857" />
           <SolidColorBrush x:Key="KubismWarnBrush" Color="#B45309" />
           <SolidColorBrush x:Key="KubismErrorBrush" Color="#B91C1C" />

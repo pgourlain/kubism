@@ -48,7 +48,9 @@ public partial class App : Application
             }
             Shell.ShellEnvironmentSetup.Apply();
             var vm = Services.GetRequiredService<MainViewModel>();
+            vm.ApplySettings();
             desktop.MainWindow = new MainWindow { DataContext = vm };
+            if (Services.GetRequiredService<ISettingsStore>().Current.CheckForUpdates) _ = vm.CheckForUpdatesAsync();
             desktop.Exit += (_, _) =>
             {
                 try { vm.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3)); } catch { }

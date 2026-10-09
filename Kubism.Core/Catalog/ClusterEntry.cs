@@ -36,6 +36,18 @@ public sealed class ClusterMetadata
     public double? PricePerVcpuHour { get; set; }
     public double? PricePerGibHour { get; set; }
     public bool Pinned { get; set; }
+    public int Order { get; set; }
+    /// <summary>Port-forwards marked "keep": restarted when the cluster is connected again.</summary>
+    public List<KeptForward> KeptForwards { get; set; } = [];
+}
+
+public sealed class KeptForward
+{
+    public string Kind { get; set; } = "Pod";
+    public string Namespace { get; set; } = "";
+    public string Name { get; set; } = "";
+    public int RemotePort { get; set; }
+    public int LocalPort { get; set; }
 }
 
 public sealed record KubeconfigError(string FilePath, string Message);

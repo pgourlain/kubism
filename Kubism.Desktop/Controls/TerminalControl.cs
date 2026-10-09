@@ -12,7 +12,7 @@ namespace Kubism.Desktop.Controls;
 public interface ITerminalView
 {
     event Func<string, Task>? InputReceived;
-    event Func<int, int, Task>? SizeChanged;
+    event Func<int, int, Task>? TerminalSizeChanged;
     void Invalidate();
 }
 
@@ -25,11 +25,10 @@ public sealed class TerminalControl : Control, ITerminalView
     private int _cols, _rows;
     private bool _cursorOn = true;
     private readonly DispatcherTimer _blink = new() { Interval = TimeSpan.FromMilliseconds(550) };
-    private int _scrollOffset;
     private (int row, int col)? _selStart, _selEnd;
 
     public event Func<string, Task>? InputReceived;
-    public event Func<int, int, Task>? SizeChanged;
+    public event Func<int, int, Task>? TerminalSizeChanged;
     public Func<string, Task>? CopyRequested { get; set; }
     public Func<Task<string?>>? PasteRequested { get; set; }
 
@@ -48,10 +47,10 @@ public sealed class TerminalControl : Control, ITerminalView
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == BufferProperty) { _buffer = change.NewValue as TerminalBuffer; _scrollOffset = 0; CheckSize(); }
+        if (change.Property == BufferProperty) { _buffer = change.NewValue as TerminalBuffer; CheckSize(); }
     }
 
-    public void Invalidate() { _scrollOffset = 0; InvalidateVisual(); }
+    public void Invalidate() { InvalidateVisual(); }
 
     private void MeasureCell()
     {
@@ -76,7 +75,7 @@ public sealed class TerminalControl : Control, ITerminalView
         if (cols == _cols && rows == _rows) return;
         _cols = cols; _rows = rows;
         _buffer.Resize(cols, rows);
-        SizeChanged?.Invoke(cols, rows);
+        TerminalSizeChanged?.Invoke(cols, rows);
     }
 
     public override void Render(DrawingContext ctx)

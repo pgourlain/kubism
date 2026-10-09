@@ -181,3 +181,29 @@ public class UiDockTests
         h.Screenshot("16-two-clusters");
     }
 }
+
+public class UiKeepForwardTests
+{
+    [AvaloniaFact]
+    public async Task Kept_forward_is_restored_when_the_cluster_is_connected_again()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        var pod = h.Demo.Server.List(Gvr.Pods, "default").First(p => p["metadata"]!["name"]!.GetValue<string>().StartsWith("web-"))["metadata"]!["name"]!.GetValue<string>();
+        await ws.StartForwardAsync(new ForwardTarget(ForwardTargetKind.Pod, "default", pod, 8080));
+        var row = ws.Dock.Find<PortForwardsViewModel>()!.Items[0];
+        row.Keep = true;
+        Assert.Single(ws.Session.Metadata.KeptForwards);
+        await h.Main.CloseWorkspaceAsync(ws);
+        var ws2 = await h.ConnectAsync();
+        await UiHarness.WaitFor(() => ws2.Session.PortForwards.Forwards.Count == 1, what: "restored forward");
+        Assert.True(ws2.Session.PortForwards.Forwards[0].Keep);
+        using var http = new HttpClient();
+        Assert.StartsWith("hello from", await http.GetStringAsync(ws2.Session.PortForwards.Forwards[0].Url));
+        // Stopping a forward from the list forgets it.
+        var pfvm = ws2.Dock.Find<PortForwardsViewModel>()!;
+        await UiHarness.WaitFor(() => pfvm.Items.Count == 1);
+        await pfvm.Items[0].StopCommand.ExecuteAsync(null);
+        Assert.Empty(ws2.Session.Metadata.KeptForwards);
+    }
+}

@@ -11,11 +11,14 @@ public sealed class AppSettings
     public Dictionary<string, Dictionary<string, double>> ColumnWidths { get; set; } = [];
     public string ProductionRegex { get; set; } = "prod|prd|production";
     public int LogBufferLines { get; set; } = 50_000;
+    /// <summary>Maximum live informers per connected cluster (0 = unlimited). Keeps many connected clusters cheap.</summary>
+    public int MaxInformersPerCluster { get; set; } = 60;
     public string Theme { get; set; } = "System";
     public string Language { get; set; } = "en";
     public bool DimForbiddenKinds { get; set; } = true;
     public bool EnableNodeShell { get; set; }
     public bool CheckForUpdates { get; set; }
+    public DateTimeOffset? LastUpdateCheck { get; set; }
     // Right-sizing strategy
     public double CpuPercentile { get; set; } = 95;
     public double MemoryMargin { get; set; } = 1.15;

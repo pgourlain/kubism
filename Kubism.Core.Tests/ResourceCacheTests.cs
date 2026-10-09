@@ -220,3 +220,20 @@ public class ResourceCacheTests
         Assert.Contains(col.Snapshot(), c => c.Resynced || c.Deleted.Count > 0);
     }
 }
+
+public class InformerBudgetTests
+{
+    [Fact]
+    public async Task Budget_evicts_idle_informers_and_refuses_when_everything_is_in_use()
+    {
+        var t = new Kubism.Testing.FakeKubeTransport();
+        await using var cache = new ResourceCache(t, "c", null, new InformerOptions { Linger = TimeSpan.FromMinutes(5) }) { MaxInformers = 2 };
+        var a = cache.Subscribe(Gvr.Pods);
+        var b = cache.Subscribe(Gvr.Nodes);
+        Assert.Throws<InformerBudgetException>(() => cache.Subscribe(Gvr.Services));
+        a.Dispose();                                   // now idle (lingering): can be evicted
+        using var c = cache.Subscribe(Gvr.Services);
+        Assert.Equal(2, cache.Informers.Count);
+        b.Dispose();
+    }
+}

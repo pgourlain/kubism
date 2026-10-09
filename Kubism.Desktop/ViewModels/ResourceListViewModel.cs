@@ -72,7 +72,9 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
         IEnumerable<string?> scopes = selected.Count == 0 ? [null] : selected.Select(s => (string?)s);
         foreach (var ns in scopes)
         {
-            var lease = _ws.Session.Cache.Subscribe(Kind.Gvr, ns);
+            InformerLease lease;
+            try { lease = _ws.Session.Cache.Subscribe(Kind.Gvr, ns); }
+            catch (InformerBudgetException ex) { ErrorText = ex.Message; StateText = "Error"; return; }
             _leases.Add(lease);
             var inf = lease.Informer;
             _subs.Add(Kubism.Core.Events.ObservableExtensions.Subscribe(inf.Changes, c => _ui.Post(() => Apply(inf, c))));
@@ -174,7 +176,7 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
 
     private void Compute(ResourceRowViewModel row)
     {
-        var skew = _ws.Session.Transport.ClockSkew;
+        var skew = _ws.Session.ClockSkew;
         var cells = new string[Columns.Count];
         for (var i = 0; i < cells.Length; i++)
         {
@@ -192,7 +194,7 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
     private string MetricCell(ResourceRowViewModel row, bool cpu)
     {
         var m = _ws.Session.Metrics;
-        if (m.Available != true) return "";
+        if (m is null || m.Available != true) return "";
         if (Kind.Kind == "Pod")
         {
             if (!m.Pods.TryGetValue($"{row.Namespace}/{row.Name}", out var u)) return "";
@@ -221,10 +223,11 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
     /// <summary>Recomputes age cells; called by the workspace timer for the visible list only.</summary>
     public void TickAges()
     {
+        if (_closed) return;
         var idx = new List<int>();
         for (var i = 0; i < Columns.Count; i++) if (Columns[i].IsAge) idx.Add(i);
         if (idx.Count == 0) return;
-        var skew = _ws.Session.Transport.ClockSkew;
+        var skew = _ws.Session.ClockSkew;
         foreach (var r in _rows.Values)
         {
             var cells = (string[])r.Cells.Clone();
@@ -301,7 +304,7 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
         if (_closed) return;
         _closed = true;
         _ws.Namespaces.Changed -= OnNamespacesChanged;
-        _ws.Session.Metrics.Updated -= OnMetrics;
+        if (_ws.Session.Metrics is { } mm) mm.Updated -= OnMetrics;
         _metricsLease?.Dispose();
         Unsubscribe();
         await Task.CompletedTask;

@@ -35,6 +35,7 @@ public static class DetailSectionBuilder
             case "Event": EventSection(o, list); break;
             case "ConfigMap": ConfigMap(o, list); break;
             case "PersistentVolumeClaim": Pvc(o, list); break;
+            case "CustomResourceDefinition": Crd(o, list); break;
         }
         var cond = Conditions(o);
         if (cond is not null) list.Add(cond);
@@ -181,6 +182,42 @@ public static class DetailSectionBuilder
         s.Rows.Add(new("Status", o.StringAt("status", "phase") ?? "")); s.Rows.Add(new("Volume", o.StringAt("spec", "volumeName") ?? ""));
         s.Rows.Add(new("Capacity", o.StringAt("status", "capacity", "storage") ?? "")); s.Rows.Add(new("Storage class", o.StringAt("spec", "storageClassName") ?? ""));
         list.Add(s);
+    }
+
+    /// <summary>CRD browser: names, versions, and the OpenAPI v3 schema of the storage version flattened to a path/type table.</summary>
+    private static void Crd(KubeObject o, List<DetailSection> list)
+    {
+        var s = new DetailSection("Definition");
+        s.Rows.Add(new("Group", o.StringAt("spec", "group") ?? "")); s.Rows.Add(new("Kind", o.StringAt("spec", "names", "kind") ?? ""));
+        s.Rows.Add(new("Plural", o.StringAt("spec", "names", "plural") ?? "")); s.Rows.Add(new("Scope", o.StringAt("spec", "scope") ?? ""));
+        list.Add(s);
+        var versions = (o.At("spec", "versions") as JsonArray ?? []).OfType<JsonObject>().ToList();
+        list.Add(new DetailSection("Versions") { Table = new DetailTable(["Version", "Served", "Storage"],
+            versions.Select(v => (IReadOnlyList<string>)[KubeObject.Str(v, "name") ?? "", v["served"]?.ToString() ?? "", v["storage"]?.ToString() ?? ""]).ToList()) });
+        var storage = versions.FirstOrDefault(v => v["storage"]?.ToString().Equals("true", StringComparison.OrdinalIgnoreCase) == true) ?? versions.FirstOrDefault();
+        if (storage?["schema"]?["openAPIV3Schema"] is JsonObject schema)
+        {
+            var rows = new List<IReadOnlyList<string>>();
+            Flatten(schema, "", 0, rows);
+            list.Add(new DetailSection($"Schema ({KubeObject.Str(storage, "name")})") { Table = new DetailTable(["Path", "Type", "Description"], rows) });
+        }
+    }
+
+    public static void Flatten(JsonObject schema, string path, int depth, List<IReadOnlyList<string>> rows)
+    {
+        if (depth > 6 || rows.Count > 400) return;
+        if (schema["properties"] is JsonObject props)
+            foreach (var (name, node) in props)
+            {
+                if (node is not JsonObject p) continue;
+                var type = KubeObject.Str(p, "type") ?? (p["x-kubernetes-preserve-unknown-fields"] is not null ? "object (free-form)" : "");
+                var desc = KubeObject.Str(p, "description") ?? "";
+                if (desc.Length > 90) desc = desc[..90] + "…";
+                var full = path.Length == 0 ? name : $"{path}.{name}";
+                rows.Add([new string(' ', depth * 2) + full, type, desc]);
+                Flatten(p, full, depth + 1, rows);
+            }
+        if (schema["items"] is JsonObject items) Flatten(items, path + "[]", depth, rows);
     }
 
     private static DetailSection? Conditions(KubeObject o)

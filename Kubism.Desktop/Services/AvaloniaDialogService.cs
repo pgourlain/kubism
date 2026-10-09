@@ -166,6 +166,40 @@ public sealed class AvaloniaDialogService : IDialogService
         return await ShowAsync<bool?>(Make("Cluster settings", 560, 560, scroll, true)) == true ? vm : null;
     }
 
+    public async Task<SettingsEditorViewModel?> EditSettingsAsync(SettingsEditorViewModel vm)
+    {
+        var w = new Window();
+        var grid = new Grid { Margin = new Thickness(20), ColumnDefinitions = new ColumnDefinitions("200,*"), RowSpacing = 8 };
+        var row = 0;
+        void Add(string label, Control c)
+        {
+            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+            var t = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetRow(t, row); Grid.SetRow(c, row); Grid.SetColumn(c, 1);
+            grid.Children.Add(t); grid.Children.Add(c);
+            row++;
+        }
+        TextBox Box(string value, Action<string> set) { var b = new TextBox { Text = value }; b.TextChanged += (_, _) => set(b.Text ?? ""); return b; }
+        ComboBox Combo(string[] items, string current, Action<string> set) { var c = new ComboBox { ItemsSource = items, SelectedItem = current, HorizontalAlignment = HorizontalAlignment.Stretch }; c.SelectionChanged += (_, _) => set(c.SelectedItem as string ?? current); return c; }
+        CheckBox Check(string text, bool value, Action<bool> set) { var c = new CheckBox { Content = text, IsChecked = value }; c.IsCheckedChanged += (_, _) => set(c.IsChecked == true); return c; }
+        Add("Theme", Combo(vm.Themes, vm.Theme, v => vm.Theme = v));
+        Add("Language", Combo(vm.Languages, vm.Language, v => vm.Language = v));
+        Add("Log buffer (lines)", Box(vm.LogBufferLines.ToString(), v => { if (int.TryParse(v, out var n)) vm.LogBufferLines = n; }));
+        Add("Max live lists per cluster", Box(vm.MaxInformers.ToString(), v => { if (int.TryParse(v, out var n)) vm.MaxInformers = n; }));
+        Add("Production context regex", Box(vm.ProductionRegex, v => vm.ProductionRegex = v));
+        Add("Kinds", Check("Dim kinds I cannot list", vm.DimForbiddenKinds, v => vm.DimForbiddenKinds = v));
+        Add("Updates", Check("Check GitHub releases once a day (never installs)", vm.CheckForUpdates, v => vm.CheckForUpdates = v));
+        Add("Right-sizing CPU percentile", Box(vm.CpuPercentile.ToString(System.Globalization.CultureInfo.InvariantCulture), v => { if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) vm.CpuPercentile = d; }));
+        Add("Memory margin (×)", Box(vm.MemoryMargin.ToString(System.Globalization.CultureInfo.InvariantCulture), v => { if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) vm.MemoryMargin = d; }));
+        Add("Memory limit factor (×)", Box(vm.MemoryLimitFactor.ToString(System.Globalization.CultureInfo.InvariantCulture), v => { if (double.TryParse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) vm.MemoryLimitFactor = d; }));
+        Add("CPU limit", Check("Keep the current CPU limit (default: none)", vm.KeepCpuLimit, v => vm.KeepCpuLimit = v));
+        var buttons = Buttons(w, "Save");
+        grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+        Grid.SetRow(buttons, row); Grid.SetColumnSpan(buttons, 2);
+        grid.Children.Add(buttons);
+        return await ShowAsync<bool?>(Make("Settings", 600, 560, new ScrollViewer { Content = grid }, true)) == true ? vm : null;
+    }
+
     public async Task<string?> PickFileAsync(string title)
     {
         var sp = Owner?.StorageProvider;

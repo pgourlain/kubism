@@ -43,6 +43,10 @@ public static class Converters
 
     public static readonly IValueConverter OkMark = new FuncConverter<bool, string>(r => r ? "✔" : "✘");
 
+    public static readonly IValueConverter SplitColumn = new FuncConverter<bool, GridLength>(split => split ? new GridLength(1, GridUnitType.Star) : new GridLength(0));
+
+    public static readonly IValueConverter SidebarColumn = new FuncConverter<bool, GridLength>(compact => compact ? new GridLength(0) : new GridLength(230));
+
     public static readonly IValueConverter Icon = new FuncConverter<string?, Geometry?>(k => k is not null && Icons.Paths.TryGetValue(k, out var p) ? Geometry.Parse(p) : null);
 
     private sealed class FuncConverter<TIn, TOut>(Func<TIn, TOut> f) : IValueConverter

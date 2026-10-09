@@ -12,7 +12,14 @@
     </Border>
     <Border Grid.Row="0" IsVisible="{Binding !HasBanner}" Height="3" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" />
 
-    <Grid Grid.Row="1" ColumnDefinitions="230,Auto,*,Auto,Auto">
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="{Binding IsCompact, Converter={x:Static app:Converters.SidebarColumn}}" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="Auto" />
+        <ColumnDefinition Width="Auto" />
+      </Grid.ColumnDefinitions>
       <!-- Sidebar -->
       <Grid Background="{DynamicResource KubismSidebarBrush}" RowDefinitions="Auto,*">
         <Border Padding="10,8" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="0,0,0,1">
@@ -41,7 +48,7 @@
           </TreeView.ItemTemplate>
         </TreeView>
       </Grid>
-      <GridSplitter Grid.Column="1" Width="1" Background="{DynamicResource KubismBorderBrush}" />
+      <GridSplitter Grid.Column="1" Width="1" IsVisible="{Binding !IsCompact}" Background="{DynamicResource KubismBorderBrush}" />
 
       <!-- Content + dock -->
       <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto">

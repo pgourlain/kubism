@@ -14,7 +14,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         KeyDown += OnKeyDown;
-        DataContextChanged += (_, _) => BuildMenus();
+        DataContextChanged += (_, _) => { BuildMenus(); if (Vm is { } v) v.SettingsApplied += BuildMenus; };
         CatalogList.DoubleTapped += (_, _) => { if (DataContext is MainViewModel vm && vm.SelectedCluster is { } c) _ = vm.ConnectAsync(c); };
         Opened += (_, _) => BuildMenus();
         PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) { } };
@@ -35,6 +35,8 @@ public partial class MainWindow : Window
         var vm = Vm;
         if (vm is null) return;
         if (cmd && e.Key == Key.K) { vm.OpenPaletteCommand.Execute(null); Dispatcher.UIThread.Post(() => PaletteBox.Focus()); e.Handled = true; return; }
+        if (cmd && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Key == Key.F) { vm.OpenGlobalSearchCommand.Execute(null); Dispatcher.UIThread.Post(() => SearchBox.Focus()); e.Handled = true; return; }
+        if (vm.GlobalSearchOpen && e.Key == Key.Escape) { vm.CloseGlobalSearchCommand.Execute(null); e.Handled = true; return; }
         if (vm.PaletteOpen)
         {
             switch (e.Key)
@@ -52,6 +54,21 @@ public partial class MainWindow : Window
     private void OnPaletteBackdrop(object? sender, PointerPressedEventArgs e)
     {
         if (e.Source == sender) Vm?.ClosePaletteCommand.Execute(null);
+    }
+
+    private void OnSearchBackdrop(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source == sender) Vm?.CloseGlobalSearchCommand.Execute(null);
+    }
+
+    private void OnSearchKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) { _ = Vm?.Search.SearchAsync(); e.Handled = true; }
+    }
+
+    private void OnSearchHitClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: SearchHit hit }) Vm?.Search.OpenCommand.Execute(hit);
     }
 
     private void OnPaletteDoubleTapped(object? sender, TappedEventArgs e) => _ = Vm?.Palette.ExecuteAsync();

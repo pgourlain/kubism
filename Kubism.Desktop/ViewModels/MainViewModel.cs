@@ -32,6 +32,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         UsageStore = usage; AzureTokens = azure;
         Translations.Language = settings.Current.Language;
         Palette = new CommandPaletteViewModel(this);
+        Search = new GlobalSearchViewModel(this);
         RebuildClusters();
         _catalog.CatalogChanged += () => Ui.Post(RebuildClusters);
     }
@@ -45,6 +46,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     public ITokenProvider? AzureTokens { get; }
     public IClusterSessionManager Sessions => _sessions;
     public CommandPaletteViewModel Palette { get; }
+    public GlobalSearchViewModel Search { get; }
     public ObservableCollection<ClusterItemViewModel> Clusters { get; } = [];
     public ObservableCollection<WorkspaceViewModel> Workspaces { get; } = [];
     public ObservableCollection<KubeconfigErrorRow> CatalogErrors { get; } = [];
@@ -55,6 +57,15 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string _busyText = "";
     [ObservableProperty] private bool _paletteOpen;
+    [ObservableProperty] private bool _globalSearchOpen;
+    [ObservableProperty] private WorkspaceViewModel? _secondaryWorkspace;
+    public bool HasSecondary => SecondaryWorkspace is not null;
+    partial void OnSecondaryWorkspaceChanged(WorkspaceViewModel? oldValue, WorkspaceViewModel? newValue)
+    {
+        if (oldValue is not null) oldValue.IsCompact = false;
+        if (newValue is not null) newValue.IsCompact = true;
+        OnPropertyChanged(nameof(HasSecondary));
+    }
 
     public bool HasWorkspaces => Workspaces.Count > 0;
     public bool ShowWelcome => SelectedWorkspace is null;
@@ -82,7 +93,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
                 next.Add(vm);
             }
         }
-        var ordered = next.OrderByDescending(c => c.Metadata.Pinned).ThenBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
+        var ordered = next.OrderByDescending(c => c.Metadata.Pinned).ThenBy(c => c.Metadata.Order).ThenBy(c => c.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
         if (!Clusters.SequenceEqual(ordered)) { Clusters.Clear(); foreach (var c in ordered) Clusters.Add(c); }
         CatalogErrors.Clear();
         foreach (var err in _catalog.Errors) CatalogErrors.Add(new KubeconfigErrorRow($"{err.FilePath}: {err.Message}"));
@@ -102,9 +113,11 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         item.State = SessionState.Connecting; item.ErrorMessage = null;
         using var cts = new CancellationTokenSource();
         SignInHandle? signIn = null;
+        var finished = false;
         var observer = new SignInObserver(line => Ui.Post(() =>
         {
             // First line from an interactive auth plugin (device code…): show the sign-in dialog.
+            if (finished) return;
             signIn ??= Dialogs.ShowSignIn(item.DisplayName);
             signIn.OnLine(line);
         }));
@@ -112,7 +125,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         {
             var connect = _sessions.ConnectAsync(item.Entry, observer, cts.Token);
             var session = await RunBusyAsync($"Connecting to {item.DisplayName}…", connect, cts);
-            signIn?.Close();
+            finished = true; signIn?.Close();
             if (session is null) { item.State = SessionState.Disconnected; await _sessions.DisconnectAsync(item.Id); return; }
             session.StateChanged += s => Ui.Post(() => { item.State = s; item.ErrorMessage = session.ErrorMessage; SelectedWorkspace?.RefreshHeader(); });
             item.State = session.State;
@@ -122,7 +135,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            signIn?.Close();
+            finished = true; signIn?.Close();
             item.State = SessionState.Error;
             item.ErrorMessage = ClusterSession.Describe(ex);
             AppLog.Warn($"Connect {item.DisplayName} failed: {ex.Message}");
@@ -145,6 +158,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         if (ws is null) return;
         var idx = Workspaces.IndexOf(ws);
         Workspaces.Remove(ws);
+        if (SecondaryWorkspace == ws) SecondaryWorkspace = null;
         if (SelectedWorkspace == ws) SelectedWorkspace = Workspaces.Count > 0 ? Workspaces[Math.Min(idx, Workspaces.Count - 1)] : null;
         await ws.DisposeAsync();
         await _sessions.DisconnectAsync(ws.Id);
@@ -205,6 +219,74 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     [RelayCommand]
     private void ClosePalette() => PaletteOpen = false;
+
+    public event Action? SettingsApplied;
+
+    [RelayCommand]
+    public async Task EditSettingsAsync()
+    {
+        var editor = new SettingsEditorViewModel(Settings.Current);
+        var result = await Dialogs.EditSettingsAsync(editor);
+        if (result is null) return;
+        result.ApplyTo(Settings.Current);
+        Settings.Save();
+        ApplySettings();
+    }
+
+    public void ApplySettings()
+    {
+        Translations.Language = Settings.Current.Language;
+        if (Avalonia.Application.Current is { } app)
+            app.RequestedThemeVariant = Settings.Current.Theme switch { "Light" => Avalonia.Styling.ThemeVariant.Light, "Dark" => Avalonia.Styling.ThemeVariant.Dark, _ => Avalonia.Styling.ThemeVariant.Default };
+        foreach (var w in Workspaces) { w.Session.Cache.MaxInformers = Settings.Current.MaxInformersPerCluster; w.BuildNav(); }
+        RebuildClusters();
+        SettingsApplied?.Invoke();
+        OnPropertyChanged(nameof(WindowTitle));
+    }
+
+    public async Task CheckForUpdatesAsync(bool force = false)
+    {
+        if (force) Settings.Current.LastUpdateCheck = null;
+        var info = await new UpdateChecker(Settings).CheckAsync(typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 1));
+        if (info is { IsNewer: true }) SetStatus($"Kubism {info.Version} is available: {info.Url}");
+    }
+
+    [RelayCommand]
+    private void OpenGlobalSearch() { Search.Reset(); GlobalSearchOpen = true; }
+
+    [RelayCommand]
+    private void CloseGlobalSearch() => GlobalSearchOpen = false;
+
+    /// <summary>Show another connected cluster next to the active one (e.g. compare deployments between staging and production).</summary>
+    [RelayCommand]
+    public void OpenSideBySide(WorkspaceViewModel? other)
+    {
+        if (other is null || other == SelectedWorkspace) return;
+        SecondaryWorkspace = other;
+        // Same kind as the primary pane, so the two lists can be compared directly.
+        if (SelectedWorkspace?.CurrentContent is ResourceListViewModel l && other.Session.Discovery.Find(l.Kind.Gvr) is { } k) other.OpenKind(k);
+    }
+
+    [RelayCommand]
+    private void CloseSplit() => SecondaryWorkspace = null;
+
+    [RelayCommand]
+    private void MoveUp(ClusterItemViewModel? item) => Move(item, -1);
+
+    [RelayCommand]
+    private void MoveDown(ClusterItemViewModel? item) => Move(item, 1);
+
+    private void Move(ClusterItemViewModel? item, int delta)
+    {
+        if (item is null) return;
+        var list = Clusters.Where(c => c.Metadata.Pinned == item.Metadata.Pinned).ToList();
+        var i = list.IndexOf(item);
+        var j = Math.Clamp(i + delta, 0, list.Count - 1);
+        if (i == j) return;
+        list.RemoveAt(i); list.Insert(j, item);
+        for (var n = 0; n < list.Count; n++) { var m = list[n].Metadata; m.Order = n; Settings.SetMetadata(list[n].Id, m); }
+        RebuildClusters();
+    }
 
     [RelayCommand]
     private void CancelBusy() => _busyCts?.Cancel();

@@ -24,6 +24,8 @@ public sealed class FakeDialogService : IDialogService
     public Task<string?> PromptAsync(string title, string message, string? initial = null) { Shown.Add($"prompt:{title}"); return Task.FromResult(PromptResponse?.Invoke(initial ?? "") ?? initial); }
     public Task<string?> ChooseAsync(string title, IReadOnlyList<string> options) { Shown.Add($"choose:{title}"); return Task.FromResult(ChooseResponse(options)); }
     public Task<ClusterEditorViewModel?> EditClusterAsync(ClusterEditorViewModel editor) { Shown.Add("editcluster"); return Task.FromResult<ClusterEditorViewModel?>(editor); }
+    public SettingsEditorViewModel? SettingsEdit { get; set; }
+    public Task<SettingsEditorViewModel?> EditSettingsAsync(SettingsEditorViewModel editor) { Shown.Add("settings"); SettingsEdit?.GetType(); return Task.FromResult<SettingsEditorViewModel?>(editor); }
     public Task<string?> PickFileAsync(string title) => Task.FromResult(FilePath);
     public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderPath);
     public Task<string?> SaveFileAsync(string title, string suggestedName) => Task.FromResult(SavePath);

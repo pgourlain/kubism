@@ -11,7 +11,7 @@ public partial class TerminalView : UserControl
     {
         InitializeComponent();
         Term.InputReceived += s => _vm is null ? Task.CompletedTask : _vm.SendAsync(s);
-        Term.SizeChanged += (c, r) => _vm is null ? Task.CompletedTask : _vm.ResizeAsync(c, r);
+        Term.TerminalSizeChanged += (c, r) => _vm is null ? Task.CompletedTask : _vm.ResizeAsync(c, r);
         Term.CopyRequested = async t => { if (_vm is not null) await _vm.CopyAsync(t); };
         Term.PasteRequested = async () => TopLevel.GetTopLevel(this)?.Clipboard is { } cb ? await Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(cb) : null;
         DataContextChanged += (_, _) =>

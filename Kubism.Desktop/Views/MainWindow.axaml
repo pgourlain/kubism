@@ -29,6 +29,8 @@
                     <Separator />
                     <MenuItem Header="Edit cluster settings…" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).EditClusterCommand}" CommandParameter="{Binding}" />
                     <MenuItem Header="Pin / unpin" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).TogglePinCommand}" CommandParameter="{Binding}" />
+                    <MenuItem Header="Move up" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).MoveUpCommand}" CommandParameter="{Binding}" />
+                    <MenuItem Header="Move down" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).MoveDownCommand}" CommandParameter="{Binding}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
                 <Border Width="30" Height="30" CornerRadius="15" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" Margin="0,0,10,0" VerticalAlignment="Center">
@@ -63,6 +65,12 @@
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:WorkspaceViewModel">
               <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="Open side by side" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).OpenSideBySideCommand}" CommandParameter="{Binding}" />
+                    <MenuItem Header="Close" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).CloseWorkspaceCommand}" CommandParameter="{Binding}" />
+                  </ContextMenu>
+                </StackPanel.ContextMenu>
                 <Border Width="4" Height="18" CornerRadius="2" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" />
                 <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
                 <Border IsVisible="{Binding IsProduction}" Background="{DynamicResource KubismProductionBrush}" CornerRadius="3" Padding="4,0"><TextBlock Text="PROD" Foreground="White" FontSize="9" FontWeight="Bold" /></Border>
@@ -71,7 +79,24 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <ContentControl Grid.Row="1" Content="{Binding SelectedWorkspace}" IsVisible="{Binding !ShowWelcome}" />
+        <Grid Grid.Row="1" IsVisible="{Binding !ShowWelcome}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="{Binding HasSecondary, Converter={x:Static app:Converters.SplitColumn}}" />
+          </Grid.ColumnDefinitions>
+          <ContentControl Name="PrimaryPane" Content="{Binding SelectedWorkspace}" />
+          <GridSplitter Grid.Column="1" Width="4" IsVisible="{Binding HasSecondary}" Background="{DynamicResource KubismBorderBrush}" />
+          <Grid Grid.Column="2" RowDefinitions="Auto,*" IsVisible="{Binding HasSecondary}">
+            <Border Background="{DynamicResource KubismSidebarBrush}" Padding="8,2">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{Binding SecondaryWorkspace.Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="link" Content="Close split ×" Command="{Binding CloseSplitCommand}" />
+              </Grid>
+            </Border>
+            <ContentControl Grid.Row="1" Content="{Binding SecondaryWorkspace}" />
+          </Grid>
+        </Grid>
         <v:WelcomeView Grid.Row="1" IsVisible="{Binding ShowWelcome}" />
       </Grid>
     </Grid>
@@ -87,6 +112,37 @@
         </StackPanel>
         <TextBlock Grid.Column="2" Text="Ctrl/⌘+K: command palette" Classes="muted" FontSize="11" Margin="12,0,0,0" VerticalAlignment="Center" />
       </Grid>
+    </Border>
+
+    <!-- Global search overlay -->
+    <Border Grid.RowSpan="3" IsVisible="{Binding GlobalSearchOpen}" Background="#66000000" PointerPressed="OnSearchBackdrop">
+      <Border Classes="card" Width="640" MaxHeight="520" VerticalAlignment="Top" Margin="0,70,0,0" Padding="8">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Name="SearchBox" Text="{Binding Search.Query, Mode=TwoWay}" PlaceholderText="Search all connected clusters: name, or label key=value" AutomationProperties.Name="Global search" KeyDown="OnSearchKeyDown" />
+            <Button Grid.Column="1" Content="Search" Command="{Binding Search.SearchCommand}" Margin="6,0,0,0" />
+          </Grid>
+          <TextBlock Grid.Row="1" Text="{Binding Search.Summary}" Classes="muted" Margin="2,6" />
+          <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{Binding Search.Groups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SearchGroup">
+                  <StackPanel Margin="0,0,0,8">
+                    <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                    <ItemsControl ItemsSource="{Binding Hits}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SearchHit">
+                          <Button Classes="link" Content="{Binding Display}" HorizontalAlignment="Left" Click="OnSearchHitClick" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
     </Border>
 
     <!-- Command palette overlay -->

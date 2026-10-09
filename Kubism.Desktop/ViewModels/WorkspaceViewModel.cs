@@ -36,6 +36,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             _sampler = new LocalSampler(session.Entry.Id, session.Metrics, main.UsageStore);
             _sampler.Start();
         }
+        _ = RestoreKeptForwardsAsync();
         var overview = FindNav(NavTarget.Overview);
         if (overview is not null) Navigate(overview);
         _ = DimForbiddenAsync();
@@ -51,6 +52,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
     public DockViewModel Dock { get; }
     public ObservableCollection<NavNode> NavRoots { get; } = [];
 
+    /// <summary>Secondary (split) pane: no sidebar, to leave room for the list.</summary>
+    [ObservableProperty] private bool _isCompact;
     [ObservableProperty] private NavNode? _selectedNav;
     [ObservableProperty] private object? _currentContent;
 
@@ -295,6 +298,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         {
             case "Pod":
                 list.Add(new ActionItem("Logs".T(), () => OpenPodLogsAsync(o), "L") { Verb = "get", Subresource = "log" });
+                if (new Core.Views.PodView(o).Restarts > 0)
+                    list.Add(new ActionItem("Logs (previous)", () => OpenPodLogsAsync(o, null, previous: true)) { Verb = "get", Subresource = "log" });
                 list.Add(new ActionItem("Shell".T(), () => OpenShellAsync(o), "S") { Verb = "create", Subresource = "exec" });
                 list.Add(new ActionItem("Forward port…", () => ForwardPortAsync(o)) { Verb = "create", Subresource = "portforward" });
                 break;
@@ -313,6 +318,16 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         }
         if (kind.Kind == "Service" && (o.At("spec", "ports") as System.Text.Json.Nodes.JsonArray)?.Count > 0)
             list.Add(new ActionItem("Forward port…", () => ForwardServicePortAsync(o)) { Verb = "create", Subresource = "portforward" });
+        if (kind.Kind == "CustomResourceDefinition")
+        {
+            var group = o.StringAt("spec", "group"); var crKind = o.StringAt("spec", "names", "kind");
+            list.Add(new ActionItem("Browse instances", () =>
+            {
+                var k = Session.Discovery.Kinds.FirstOrDefault(x => x.Group == group && x.Kind == crKind);
+                if (k is not null) OpenKind(k);
+                return Task.CompletedTask;
+            }));
+        }
         if (kind.Kind == "Node")
         {
             var cordoned = o.At("spec", "unschedulable")?.ToString().Equals("true", StringComparison.OrdinalIgnoreCase) == true;
@@ -453,6 +468,21 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
     }
 
     private void EnsurePortForwardsDock() => EnsurePortForwards();
+
+    private async Task RestoreKeptForwardsAsync()
+    {
+        foreach (var k in Session.Metadata.KeptForwards.ToList())
+        {
+            try
+            {
+                var kind = Enum.TryParse<ForwardTargetKind>(k.Kind, out var kk) ? kk : ForwardTargetKind.Pod;
+                var pf = await Session.Actions.StartPortForwardAsync(new ForwardTarget(kind, k.Namespace, k.Name, k.RemotePort), k.LocalPort, true, Session.SessionToken);
+                pf.Keep = true;
+            }
+            catch (Exception ex) { AppLog.Warn($"Cannot restore kept port-forward {k.Name}: {ex.Message}"); }
+        }
+        if (Session.PortForwards?.Forwards.Count > 0) Ui.Post(() => EnsurePortForwardsDock());
+    }
 
     // ---------- lifecycle ----------
 

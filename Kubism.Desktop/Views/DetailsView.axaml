@@ -55,6 +55,16 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <Border Classes="card" IsVisible="{Binding HasUsage}">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="Usage (metrics-server, last 15 min)" Classes="h2" />
+                  <TextBlock Text="{Binding UsageText}" Classes="muted" />
+                  <TextBlock Text="CPU" FontSize="11" Classes="muted" />
+                  <c:Sparkline Height="44" Values="{Binding CpuHistory}" />
+                  <TextBlock Text="Memory" FontSize="11" Classes="muted" />
+                  <c:Sparkline Height="44" Values="{Binding MemoryHistory}" />
+                </StackPanel>
+              </Border>
               <Border Classes="card" IsVisible="{Binding IsSecret}">
                 <StackPanel Spacing="4">
                   <TextBlock Text="Data (values are hidden until revealed)" Classes="h2" />

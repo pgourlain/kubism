@@ -64,8 +64,8 @@ public sealed partial class OverviewViewModel : ViewModelBase, IClosable
 
     public void Refresh()
     {
-        if (_closed) return;
-        var skew = _ws.Session.Transport.ClockSkew;
+        if (_closed || _ws.Session.Metrics is null) return;
+        var skew = _ws.Session.ClockSkew;
         Version = _ws.Session.ServerVersion ?? "";
         var nodes = _leases[0].Informer.Snapshot().Select(i => new NodeView(i.Object)).ToList();
         NodesTotal = nodes.Count; NodesReady = nodes.Count(n => n.IsReady);
@@ -98,7 +98,7 @@ public sealed partial class OverviewViewModel : ViewModelBase, IClosable
     public async ValueTask DisposeAsync()
     {
         _closed = true;
-        _ws.Session.Metrics.Updated -= Queue;
+        if (_ws.Session.Metrics is { } mm) mm.Updated -= Queue;
         _metrics?.Dispose();
         foreach (var s in _subs) s.Dispose();
         foreach (var l in _leases) l.Dispose();

@@ -239,3 +239,26 @@ public class UiDetailsAndActionsTests
         h.Screenshot("12-create-yaml");
     }
 }
+
+public class UiYamlTabTests
+{
+    [AvaloniaFact]
+    public async Task Yaml_tab_renders_masked_yaml_in_the_editor_control()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        ws.Namespaces.Select("default");
+        ws.OpenKind(ws.Session.Discovery.FindByName("deployments")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Rows.Count > 0);
+        var list = (ResourceListViewModel)ws.CurrentContent!;
+        list.SelectedRow = list.Rows.First(r => r.Name == "api");
+        await UiHarness.WaitFor(() => ws.Details.IsOpen && ws.Details.YamlText.Contains("kind: Deployment"));
+        ws.Details.SelectedTab = 1;
+        UiHarness.Pump();
+        var editor = h.Find<Kubism.Desktop.Controls.YamlEditor>(e => !e.IsReadOnly is false);
+        Assert.NotNull(editor);
+        Assert.Contains("kind: Deployment", editor!.Editor.Text);
+        Assert.Contains("replicas: 2", editor.Editor.Text);
+        h.Screenshot("23-yaml-tab");
+    }
+}

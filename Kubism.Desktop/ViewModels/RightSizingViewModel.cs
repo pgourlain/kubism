@@ -193,8 +193,8 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
 
     private void Summarize(RightSizingReport r)
     {
-        CpuKpi = $"{Quantities.FormatCpu(r.CpuRequested)} requested · {Quantities.FormatCpu(r.CpuUsed)} used (p95)";
-        MemoryKpi = $"{Quantities.FormatBytes(r.MemoryRequested)} requested · {Quantities.FormatBytes(r.MemoryUsed)} used (p95)";
+        CpuKpi = $"{Quantities.FormatCpu(r.CpuRequested)} requested · {Quantities.FormatCpu(r.CpuUsed)} used (p95)" + (r.NodeCpuAllocatable > 0 ? $" · {Quantities.FormatCpu(r.NodeCpuAllocatable)} allocatable ({r.CpuRequested / r.NodeCpuAllocatable:P0} requested)" : "");
+        MemoryKpi = $"{Quantities.FormatBytes(r.MemoryRequested)} requested · {Quantities.FormatBytes(r.MemoryUsed)} used (p95)" + (r.NodeMemoryAllocatable > 0 ? $" · {Quantities.FormatBytes(r.NodeMemoryAllocatable)} allocatable ({r.MemoryRequested / r.NodeMemoryAllocatable:P0} requested)" : "");
         WasteKpi = $"{Quantities.FormatCpu(r.WasteCpu)} cores · {Quantities.FormatBytes(r.WasteMemory)}";
         CostKpi = r.WasteCostPerMonth is { } c ? $"≈ {c:0.##} / month" : "";
         UnderCount = r.UnderProvisioned; NoRequestCount = r.WithoutRequests;

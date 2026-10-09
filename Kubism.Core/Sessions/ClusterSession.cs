@@ -45,6 +45,8 @@ public sealed class ClusterSession : IAsyncDisposable
     public string? ServerVersion { get; private set; }
     public ActivityLog Activity { get; }
     public ClusterMetadata Metadata => _settings.GetMetadata(Entry.Id);
+    /// <summary>Server clock minus local clock; zero when disconnected (UI timers may fire after a disconnect).</summary>
+    public TimeSpan ClockSkew => _transport?.ClockSkew ?? default;
     public IKubeTransport Transport => _transport ?? throw new InvalidOperationException("Not connected");
     public ApiDiscovery Discovery { get; private set; } = null!;
     public ResourceCache Cache { get; private set; } = null!;
@@ -79,7 +81,7 @@ public sealed class ClusterSession : IAsyncDisposable
             var version = await _transport.GetAsync("/version", linked.Token).ConfigureAwait(false);
             ServerVersion = version?["gitVersion"]?.GetValue<string>();
             Discovery = new ApiDiscovery(_transport);
-            Cache = new ResourceCache(_transport, Entry.Id, _events);
+            Cache = new ResourceCache(_transport, Entry.Id, _events) { MaxInformers = _settings.Current.MaxInformersPerCluster };
             Access = new AccessReview(_transport);
             PortForwards = new PortForwardManager(_transport, Entry.Id, _events);
             Metrics = new MetricsService(_transport);

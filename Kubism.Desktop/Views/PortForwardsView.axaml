@@ -17,6 +17,7 @@
                   <TextBlock Text="{Binding Info}" Classes="muted" FontSize="11" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                  <CheckBox Content="Keep" IsChecked="{Binding Keep, Mode=TwoWay}" ToolTip.Tip="Restart this forward when the cluster is connected again" />
                   <Button Content="Open" Command="{Binding OpenCommand}" />
                   <Button Content="Copy URL" Command="{Binding CopyUrlCommand}" />
                   <Button Content="Stop" Command="{Binding StopCommand}" />

@@ -52,6 +52,12 @@ public sealed partial class DetailsViewModel : ViewModelBase
     [ObservableProperty] private int _selectedTab;
     [ObservableProperty] private bool _isDeleted;
     [ObservableProperty] private bool _isSecret;
+    [ObservableProperty] private IReadOnlyList<double> _cpuHistory = [];
+    [ObservableProperty] private IReadOnlyList<double> _memoryHistory = [];
+    [ObservableProperty] private bool _hasUsage;
+    [ObservableProperty] private string _usageText = "";
+    private IDisposable? _metricsLease;
+    private Core.Metrics.MetricsService? _metricsService;
     public ObservableCollection<DetailSection> Sections { get; } = [];
     public ObservableCollection<string> Annotations { get; } = [];
     public ObservableCollection<EventRow> Events { get; } = [];
@@ -67,6 +73,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
         Title = obj.Name;
         Subtitle = obj.Namespace is null ? kind.Kind : $"{kind.Kind} · {obj.Namespace}";
         IsOpen = true;
+        SubscribeUsage(obj, kind);
         IsSecret = obj.Kind == "Secret" && obj.ApiVersion == "v1";
         if (!IsEditing) { Rebuild(); }
         _ = LoadAsync(obj);
@@ -85,8 +92,34 @@ public sealed partial class DetailsViewModel : ViewModelBase
         if (Object?.Uid == uid) { IsDeleted = true; Subtitle += " · deleted"; }
     }
 
+    private void SubscribeUsage(KubeObject obj, ResourceKind kind)
+    {
+        if (_metricsService is not null) { _metricsService.Updated -= RefreshUsage; _metricsLease?.Dispose(); _metricsService = null; _metricsLease = null; }
+        HasUsage = false; CpuHistory = []; MemoryHistory = [];
+        if (kind.Kind is not ("Pod" or "Node") || _ws.Session.Metrics is not { } m) return;
+        _metricsService = m; _metricsLease = m.Acquire(); m.Updated += RefreshUsage;
+        RefreshUsage();
+    }
+
+    private void RefreshUsage()
+    {
+        if (Object is null || _metricsService is null) return;
+        var key = Object.Kind == "Pod" ? $"pod/{Object.Namespace}/{Object.Name}" : $"node/{Object.Name}";
+        var h = _metricsService.History(key);
+        _ws.Ui.Post(() =>
+        {
+            HasUsage = h.Count > 0;
+            CpuHistory = h.Select(x => x.Cpu).ToList(); MemoryHistory = h.Select(x => x.Memory).ToList();
+            UsageText = h.Count == 0 ? "" : $"{Core.Views.Quantities.FormatCpu(h[^1].Cpu)} · {Core.Views.Quantities.FormatBytes(h[^1].Memory)} (last {h.Count} samples)";
+        });
+    }
+
     [RelayCommand]
-    public void Close() { IsOpen = false; IsEditing = false; _cts?.Cancel(); Object = null; }
+    public void Close()
+    {
+        IsOpen = false; IsEditing = false; _cts?.Cancel(); Object = null;
+        if (_metricsService is not null) { _metricsService.Updated -= RefreshUsage; _metricsLease?.Dispose(); _metricsService = null; _metricsLease = null; }
+    }
 
     partial void OnShowManagedFieldsChanged(bool value) { if (!IsEditing) BuildYaml(); }
 
@@ -94,7 +127,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
     {
         if (Object is null) return;
         Sections.Clear();
-        foreach (var s in DetailSectionBuilder.Build(Object, _ws.Session.Transport.ClockSkew)) Sections.Add(s);
+        foreach (var s in DetailSectionBuilder.Build(Object, _ws.Session.ClockSkew)) Sections.Add(s);
         Annotations.Clear();
         foreach (var a in DetailSectionBuilder.Annotations(Object)) Annotations.Add(a);
         SecretKeys.Clear();
@@ -132,7 +165,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
         {
             var list = await _ws.Session.Transport.ListAsync(Gvr.Events, null, new ListOptions { FieldSelector = $"involvedObject.uid={obj.Uid}" }, ct).ConfigureAwait(false);
             var events = list.Items.Select(i => new EventView(new KubeObject(i))).OrderByDescending(e => e.LastSeen).ToList();
-            var skew = _ws.Session.Transport.ClockSkew;
+            var skew = _ws.Session.ClockSkew;
             var rows = events.Select(e => new EventRow(e.Type, e.Reason, KubeTime.Age(e.LastSeen, skew), e.Message, e.IsWarning)).ToList();
             var related = await LoadRelatedAsync(obj, ct).ConfigureAwait(false);
             _ws.Ui.Post(() =>
