@@ -206,7 +206,7 @@ Like CinnabarSharp: state changes call `IClusterEventsService.Push(...)` with ty
 Releases are Native AOT like CinnabarSharp. Consequences:
 - No reflection-based `System.Text.Json`: our own types go in `CoreJson`/`DesktopJson`/`McpJson` source-generated contexts (`AotJsonTests` fails otherwise). Kubernetes objects are `JsonNode`s, so they need nothing.
 - YAML ⇄ JSON conversion with YamlDotNet's representation model (no `Deserializer<T>` on our types).
-- `KubernetesClient` vs `KubernetesClient.Aot`: decided by the Phase 0 spike. The AOT package historically left out watch and some patch shapes; we only rely on the client for config/auth and WebSocket streams, which keeps that risk small. Until the spike passes, releases may be self-contained JIT builds; keep trim/AOT warnings at zero in our own projects either way.
+- `KubernetesClient` vs `KubernetesClient.Aot`: decided by the Phase 0 spike. Result so far (docs/adr/0001): `KubernetesClient` is enough since we only use it for config, the HTTP handler chain and WebSocket setup; the AOT compile passes on macOS arm64, the link and the three-OS run are still open, so releases are self-contained JIT builds for now. Keep trim/AOT warnings at zero in our own projects either way.
 
 ## Conventions
 
