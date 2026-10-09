@@ -3,6 +3,8 @@ using Kubism.Core.Api;
 using Kubism.Core.Catalog;
 using Kubism.Core.Discovery;
 using Kubism.Core.Events;
+using Kubism.Core.Exec;
+using Kubism.Core.Forward;
 
 namespace Kubism.Core.Actions;
 
@@ -36,10 +38,13 @@ public sealed class ClusterActions
     private readonly ActivityLog _log;
     private readonly Func<SafetyMode> _mode;
 
+    private readonly Func<PortForwardManager?> _forwards;
+
     public ClusterActions(string clusterId, ApiDiscovery discovery, IKubeTransport transport, IClusterEventsService events,
-        ActivityLog log, Func<SafetyMode> mode)
+        ActivityLog log, Func<SafetyMode> mode, Func<PortForwardManager?>? forwards = null)
     {
         _clusterId = clusterId; _discovery = discovery; _transport = transport; _events = events; _log = log; _mode = mode;
+        _forwards = forwards ?? (() => null);
     }
 
     public SafetyMode Mode => _mode();
@@ -352,6 +357,25 @@ public sealed class ClusterActions
                 done++;
                 progress?.Report(new DrainProgress($"{pod.Namespace}/{pod.Name}", "evicted", done, pods.Count));
             }
+        });
+
+    // ---------- exec, port-forward ----------
+
+    [ClusterAction("StartExec")]
+    public Task<ExecSession> StartExecAsync(string ns, string pod, string? container, IReadOnlyList<string>? command, CancellationToken ct) =>
+        RunAsync("StartExec", $"pods/{ns}/{pod}", false, null, null, async () =>
+        {
+            var session = new ExecSession(_transport, ns, pod, container, command);
+            await session.StartAsync(ct).ConfigureAwait(false);
+            return session;
+        });
+
+    [ClusterAction("StartPortForward")]
+    public Task<PortForward> StartPortForwardAsync(ForwardTarget target, int localPort, bool keep, CancellationToken ct) =>
+        RunAsync("StartPortForward", $"{target.Kind.ToString().ToLowerInvariant()}s/{target.Namespace}/{target.Name}:{target.RemotePort}", false, null, null, () =>
+        {
+            var m = _forwards() ?? throw new InvalidOperationException("Port-forward is not available");
+            return Task.FromResult(m.Start(target, localPort, keep));
         });
 
     /// <summary>Delay between eviction retries when a PDB blocks (tests shorten it).</summary>

@@ -280,13 +280,28 @@ public sealed class KubeTransport : IKubeTransport
     public async Task<IKubeSocket> OpenSocketAsync(string path, IReadOnlyList<string> subProtocols, CancellationToken ct)
     {
         var uri = new UriBuilder(Url(path)) { Scheme = _baseUri.Scheme == "https" ? "wss" : "ws" }.Uri;
-        try
+        Exception? last = null;
+        // The client library negotiates one sub-protocol per attempt: try them in preference order.
+        foreach (var protocol in subProtocols.Take(2))
         {
-            var ws = await _client.ConnectAsync(uri, string.Join(",", subProtocols), ct).ConfigureAwait(false);
-            return new WebSocketAdapter(ws);
+            try
+            {
+                var ws = await _client.ConnectAsync(uri, protocol, ct).ConfigureAwait(false);
+                return new WebSocketAdapter(ws);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                last = ex;
+                var msg = ex.ToString();
+                // A definite HTTP error (not found, forbidden…) won't change with another protocol.
+                if (msg.Contains("'404'") || msg.Contains("'403'") || msg.Contains("'401'") || msg.Contains("'400'")) break;
+            }
         }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { throw MapException(ex); }
+        var mapped = MapException(last!);
+        if (last!.ToString().Contains("'404'")) throw new KubeApiException(404, "NotFound", "pod or container not found", last);
+        if (last.ToString().Contains("'403'")) throw new KubeApiException(403, "Forbidden", "forbidden: you cannot connect to this resource", last);
+        throw mapped;
     }
 
     public void Dispose() => _client.Dispose();

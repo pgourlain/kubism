@@ -4,6 +4,9 @@ using Kubism.Core.Cache;
 using Kubism.Core.Catalog;
 using Kubism.Core.Discovery;
 using Kubism.Core.Events;
+using Kubism.Core.Exec;
+using Kubism.Core.Forward;
+using Kubism.Core.Metrics;
 
 namespace Kubism.Core.Sessions;
 
@@ -45,6 +48,8 @@ public sealed class ClusterSession : IAsyncDisposable
     public ResourceCache Cache { get; private set; } = null!;
     public ClusterActions Actions { get; private set; } = null!;
     public AccessReview Access { get; private set; } = null!;
+    public PortForwardManager PortForwards { get; private set; } = null!;
+    public MetricsService Metrics { get; private set; } = null!;
     /// <summary>Cancelled when the session disconnects; views link their own tokens to it.</summary>
     public CancellationToken SessionToken => _cts?.Token ?? new CancellationToken(true);
 
@@ -74,7 +79,9 @@ public sealed class ClusterSession : IAsyncDisposable
             Discovery = new ApiDiscovery(_transport);
             Cache = new ResourceCache(_transport, Entry.Id, _events);
             Access = new AccessReview(_transport);
-            Actions = new ClusterActions(Entry.Id, Discovery, _transport, _events, Activity, () => Metadata.SafetyMode);
+            PortForwards = new PortForwardManager(_transport, Entry.Id, _events);
+            Metrics = new MetricsService(_transport);
+            Actions = new ClusterActions(Entry.Id, Discovery, _transport, _events, Activity, () => Metadata.SafetyMode, () => PortForwards);
             Cache.HealthChanged += OnCacheHealth;
             await Discovery.RefreshAsync(linked.Token).ConfigureAwait(false);
             SetState(SessionState.Connected);
@@ -147,6 +154,8 @@ public sealed class ClusterSession : IAsyncDisposable
         Task? loop;
         lock (_gate) { cts = _cts; loop = _healthLoop; _cts = null; _healthLoop = null; }
         try { cts?.Cancel(); } catch { }
+        if (PortForwards is not null) { await PortForwards.DisposeAsync().ConfigureAwait(false); PortForwards = null!; }
+        if (Metrics is not null) { await Metrics.DisposeAsync().ConfigureAwait(false); Metrics = null!; }
         if (Cache is not null) { Cache.HealthChanged -= OnCacheHealth; await Cache.DisposeAsync().ConfigureAwait(false); }
         if (loop is not null) { try { await loop.ConfigureAwait(false); } catch { } }
         _transport?.Dispose();
