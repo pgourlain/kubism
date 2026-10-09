@@ -133,6 +133,14 @@
       <Setter Property="CornerRadius" Value="10" />
       <Setter Property="Padding" Value="14" />
     </Style>
+    <Style Selector="Border.section">
+      <Setter Property="BorderBrush" Value="{DynamicResource KubismBorderBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,0,1" />
+      <Setter Property="Padding" Value="0,12,0,14" />
+    </Style>
+    <Style Selector="TextBlock.sectionTitle"><Setter Property="FontSize" Value="11" /><Setter Property="FontWeight" Value="SemiBold" /><Setter Property="LetterSpacing" Value="1" /><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /></Style>
+    <Style Selector="Button.danger"><Setter Property="Foreground" Value="{DynamicResource KubismErrorBrush}" /><Setter Property="BorderBrush" Value="{DynamicResource KubismErrorBrush}" /><Setter Property="Background" Value="Transparent" /></Style>
+    <Style Selector="Border.pill"><Setter Property="CornerRadius" Value="10" /><Setter Property="Padding" Value="8,1" /><Setter Property="BorderThickness" Value="1" /></Style>
     <Style Selector="Border.chip">
       <Setter Property="Background" Value="{DynamicResource KubismSidebarBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource KubismBorderBrush}" />

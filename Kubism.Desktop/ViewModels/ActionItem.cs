@@ -23,6 +23,8 @@ public sealed partial class ActionItem : ViewModelBase
     public string? Gesture { get; }
     public bool IsDestructive { get; }
     public bool IsSeparator { get; }
+    public bool IsNormal => !IsSeparator && !IsDestructive;
+    public bool IsDestructiveVisible => !IsSeparator && IsDestructive;
     /// <summary>RBAC check performed before the action is offered (verb, subresource).</summary>
     public string? Verb { get; init; }
     public string? Subresource { get; init; }

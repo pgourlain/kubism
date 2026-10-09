@@ -52,6 +52,8 @@ public sealed partial class DetailsViewModel : ViewModelBase
     [ObservableProperty] private int _selectedTab;
     [ObservableProperty] private bool _isDeleted;
     [ObservableProperty] private bool _isSecret;
+    [ObservableProperty] private string _statusText = "";
+    [ObservableProperty] private Severity _statusSeverity;
     [ObservableProperty] private IReadOnlyList<double> _cpuHistory = [];
     [ObservableProperty] private IReadOnlyList<double> _memoryHistory = [];
     [ObservableProperty] private bool _hasUsage;
@@ -72,6 +74,13 @@ public sealed partial class DetailsViewModel : ViewModelBase
         Kind = kind; Object = obj; IsDeleted = false;
         Title = obj.Name;
         Subtitle = obj.Namespace is null ? kind.Kind : $"{kind.Kind} · {obj.Namespace}";
+        StatusText = kind.Kind switch
+        {
+            "Pod" => new PodView(obj).Status, "Node" => new NodeView(obj).Status,
+            "Deployment" or "StatefulSet" or "ReplicaSet" => $"{new DeploymentView(obj).Ready}/{new DeploymentView(obj).Desired} ready",
+            _ => "",
+        };
+        StatusSeverity = ResourceRowViewModel.SeverityOf(kind.Kind, new Core.Cache.CacheItem(obj, null));
         IsOpen = true;
         SubscribeUsage(obj, kind);
         IsSecret = obj.Kind == "Secret" && obj.ApiVersion == "v1";
