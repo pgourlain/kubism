@@ -366,3 +366,22 @@ public class UiNavIconTests
         h.Screenshot("31-nav-icons");
     }
 }
+
+public class UiDialogSizeTests
+{
+    [AvaloniaFact]
+    public async Task Confirmation_dialog_fits_its_content()
+    {
+        double? height = null;
+        void OnOpened(Window w) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            height = w.Bounds.Height;
+            w.GetVisualDescendants().OfType<Button>().First(b => b.Content as string == "Cancel").RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        }, Avalonia.Threading.DispatcherPriority.Background);
+        AvaloniaDialogService.DialogOpened += OnOpened;
+        try { await new AvaloniaDialogService().ConfirmAsync(new ConfirmRequest("Delete", "Delete 2 replicaset objects?", "Delete", true)); }
+        finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
+        Assert.NotNull(height);
+        Assert.True(height < 170, $"confirmation is {height}px tall");
+    }
+}

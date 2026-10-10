@@ -18,7 +18,9 @@ public sealed class AvaloniaDialogService : IDialogService
     /// <summary>Configures <paramref name="w"/>, the same window the dialog buttons close (a separate instance made Cancel do nothing).</summary>
     private static Window Make(Window w, string title, double width, double height, Control content, bool resizable = false)
     {
-        w.Title = title; w.Width = width; w.Height = height; w.CanResize = resizable; w.Content = content;
+        w.Title = title; w.Width = width; w.CanResize = resizable; w.Content = content;
+        // Fixed-size dialogs fit their content (a one-line confirmation must not be a big empty box); resizable ones keep the given size.
+        if (resizable) w.Height = height; else { w.SizeToContent = SizeToContent.Height; w.MaxHeight = 640; }
         w.WindowStartupLocation = Owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner;
         w.ShowInTaskbar = false;
         w.KeyDown += (_, e) => { if (e.Key == Avalonia.Input.Key.Escape) { CloseWith(w, null); e.Handled = true; } };
