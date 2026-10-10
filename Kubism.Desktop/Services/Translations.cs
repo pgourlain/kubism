@@ -19,7 +19,7 @@ public static class Translations
         ["Production"] = "Production", ["Read-only"] = "Lecture seule", ["Normal"] = "Normal", ["Apply"] = "Appliquer",
         ["Search"] = "Rechercher", ["Pause"] = "Pause", ["Resume"] = "Reprendre", ["Clear"] = "Effacer", ["Download"] = "Télécharger",
         ["Export"] = "Exporter", ["Copy"] = "Copier", ["Open Log Folder"] = "Ouvrir le dossier des journaux", ["Copy diagnostics"] = "Copier les diagnostics",
-        ["Diagnostics"] = "Diagnostics", ["Releases"] = "Releases", ["Namespace"] = "Namespace", ["All namespaces"] = "Tous les namespaces",
+        ["Diagnostics"] = "Diagnostics", ["RBAC graph"] = "Graphe RBAC", ["Releases"] = "Releases", ["Namespace"] = "Namespace", ["All namespaces"] = "Tous les namespaces",
     };
 
     public static string Language { get; set; } = "en";

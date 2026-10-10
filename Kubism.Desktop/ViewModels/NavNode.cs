@@ -3,7 +3,7 @@ using Kubism.Core.Discovery;
 
 namespace Kubism.Desktop.ViewModels;
 
-public enum NavTarget { Group, Overview, Kind, RightSizing, Helm, Activity, CreateYaml, PortForwards, Crds, Compare, Security, GitOps, Capacity }
+public enum NavTarget { Group, Overview, Kind, RightSizing, Helm, Activity, CreateYaml, PortForwards, Crds, Compare, Security, GitOps, Capacity, Rbac }
 
 /// <summary>A node of the workspace sidebar.</summary>
 public sealed partial class NavNode : ViewModelBase

@@ -1,0 +1,149 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             x:Class="Kubism.Desktop.Views.RbacView"
+             x:DataType="vm:RbacViewModel">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="16" RowSpacing="6">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="RBAC graph" Classes="h1" />
+        <TextBlock Text="How rights are given, read-only. Rights are additive (RBAC has no deny). Other authorizers (webhook, Azure RBAC for Kubernetes) are not visible here: use 'Ask the API server' to compare." Classes="muted" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Summary}" Classes="muted" />
+      </StackPanel>
+      <TextBlock Grid.Column="1" Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Top" />
+    </Grid>
+    <StackPanel Grid.Row="1" Spacing="4">
+      <Border IsVisible="{Binding HasWarning}" BorderBrush="{DynamicResource KubismWarnBrush}" BorderThickness="1" CornerRadius="6" Padding="10,6" AutomationProperties.Name="Incomplete data warning">
+        <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" Foreground="{DynamicResource KubismWarnBrush}" />
+      </Border>
+      <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" TextWrapping="Wrap" />
+    </StackPanel>
+
+    <TabControl Grid.Row="2" SelectedIndex="{Binding Tab, Mode=TwoWay}">
+      <!-- ============ Chain ============ -->
+      <TabItem Header="Chain">
+        <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="0,8,0,0" RowSpacing="6">
+          <WrapPanel>
+            <ComboBox ItemsSource="{Binding NamespaceChoices}" SelectedItem="{Binding SelectedNamespace, Mode=TwoWay}" MinWidth="170" Margin="0,0,8,4" AutomationProperties.Name="Namespace filter" />
+            <ComboBox ItemsSource="{Binding KindChoices}" SelectedItem="{Binding SelectedKind, Mode=TwoWay}" MinWidth="150" Margin="0,0,8,4" AutomationProperties.Name="Subject kind filter" />
+            <CheckBox Content="Risky only" IsChecked="{Binding RiskyOnly}" Margin="0,0,8,4" />
+            <TextBox Text="{Binding SubjectSearch}" Watermark="Search a subject" MinWidth="200" Margin="0,0,8,4" AutomationProperties.Name="Subject search" />
+          </WrapPanel>
+          <WrapPanel Grid.Row="1">
+            <TextBlock Text="{Binding ChainSummary}" Classes="muted" Margin="0,0,16,0" />
+            <TextBlock Text="■ namespace" Foreground="{DynamicResource KubismAccentBrush}" Margin="0,0,10,0" />
+            <TextBlock Text="■ cluster-wide" Foreground="{DynamicResource KubismHelmBrush}" Margin="0,0,10,0" />
+            <TextBlock Text="▌ risky" Foreground="{DynamicResource KubismErrorBrush}" Margin="0,0,10,0" />
+            <TextBlock Text="┅ missing role" Foreground="{DynamicResource KubismErrorBrush}" />
+          </WrapPanel>
+          <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <c:RbacGraphControl Chain="{Binding Chain}" SelectedNode="{Binding SelectedNode}" NodeCommand="{Binding NodeClickedCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="RBAC chain graph" />
+          </ScrollViewer>
+          <ItemsControl Grid.Row="3" ItemsSource="{Binding NodeLines}" MaxHeight="130" />
+        </Grid>
+      </TabItem>
+
+      <!-- ============ Subject ============ -->
+      <TabItem Header="Subject: what can X do?">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,*" Margin="0,8,0,0" RowSpacing="6">
+          <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+            <AutoCompleteBox Text="{Binding SubjectText, Mode=TwoWay}" ItemsSource="{Binding KnownSubjects}" FilterMode="Contains" Watermark="ServiceAccount ns/name · User name · Group name" AutomationProperties.Name="Subject" />
+            <Button Grid.Column="1" Content="Show" Command="{Binding ShowSubjectCommand}" Margin="6,0,0,0" />
+            <Button Grid.Column="2" Content="Me" Command="{Binding UseMeCommand}" Margin="6,0,0,0" ToolTip.Tip="The identity the API server sees for you (SelfSubjectReview), with your groups" />
+            <ComboBox Grid.Column="3" ItemsSource="{Binding SubjectNamespaces}" SelectedItem="{Binding SelectedSubjectNamespace, Mode=TwoWay}" MinWidth="170" Margin="6,0,0,0" AutomationProperties.Name="Matrix namespace" />
+          </Grid>
+          <TextBlock Grid.Row="1" Text="{Binding SubjectSummary}" TextWrapping="Wrap" />
+          <ItemsControl Grid.Row="2" ItemsSource="{Binding SubjectNotes}" />
+          <Grid Grid.Row="3" RowDefinitions="Auto,*" AutomationProperties.Name="Rights matrix">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="RESOURCE" Classes="sectionTitle" Width="260" VerticalAlignment="Center" />
+              <ItemsControl ItemsSource="{Binding MatrixVerbs}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" Width="104" FontSize="11" Classes="muted" TextTrimming="CharacterEllipsis" /></DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+            <ListBox Grid.Row="1" ItemsSource="{Binding MatrixRows}" SelectionMode="Single">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:MatrixRowVm">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding Resource}" Width="260" FontWeight="{Binding Risky, Converter={x:Static app:Converters.GroupWeight}}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Resource}" />
+                    <ItemsControl ItemsSource="{Binding Cells}">
+                      <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CellVm">
+                          <Border Width="100" Height="22" Margin="2" CornerRadius="4" ToolTip.Tip="{Binding Tip}"
+                                  BorderThickness="{Binding Risky, Converter={x:Static app:Converters.RiskyThickness}}" BorderBrush="{DynamicResource KubismErrorBrush}">
+                            <TextBlock Text="{Binding Text}" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+          </Grid>
+          <TextBlock Grid.Row="4" Text="WHERE EACH RIGHT COMES FROM" Classes="sectionTitle" />
+          <DataGrid Grid.Row="5" ItemsSource="{Binding SubjectPaths}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Subject paths">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" x:DataType="vm:PathRow" />
+              <DataGridTextColumn Header="Binding" Binding="{Binding Binding}" x:DataType="vm:PathRow" Width="1.3*" />
+              <DataGridTextColumn Header="Role" Binding="{Binding Role}" x:DataType="vm:PathRow" Width="1.2*" />
+              <DataGridTextColumn Header="Rule" Binding="{Binding Rule}" x:DataType="vm:PathRow" Width="2*" />
+              <DataGridTextColumn Header="Via" Binding="{Binding Via}" x:DataType="vm:PathRow" />
+              <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:PathRow" Width="1.2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+
+      <!-- ============ Resource ============ -->
+      <TabItem Header="Resource: who can?">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,*" Margin="0,8,0,0" RowSpacing="6">
+          <Grid ColumnDefinitions="140,*,190,160,Auto">
+            <AutoCompleteBox Text="{Binding Verb, Mode=TwoWay}" ItemsSource="{Binding Verbs}" MinimumPrefixLength="0" Watermark="verb" AutomationProperties.Name="Verb" />
+            <TextBox Grid.Column="1" Text="{Binding ResourceText}" Watermark="resource: secrets · pods/exec · deployments.apps · /metrics" Margin="6,0,0,0" AutomationProperties.Name="Resource" />
+            <ComboBox Grid.Column="2" ItemsSource="{Binding ResourceNamespaces}" SelectedItem="{Binding ResourceNamespace, Mode=TwoWay}" Margin="6,0,0,0" HorizontalAlignment="Stretch" AutomationProperties.Name="Namespace" />
+            <TextBox Grid.Column="3" Text="{Binding ResourceName}" Watermark="object name (optional)" Margin="6,0,0,0" AutomationProperties.Name="Object name" />
+            <Button Grid.Column="4" Content="Search" Command="{Binding SearchCommand}" Classes="primary" Margin="6,0,0,0" />
+          </Grid>
+          <TextBlock Grid.Row="1" Text="{Binding WhoSummary}" TextWrapping="Wrap" />
+          <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
+            <Button Content="Ask the API server (me)" Command="{Binding VerifyMeCommand}" ToolTip.Tip="SelfSubjectAccessReview for you, compared with what the RBAC objects say" />
+            <Button Content="Ask the API server (selected)" Command="{Binding VerifySelectedCommand}" IsEnabled="{Binding CanReviewOthers}" ToolTip.Tip="{Binding ReviewOthersTip}" />
+            <Button Content="Show subject" Command="{Binding ShowResourceForCommand}" CommandParameter="{Binding SelectedWho}" IsEnabled="{Binding SelectedWho, Converter={x:Static app:Converters.NotNull}}" />
+            <TextBlock Text="{Binding VerifyText}" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="900" />
+          </StackPanel>
+          <DataGrid Grid.Row="3" ItemsSource="{Binding WhoCanRows}" SelectedItem="{Binding SelectedWho}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Who can">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="Subject" Width="1.3*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:WhoCanRow">
+                    <TextBlock Text="{Binding Subject}" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Breadth" Binding="{Binding Breadth}" x:DataType="vm:WhoCanRow" Width="90" />
+              <DataGridTextColumn Header="Through" Binding="{Binding Paths}" x:DataType="vm:WhoCanRow" Width="2*" />
+              <DataGridTextColumn Header="Risk flags" Binding="{Binding Risks}" x:DataType="vm:WhoCanRow" Width="1.2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+          <TextBlock Grid.Row="4" Text="PATHS FOR THE SELECTED SUBJECT (binding → role → rule)" Classes="sectionTitle" />
+          <DataGrid Grid.Row="5" ItemsSource="{Binding WhoPaths}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Who can paths">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" x:DataType="vm:PathRow" />
+              <DataGridTextColumn Header="Binding" Binding="{Binding Binding}" x:DataType="vm:PathRow" Width="1.3*" />
+              <DataGridTextColumn Header="Role" Binding="{Binding Role}" x:DataType="vm:PathRow" Width="1.2*" />
+              <DataGridTextColumn Header="Rule" Binding="{Binding Rule}" x:DataType="vm:PathRow" Width="2*" />
+              <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:PathRow" Width="1.2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

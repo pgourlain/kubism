@@ -41,6 +41,8 @@ Read tools (always on). Every `cluster` argument accepts the context name, the l
 | `top_pods`, `top_nodes` | metrics-server usage |
 | `describe` | Object + owner chain + events (like `kubectl describe`) |
 | `rightsizing_report` | Requests/limits vs usage per workload container, verdicts, recommendations and a YAML snippet |
+| `rbac_who_can` | Who can `<verb>` `<resource>` in `<namespace>`: subjects with the binding → role → rule paths and risk flags (RBAC objects only; says when a kind could not be read) |
+| `rbac_rights_of` | What a subject can do: paths per namespace through its bindings and implicit groups, risk flags, and a verbs × resources matrix for one namespace |
 
 Resources: `kubism://clusters`, `kubism://clusters/{id}/kinds`.
 

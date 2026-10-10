@@ -187,6 +187,80 @@ public sealed class KubismReadTools(McpContext ctx)
             return sb.ToString();
         });
 
+    [McpServerTool(Name = "rbac_who_can"), Description("Who can <verb> <resource> in <namespace>, from the cluster's Roles, ClusterRoles and bindings (read-only; same semantics as the API server's RBAC authorizer: wildcards, subresources, resourceNames, aggregated roles, nonResourceURLs). Each subject comes with the binding → role → rule paths that give the right and risk flags. Other authorizers (webhook, Azure RBAC for Kubernetes) are not visible. The result says when some RBAC kinds could not be read.")]
+    public Task<string> RbacWhoCan(string cluster, [Description("Verb: get, list, watch, create, update, patch, delete, deletecollection, escalate, bind, impersonate…")] string verb,
+        [Description("Resource: secrets, pods/exec, deployments.apps, deployments.apps/scale, or a non-resource URL such as /metrics")] string resource,
+        [Description("Namespace; omit for cluster-scoped resources or 'in all namespaces' (only ClusterRoleBindings count)")] string? @namespace = null,
+        [Description("Optional object name (matters for roles that use resourceNames)")] string? name = null, CancellationToken ct = default) =>
+        ctx.Run(async () =>
+        {
+            var s = await ctx.SessionAsync(cluster, ct);
+            var graph = await Core.Security.RbacLoader.LoadAsync(s.Transport, ct);
+            var req = Core.Security.RbacRequest.Parse(verb, resource, string.IsNullOrWhiteSpace(@namespace) ? null : @namespace, name);
+            var entries = graph.WhoCan(req);
+            var o = RbacHeader(graph);
+            o["request"] = req.Display;
+            o["subjects"] = new JsonArray(entries.Select(e => (JsonNode?)new JsonObject
+            {
+                ["subject"] = e.Subject.Display, ["kind"] = e.Subject.Kind, ["everyone"] = e.IsBroad,
+                ["risks"] = Risks(e.Risks),
+                ["paths"] = Paths(e.Paths),
+                ["builtIn"] = e.Paths.Count == 0 ? "the group system:masters is always authorized by the API server, outside RBAC" : null,
+            }).ToArray());
+            return Json(o);
+        });
+
+    [McpServerTool(Name = "rbac_rights_of"), Description("What a subject can do, from the RBAC objects: every binding → role → rule path that grants it (through the groups it implicitly belongs to), per namespace, with risk flags, plus the verbs × resources matrix for one namespace when given. Subject: 'User name', 'Group name', 'ServiceAccount namespace/name' or 'system:serviceaccount:ns:name'. Pass the user's real groups (SelfSubjectReview) in 'groups' if known. Rights are additive; other authorizers are not visible.")]
+    public Task<string> RbacRightsOf(string cluster, string subject, [Description("Comma-separated extra groups the subject belongs to (e.g. Entra group object IDs)")] string? groups = null,
+        [Description("Namespace for the verbs × resources matrix; omit for cluster-wide grants only")] string? @namespace = null, CancellationToken ct = default) =>
+        ctx.Run(async () =>
+        {
+            var parsed = Core.Security.RbacSubject.Parse(subject) ?? throw new McpException($"Cannot read subject '{subject}'. Use 'User name', 'Group name' or 'ServiceAccount namespace/name'.");
+            var extra = (groups ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var s = await ctx.SessionAsync(cluster, ct);
+            var graph = await Core.Security.RbacLoader.LoadAsync(s.Transport, ct);
+            var rights = graph.RightsOf(parsed, extra);
+            var o = RbacHeader(graph);
+            o["subject"] = parsed.Display;
+            o["groups"] = new JsonArray(extra.Select(g => (JsonNode?)JsonValue.Create(g)).ToArray());
+            o["namespaces"] = new JsonArray(rights.Namespaces.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray());
+            o["notes"] = new JsonArray(rights.Notes.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray());
+            o["paths"] = new JsonArray(rights.Paths.Select(p => (JsonNode?)new JsonObject
+            {
+                ["scope"] = p.ScopeText, ["binding"] = p.Binding.Display, ["role"] = p.Role.Display, ["rule"] = p.Rule.Summary,
+                ["via"] = p.ViaGroup, ["note"] = p.Note,
+                ["risks"] = Risks(Core.Security.RbacGraph.RisksOf(p.Rule, p.Role.Kind == "ClusterRole" ? p.Role.Name : null)),
+            }).ToArray());
+            var m = graph.MatrixFor(parsed, string.IsNullOrWhiteSpace(@namespace) ? null : @namespace, extra);
+            o["matrix"] = new JsonObject
+            {
+                ["namespace"] = m.Namespace ?? "(cluster-wide)",
+                ["resources"] = new JsonArray(m.Rows.Select(r => (JsonNode?)new JsonObject
+                {
+                    ["resource"] = r.Resource, ["risky"] = r.Risky,
+                    ["verbs"] = new JsonArray(m.Verbs.Select((v, i) => (v, c: r.Cells[i])).Where(x => x.c.Level != Core.Security.RightLevel.None)
+                        .Select(x => (JsonNode?)JsonValue.Create(x.c.Level == Core.Security.RightLevel.Limited ? x.v + " (named objects only)" : x.v)).ToArray()),
+                }).ToArray()),
+            };
+            return Json(o);
+        });
+
+    private static JsonObject RbacHeader(Core.Security.RbacGraph g) => new()
+    {
+        ["complete"] = g.IsComplete, ["warning"] = g.IncompleteWarning,
+        ["orphanBindings"] = new JsonArray(g.OrphanBindings.Select(b => (JsonNode?)JsonValue.Create($"{b.Display} -> missing {b.RoleKind} {b.RoleName}")).ToArray()),
+        ["limits"] = "RBAC objects only: webhook authorizers, Azure RBAC for Kubernetes and ABAC are not visible.",
+    };
+
+    private static JsonArray Risks(IEnumerable<Core.Security.RbacRisk> risks) =>
+        new(risks.Select(r => (JsonNode?)new JsonObject { ["code"] = r.Code, ["severity"] = r.Severity.ToString(), ["description"] = r.Description }).ToArray());
+
+    private static JsonArray Paths(IEnumerable<Core.Security.RbacPath> paths) =>
+        new(paths.Select(p => (JsonNode?)new JsonObject
+        {
+            ["scope"] = p.ScopeText, ["binding"] = p.Binding.Display, ["role"] = p.Role.Display, ["rule"] = p.Rule.Summary, ["via"] = p.ViaGroup, ["note"] = p.Note,
+        }).ToArray());
+
     [McpServerTool(Name = "rightsizing_report"), Description("Requests/limits vs real usage per workload container, with verdicts, waste and recommended resources (and a YAML snippet). Uses Prometheus (cluster setting or in-cluster), else VPA, else local sampling.")]
     public Task<string> RightsizingReport(string cluster, string? @namespace = null, [Description("Window in days (1-30)")] int days = 7, [Description("Maximum workloads returned")] int limit = 40, CancellationToken ct = default) =>
         ctx.Run(async () =>

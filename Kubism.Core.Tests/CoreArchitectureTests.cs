@@ -32,9 +32,10 @@ public class CoreArchitectureTests
     [Fact]
     public void Mutating_requests_only_go_through_ClusterActions()
     {
-        // Rule 2: no SendAsync with a mutating verb outside ClusterActions (and the access review, which is read-only in effect).
+        // Rule 2: no SendAsync with a mutating verb outside ClusterActions. The access reviews (SelfSubjectAccessReview, SelfSubjectReview,
+        // SubjectAccessReview) are POSTs that create nothing: AccessReview and RbacVerifier ask questions only.
         var root = Directory.GetParent(FindCoreDir())!.FullName;
-        var allowed = new[] { "ClusterActions.cs", "AccessReview.cs", "SessionHealth" };
+        var allowed = new[] { "ClusterActions.cs", "AccessReview.cs", "RbacVerifier.cs", "SessionHealth" };
         foreach (var project in new[] { "Kubism.Core", "Kubism.Desktop", "Kubism.Mcp" })
         {
             var dir = Path.Combine(root, project);

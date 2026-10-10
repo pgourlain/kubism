@@ -99,7 +99,7 @@ public sealed class RbacChain
                 var label = b.ClusterRoleInNamespace ? $"ClusterRole applied in {b.Namespace} only" : "";
                 edges.Add(new RbacChainEdge(bid, rid, label, b.ClusterRoleInNamespace));
                 var uid = "u:" + role.Key;
-                nodes.TryAdd(uid, new RbacChainNode(uid, RbacNodeKind.Rules, role.Rules.Count == 1 ? "1 rule" : $"{role.Rules.Count} rules", role.Namespace) { Rules = role.Rules, Risks = risks, Detail = role.Display });
+                nodes.TryAdd(uid, new RbacChainNode(uid, RbacNodeKind.Rules, role.Rules.Count == 1 ? "1 rule" : $"{role.Rules.Count} rules", role.Namespace) { Rules = role.Rules, Risks = risks, Detail = $"rules of {role.Name}" });
                 edges.Add(new RbacChainEdge(rid, uid, "", false));
             }
             else

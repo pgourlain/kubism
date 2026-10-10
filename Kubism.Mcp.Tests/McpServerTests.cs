@@ -84,7 +84,7 @@ public class McpReadToolsTests
     public async Task Server_lists_read_tools_and_hides_write_tools_by_default()
     {
         await using var f = await McpFixture.StartAsync([]);
-        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe" })
+        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of" })
             Assert.Contains(t, f.ToolNames);
         foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart" })
             Assert.DoesNotContain(t, f.ToolNames);
@@ -239,5 +239,57 @@ public class McpWriteToolsTests
         Assert.Contains("read-only", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(3, f.Server.Get(Core.Api.Gvr.Deployments, "default", "web")!["spec"]!["replicas"]!.GetValue<int>());
         Assert.Equal(before, f.Server.Requests.Count(r => r.Method is "PATCH" or "DELETE" or "POST" && !r.Path.Contains("selfsubject")));
+    }
+}
+
+public class McpRbacTests
+{
+    [Fact]
+    public async Task Rbac_who_can_returns_subjects_with_paths_and_risk_flags()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var r = JsonNode.Parse(await f.CallAsync("rbac_who_can", new() { ["cluster"] = "fake", ["verb"] = "get", ["resource"] = "secrets", ["namespace"] = "staging" }))!;
+        Assert.True(r["complete"]!.GetValue<bool>());
+        Assert.Null(r["warning"]);
+        Assert.Contains("RBAC objects only", r["limits"]!.ToString());
+        var subjects = r["subjects"]!.AsArray().Select(x => x!.AsObject()).ToList();
+        var devs = subjects.Single(x => x["subject"]!.ToString() == "Group devs");
+        Assert.Contains(devs["paths"]!.AsArray(), p => p!["binding"]!.ToString().Contains("devs-edit") && p["role"]!.ToString().Contains("edit") && p["rule"]!.ToString().Contains("secrets"));
+        Assert.Contains(devs["risks"]!.AsArray(), x => x!["code"]!.ToString() == "read-secrets");
+        var everyone = subjects.Single(x => x["subject"]!.ToString() == "Group system:authenticated");
+        Assert.True(everyone["everyone"]!.GetValue<bool>());
+        Assert.DoesNotContain(subjects, x => x["subject"]!.ToString() == "User bob");
+        Assert.Contains(r["orphanBindings"]!.AsArray(), x => x!.ToString().Contains("removed-role"));
+    }
+
+    [Fact]
+    public async Task Rbac_rights_of_returns_paths_per_namespace_and_a_matrix()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var r = JsonNode.Parse(await f.CallAsync("rbac_rights_of", new() { ["cluster"] = "fake", ["subject"] = "Group devs", ["namespace"] = "staging" }))!;
+        Assert.Equal(["production", "staging"], r["namespaces"]!.AsArray().Select(x => x!.ToString()).ToArray());
+        Assert.Contains(r["paths"]!.AsArray(), p => p!["note"]?.ToString().Contains("staging only") == true);
+        var exec = r["matrix"]!["resources"]!.AsArray().Single(x => x!["resource"]!.ToString() == "pods/exec")!;
+        Assert.Contains("create", exec["verbs"]!.AsArray().Select(v => v!.ToString()));
+        Assert.True(exec["risky"]!.GetValue<bool>());
+
+        var ci = JsonNode.Parse(await f.CallAsync("rbac_rights_of", new() { ["cluster"] = "fake", ["subject"] = "ServiceAccount staging/ci-bot", ["namespace"] = "staging" }))!;
+        var cm = ci["matrix"]!["resources"]!.AsArray().Single(x => x!["resource"]!.ToString() == "configmaps")!;
+        Assert.Contains("get (named objects only)", cm["verbs"]!.AsArray().Select(v => v!.ToString()));
+
+        var carol = JsonNode.Parse(await f.CallAsync("rbac_rights_of", new() { ["cluster"] = "fake", ["subject"] = "User carol" }))!;
+        Assert.Contains(carol["notes"]!.AsArray(), n => n!.ToString().Contains("removed-role"));
+        await Assert.ThrowsAsync<McpException>(() => f.CallAsync("rbac_rights_of", new() { ["cluster"] = "fake", ["subject"] = "" }));
+    }
+
+    [Fact]
+    public async Task Rbac_answers_say_when_a_kind_could_not_be_read()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        f.Server.Deny("list", "rolebindings");
+        var r = JsonNode.Parse(await f.CallAsync("rbac_who_can", new() { ["cluster"] = "fake", ["verb"] = "get", ["resource"] = "pods", ["namespace"] = "staging" }))!;
+        Assert.False(r["complete"]!.GetValue<bool>());
+        Assert.Contains("rolebindings", r["warning"]!.ToString());
+        Assert.DoesNotContain(r["subjects"]!.AsArray(), x => x!["subject"]!.ToString() == "Group devs");     // devs get pods in staging through a RoleBinding we could not read
     }
 }

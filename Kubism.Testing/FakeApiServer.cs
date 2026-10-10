@@ -393,6 +393,8 @@ public sealed class FakeApiServer : IAsyncDisposable
     {
         if (group == "metrics.k8s.io") { await Metrics(ctx, rest); return; }
         if (group == "authorization.k8s.io" && rest[0] == "selfsubjectaccessreviews") { await AccessReview(ctx, body); return; }
+        if (group == "authorization.k8s.io" && rest[0] == "subjectaccessreviews") { await SubjectAccessReview(ctx, body); return; }
+        if (group == "authentication.k8s.io" && rest[0] == "selfsubjectreviews") { await SelfSubjectReview(ctx); return; }
 
         string? ns = null;
         if (rest[0] == "namespaces" && rest.Count >= 3) { ns = rest[1]; rest = rest.Skip(2).ToList(); }
@@ -544,6 +546,30 @@ public sealed class FakeApiServer : IAsyncDisposable
             return result;
         }
         return patch?.DeepClone();
+    }
+
+    /// <summary>Who the fake API server says the caller is (SelfSubjectReview); null user answers 404, like a server older than 1.28.</summary>
+    public string? FakeUser { get; set; } = "fake";
+    public string[] FakeGroups { get; set; } = ["system:authenticated"];
+    /// <summary>Answers SubjectAccessReview (spec.user, spec.groups, resourceAttributes); default is "allowed unless denied with Deny".</summary>
+    public Func<JsonObject, bool>? SubjectReviewHandler { get; set; }
+
+    private async Task SelfSubjectReview(HttpContext ctx)
+    {
+        if (FakeUser is null) { await Json(ctx, 404, Status(404, "NotFound", "the server could not find the requested resource")); return; }
+        await Json(ctx, 201, new JsonObject
+        {
+            ["apiVersion"] = "authentication.k8s.io/v1", ["kind"] = "SelfSubjectReview",
+            ["status"] = new JsonObject { ["userInfo"] = new JsonObject { ["username"] = FakeUser, ["groups"] = new JsonArray(FakeGroups.Select(g => (JsonNode?)JsonValue.Create(g)).ToArray()) } },
+        });
+    }
+
+    private async Task SubjectAccessReview(HttpContext ctx, string? body)
+    {
+        var spec = (JsonNode.Parse(body ?? "{}") as JsonObject)?["spec"] as JsonObject ?? new JsonObject();
+        var attrs = spec["resourceAttributes"] as JsonObject ?? new JsonObject();
+        var allowed = SubjectReviewHandler?.Invoke(spec) ?? !IsDenied(FakeKinds.S(attrs, "verb") ?? "", FakeKinds.S(attrs, "resource") ?? "");
+        await Json(ctx, 201, new JsonObject { ["kind"] = "SubjectAccessReview", ["status"] = new JsonObject { ["allowed"] = allowed, ["reason"] = "fake api server" } });
     }
 
     private async Task AccessReview(HttpContext ctx, string? body)

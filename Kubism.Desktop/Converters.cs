@@ -37,6 +37,8 @@ public static class Converters
         return app.TryGetResource(key, app.ActualThemeVariant, out var v) ? v as IBrush : null;
     }
 
+    public static readonly IValueConverter RiskyThickness = new FuncConverter<bool, Thickness>(risky => new Thickness(risky ? 1.5 : 0));
+
     public static readonly IValueConverter GroupWeight = new FuncConverter<bool, FontWeight>(g => g ? FontWeight.SemiBold : FontWeight.Normal);
 
     public static readonly IValueConverter RevealLabel = new FuncConverter<bool, string>(r => r ? "Hide" : "Reveal");
