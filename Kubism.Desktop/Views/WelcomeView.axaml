@@ -8,7 +8,10 @@
     <StackPanel Margin="32" Spacing="16" MaxWidth="900" HorizontalAlignment="Left">
       <StackPanel>
         <TextBlock Text="Kubism" Classes="h1" FontSize="30" />
-        <TextBlock Classes="muted"><Run FontWeight="Bold" Text="Kub" /><Run Text="ernetes  " /><Run FontWeight="Bold" Text="I" /><Run Text="nspect. " /><Run FontWeight="Bold" Text="S" /><Run Text="teer. " /><Run FontWeight="Bold" Text="M" /><Run Text="onitor." /></TextBlock>
+        <StackPanel Spacing="2">
+          <TextBlock Classes="muted"><Run FontWeight="Bold" Text="Kub" /><Run Text="ernetes " /><Run FontWeight="Bold" Text="I" /><Run Text="nterface for " /><Run FontWeight="Bold" Text="S" /><Run Text="upervising " /><Run FontWeight="Bold" Text="M" /><Run Text="ulti-clusters." /></TextBlock>
+          <TextBlock Classes="muted"><Run FontWeight="Bold" Text="I" /><Run Text="nspect. " /><Run FontWeight="Bold" Text="S" /><Run Text="teer. " /><Run FontWeight="Bold" Text="M" /><Run Text="onitor." /></TextBlock>
+        </StackPanel>
       </StackPanel>
       <StackPanel Orientation="Horizontal" Spacing="8">
         <Button Content="Add kubeconfig file…" Command="{Binding AddKubeconfigCommand}" />

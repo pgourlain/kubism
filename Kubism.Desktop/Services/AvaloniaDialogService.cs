@@ -125,11 +125,19 @@ public sealed class AvaloniaDialogService : IDialogService
         }
         catch (Exception) { /* icon is decoration */ }
         root.Children.Add(new TextBlock { Text = info.Name, FontSize = 24, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center });
-        var tag = new TextBlock { Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center };
-        // Kubernetes · Inspect. Steer. Monitor. with the leading letters in bold (Kub, I, S, M).
-        void Part(string bold, string rest) { tag.Inlines!.Add(new Avalonia.Controls.Documents.Run(bold) { FontWeight = FontWeight.Bold }); tag.Inlines.Add(new Avalonia.Controls.Documents.Run(rest)); }
-        Part("Kub", "ernetes  "); Part("I", "nspect. "); Part("S", "teer. "); Part("M", "onitor.");
-        root.Children.Add(tag);
+        // "Kubernetes Interface for Supervising Multi-clusters." then "Inspect. Steer. Monitor.", acronym letters in bold.
+        TextBlock Line(params (string bold, string rest)[] parts)
+        {
+            var tb = new TextBlock { Opacity = 0.85, HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap };
+            foreach (var (bold, rest) in parts)
+            {
+                tb.Inlines!.Add(new Avalonia.Controls.Documents.Run(bold) { FontWeight = FontWeight.Bold });
+                tb.Inlines.Add(new Avalonia.Controls.Documents.Run(rest));
+            }
+            return tb;
+        }
+        root.Children.Add(Line(("Kub", "ernetes "), ("I", "nterface for "), ("S", "upervising "), ("M", "ulti-clusters.")));
+        root.Children.Add(Line(("I", "nspect. "), ("S", "teer. "), ("M", "onitor.")));
         root.Children.Add(new TextBlock { Text = $"Version {info.Version}", Margin = new Thickness(0, 10, 0, 0), HorizontalAlignment = HorizontalAlignment.Center });
         root.Children.Add(new TextBlock { Text = $"{info.Runtime} · {info.Os}", Opacity = 0.6, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
         root.Children.Add(new TextBlock { Text = info.License, Opacity = 0.6, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
