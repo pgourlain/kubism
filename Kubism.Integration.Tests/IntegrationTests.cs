@@ -61,19 +61,25 @@ public class IntegrationTests
     }
 
     [RequiresClusterFact]
-    public async Task Exec_into_a_kube_system_pod_when_it_has_a_shell()
+    public async Task Exec_into_a_kube_system_pod_that_has_a_shell()
     {
         using var t = Connect();
         var pods = await t.ListAsync(Gvr.Pods, "kube-system", new ListOptions { FieldSelector = "status.phase=Running" }, TestContext.Current.CancellationToken);
-        var pod = pods.Items.Select(i => new KubeObject(i)).FirstOrDefault(p => p.Name.StartsWith("etcd") || p.Name.StartsWith("kube-proxy") || p.Name.StartsWith("kindnet"));
-        if (pod is null) return; // nothing suitable on this distribution
-        await using var exec = new Kubism.Core.Exec.ExecSession(t, "kube-system", pod.Name, null, ["/bin/sh", "-c", "echo kubism-ok"], tty: false);
-        var output = new System.Text.StringBuilder();
-        exec.Output += (d, _) => output.Append(System.Text.Encoding.UTF8.GetString(d));
-        var done = new TaskCompletionSource();
-        exec.Exited += _ => done.TrySetResult();
-        await exec.StartAsync(TestContext.Current.CancellationToken);
-        await done.Task.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
-        Assert.Contains("kubism-ok", output.ToString());
+        // Distroless images (etcd, apiserver…) have no shell: try the candidates until one answers.
+        var tried = new List<string>();
+        foreach (var pod in pods.Items.Select(i => new KubeObject(i)).Where(p => p.Name.StartsWith("kube-proxy") || p.Name.StartsWith("kindnet") || p.Name.StartsWith("coredns")))
+        {
+            await using var exec = new Kubism.Core.Exec.ExecSession(t, "kube-system", pod.Name, null, ["/bin/sh", "-c", "echo kubism-ok"], tty: false);
+            var output = new System.Text.StringBuilder();
+            exec.Output += (d, _) => output.Append(System.Text.Encoding.UTF8.GetString(d));
+            var done = new TaskCompletionSource<Kubism.Core.Exec.ExecResult>();
+            exec.Exited += r => done.TrySetResult(r);
+            await exec.StartAsync(TestContext.Current.CancellationToken);
+            var result = await done.Task.WaitAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+            tried.Add($"{pod.Name}: {result.Message}");
+            if (result.Success && output.ToString().Contains("kubism-ok")) return;
+        }
+        // Nothing with a shell on this distribution: don't fail the suite, but say so.
+        Assert.True(tried.Count == 0 || tried.All(m => m.Contains("not found") || m.Contains("executable")), "exec failed on every candidate: " + string.Join(" | ", tried));
     }
 }
