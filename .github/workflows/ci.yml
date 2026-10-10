@@ -34,6 +34,20 @@ jobs:
           path: Kubism.Desktop.Tests/bin/Debug/net10.0/screenshots/
           if-no-files-found: ignore
 
+  # The Apple-silicon package must hold arm64-only Mach-O files (macOS shows an "Intel-based app" warning otherwise): package it as the release does and check.
+  macos-arm64-package:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+      - name: Package osx-arm64
+        run: packaging/package.sh osx-arm64 0.0.0-ci
+      - name: Mach-O architectures
+        run: packaging/check-macho-archs.sh artifacts/Kubism.app arm64
+
   integration:
     runs-on: ubuntu-latest
     needs: build-test

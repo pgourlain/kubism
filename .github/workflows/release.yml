@@ -36,6 +36,13 @@ jobs:
       - name: Package (Native AOT)
         shell: bash
         run: packaging/package.sh ${{ matrix.rid }} "${{ steps.v.outputs.version }}"
+      # No Mach-O of another architecture: macOS warns about an "Intel-based app" if the executable or any library it loads lacks an arm64 slice.
+      - name: Check Mach-O architectures (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          arch=arm64; [[ "${{ matrix.rid }}" == "osx-x64" ]] && arch=x86_64
+          packaging/check-macho-archs.sh artifacts/Kubism.app "$arch"
       - uses: actions/upload-artifact@v4
         with:
           name: kubism-${{ matrix.rid }}

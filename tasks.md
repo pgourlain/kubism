@@ -418,11 +418,15 @@ Read-only (no `ClusterActions`). One page, under Network in the sidebar, that sh
   - Done (opt-in, ≤ once a day, never installs; tested with a stub handler).
 - [x] `packaging/package.sh` and release workflow: Windows zip, macOS `.app`/`.dmg`, Linux tarball + `.desktop`, Arch package; Native AOT if ADR 0001 allows it.
   - Script, `.desktop`, PKGBUILD and release workflow are in; the macOS `.app`/`.dmg` was built and started locally. Windows/Linux packaging and Native AOT are untested here.
+- [x] **macOS packages are native for their architecture.** `osx-arm64` is published with `-r osx-arm64` on an arm64 `dotnet` (the script refuses an Intel shell, Rosetta or an x64 SDK). NuGet ships `libAvaloniaNative`, `libSkiaSharp` and `libHarfBuzzSharp` as universal binaries, which neither Avalonia nor `dotnet publish` thins: `packaging/thin-macho.sh` keeps only the target slice in every Mach-O of the `.app` (`lipo -thin`, failing when a file has no slice for the target), before signing (`lipo` invalidates signatures). `Info.plist` gets `LSArchitecturePriority = arm64` in the arm64 package (and never a Rosetta option). `packaging/check-macho-archs.sh <App.app> <arch>` lists every Mach-O with `lipo -archs` and fails on a missing or extra architecture; it runs at the end of `package.sh`, in `release.yml` for each macOS package, and in a `macos-arm64-package` CI job.
+  - Done for `osx-arm64`: before, three libraries were `x86_64 arm64`; after, every Mach-O is `arm64` only (output in the commit message). **Not verified here:** the `osx-x64` package (Intel runner), Developer ID signing and notarization (ad-hoc signing only, plus `codesign --verify --deep --strict`), and Finder's Get Info "Application (Apple silicon)" on a clean machine.
 - [ ] Signed packages (later): Windows code signing, macOS Developer ID + notarization, Linux AppImage/Flatpak.
   - **Open.** Not done (marked later).
 
 **Validation**
 - [ ] (manual) Fresh machine of each OS: download, start, add a kubeconfig, connect, list pods, open a shell.
+- [ ] (automated) macOS packages contain only Mach-O files of their target architecture (`check-macho-archs.sh` in CI and in the release workflow).
+- [ ] (manual) On Apple silicon, Finder › Get Info shows the app's Kind as "Application (Apple silicon)" and macOS shows no "Intel-based app" warning.
 
 ## Phase 14 — Understand and compare (first batch of the "what to add" list)
 
