@@ -53,7 +53,7 @@ public class RbacStoreTests
         store.Changed += _ => Interlocked.Increment(ref changed);
         t.Emit(WatchEventType.Added, binding);
         Assert.True(await Until(() => store.Graph.Explain(new RbacSubject("User", "newbie"), RbacRequest.Parse("get", "pods", "staging")).Allowed));
-        Assert.True(changed > 0);
+        Assert.True(await Until(() => Volatile.Read(ref changed) > 0));      // Changed is raised just after the graph is replaced
 
         // and goes away again
         t.Emit(WatchEventType.Deleted, binding);

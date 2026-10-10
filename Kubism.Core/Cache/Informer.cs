@@ -87,11 +87,7 @@ public sealed class Informer : IAsyncDisposable
         }
     }
 
-    private void StopIfUnused()
-    {
-        lock (_gate) { if (_refs > 0) return; }
-        _ = StopAsync();
-    }
+    private void StopIfUnused() => _ = StopAsync(onlyIfUnused: true);
 
     private void Start()
     {
@@ -100,10 +96,11 @@ public sealed class Informer : IAsyncDisposable
         _loop = Task.Run(() => RunAsync(ct));
     }
 
-    private async Task StopAsync()
+    private async Task StopAsync(bool onlyIfUnused = false)
     {
         CancellationTokenSource? cts; Task? loop;
-        lock (_gate) { cts = _cts; loop = _loop; _cts = null; _loop = null; }
+        // The "nobody subscribed" check and the stop are one step: a Subscribe arriving between them would otherwise get an informer that is stopped under its feet.
+        lock (_gate) { if (onlyIfUnused && _refs > 0) return; cts = _cts; loop = _loop; _cts = null; _loop = null; }
         try { cts?.Cancel(); } catch { }
         if (loop is not null) { try { await loop.ConfigureAwait(false); } catch { } }
         cts?.Dispose();
