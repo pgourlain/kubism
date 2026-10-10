@@ -20,8 +20,15 @@
         <v:NamespacePicker DataContext="{Binding Workspace.Namespaces}" IsVisible="{Binding $parent[v:ResourceListView].((vm:ResourceListViewModel)DataContext).Namespaced}" Margin="0,0,8,4" />
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter (name, key=value)" Width="220" Margin="0,0,8,4" AutomationProperties.Name="Filter" />
         <CheckBox Content="All columns" IsChecked="{Binding ShowAllColumns}" ToolTip.Tip="Columns…" Margin="0,0,8,4" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" Margin="0,0,8,4" />
-        <Button Content="{Binding DeleteLabel}" Command="{Binding DeleteSelectedCommand}" IsEnabled="{Binding HasSelection}" Foreground="{DynamicResource KubismErrorBrush}" Margin="0,0,8,4" AutomationProperties.Name="Delete selected" />
+        <Button Command="{Binding RefreshCommand}" Margin="0,0,8,4" Padding="9,6" ToolTip.Tip="Refresh" AutomationProperties.Name="Refresh">
+          <Path Width="16" Height="16" Stretch="Uniform" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Stroke="{DynamicResource KubismMutedBrush}" Data="M20,12 A8,8 0 1 1 16,5 M20,3 V9 H14" />
+        </Button>
+        <Button Command="{Binding DeleteSelectedCommand}" IsEnabled="{Binding HasSelection}" Classes="danger" Margin="0,0,8,4" Padding="9,6" ToolTip.Tip="{Binding DeleteLabel}" AutomationProperties.Name="Delete selected">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Path Width="16" Height="16" Stretch="Uniform" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Stroke="{DynamicResource KubismErrorBrush}" Data="M5,7 H19 M9,7 V4 H15 V7 M7,7 L8,20 H16 L17,7" />
+            <TextBlock Text="{Binding SelectedCount}" IsVisible="{Binding HasMultiSelection}" FontWeight="SemiBold" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
       </WrapPanel>
     </StackPanel>
     <Border Grid.Row="1" IsVisible="{Binding ErrorText, Converter={x:Static app:Converters.NotNull}}" Background="{DynamicResource KubismSidebarBrush}" Padding="12,6">

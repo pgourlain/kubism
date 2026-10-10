@@ -294,7 +294,7 @@ public class UiMultiSelectTests
         await UiHarness.WaitFor(() => ws.Details.IsOpen);
         UiHarness.Pump();
         var details = h.Find<Kubism.Desktop.Views.DetailsView>(d => d.IsVisible)!;
-        var refresh = h.Find<Avalonia.Controls.Button>(b => b.Content as string == "Refresh" && b.IsEffectivelyVisible)!;
+        var refresh = h.Find<Avalonia.Controls.Button>(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Refresh" && b.IsEffectivelyVisible)!;
         var refreshRight = Avalonia.VisualExtensions.TranslatePoint(refresh, new Avalonia.Point(refresh.Bounds.Width, 0), h.Window)!.Value.X;
         var detailsLeft = Avalonia.VisualExtensions.TranslatePoint(details, new Avalonia.Point(0, 0), h.Window)!.Value.X;
         Assert.True(refreshRight <= detailsLeft + 1, $"Refresh ends at {refreshRight}, details start at {detailsLeft}");

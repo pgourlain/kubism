@@ -57,11 +57,13 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
     /// <summary>Called by the view after it filled <see cref="SelectedRows"/>.</summary>
     public void NotifySelectionChanged()
     {
-        OnPropertyChanged(nameof(HasSelection)); OnPropertyChanged(nameof(DeleteLabel));
+        OnPropertyChanged(nameof(HasSelection)); OnPropertyChanged(nameof(DeleteLabel)); OnPropertyChanged(nameof(SelectedCount)); OnPropertyChanged(nameof(HasMultiSelection));
     }
 
     partial void OnSelectedRowChanged(ResourceRowViewModel? value) => NotifySelectionChanged();
 
+    public int SelectedCount => SelectedRows.Count;
+    public bool HasMultiSelection => SelectedRows.Count > 1;
     public bool HasSelection => SelectedRows.Count > 0 || SelectedRow is not null;
     public string DeleteLabel => SelectedRows.Count > 1 ? $"Delete {SelectedRows.Count} selected" : "Delete";
 
