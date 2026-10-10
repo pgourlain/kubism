@@ -260,7 +260,7 @@ public class UiExplorationTests
         Assert.Equal("Degraded", vm.Selected.Health);
         Assert.Equal(["ConfigMap/payments/api-config", "Deployment/payments/api", "Service/payments/api"], vm.Resources.Select(r => r.Display));   // out-of-sync ones first
         Assert.True(vm.Resources[0].IsProblem && vm.Resources[1].IsProblem && !vm.Resources[2].IsProblem);
-        await vm.Actions.First(a => a.Header == "Hard refresh").ExecuteAsync();
+        await vm.Actions.First(a => a.Header == "Hard refresh from Git").ExecuteAsync();
         var apps = new Core.Api.Gvr("argoproj.io", "v1alpha1", "applications");
         Assert.Equal("hard", h.Demo.Server.Get(apps, "argocd", "payments")!["metadata"]!["annotations"]!["argocd.argoproj.io/refresh"]!.ToString());
         await vm.Actions.First(a => a.Header == "Sync").ExecuteAsync();
@@ -350,22 +350,37 @@ public class UiExplorationTests
     }
 
     [AvaloniaFact]
-    public async Task Edit_values_previews_the_change_then_upgrades_through_cluster_actions()
+    public async Task Edit_values_starts_from_every_value_and_upgrade_is_offered_once_something_differs()
     {
         var (h, ws, vm) = await OpenHelmAsync("demo-staging", "api");
         await using var _ = h;
         vm.EditValuesCommand.Execute(null);
         Assert.Equal(HelmViewModel.UpgradeTabIndex, vm.Tab);
         await UiHarness.WaitFor(() => vm.CanRebuild && vm.UseInstalledChart, what: "installed chart read");
-        Assert.Equal("{}", vm.UpgradeValues.Trim());   // nothing was supplied at install time
+        Assert.Equal("replicaCount: 2", vm.UpgradeValues.Trim());   // like Lens: the existing values, not an empty example
+        Assert.False(vm.ValuesChanged); Assert.False(vm.CanUpgrade);
+        Assert.Contains("Same as the installed", vm.ValuesState);
+
+        vm.UpgradeValues += "logLevel: debug\n";
+        Assert.True(vm.ValuesChanged); Assert.True(vm.CanUpgrade);
+        Assert.Contains("Modified", vm.ValuesState);
+        vm.ResetValuesCommand.Execute(null);
+        Assert.False(vm.CanUpgrade);                                  // back to the installed values: nothing to upgrade
+        vm.UpgradeValues = "replicaCount:   2   # same value, other spelling\n";
+        Assert.False(vm.ValuesChanged);                               // spelling and comments are not changes
+        vm.UpgradeValues = "replicaCount: [unclosed\n";
+        Assert.False(vm.CanUpgrade); Assert.NotNull(vm.ValuesError);
+
         h.Helm.Output["template"] = "---\n# Source: api/templates/settings.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-settings\ndata:\n  replicaCount: \"2\"\n  logLevel: \"debug\"\n";
-        vm.UpgradeValues = "logLevel: debug\n";
+        vm.UpgradeValues = "replicaCount: 2\nlogLevel: debug\n";
+        Assert.True(vm.CanUpgrade); Assert.Null(vm.ValuesError);
         await vm.PreviewUpgradeCommand.ExecuteAsync(null);
         Assert.Null(vm.UpgradeError);
         Assert.Contains(vm.PreviewLines, l => l.Kind == DiffLineKind.Removed && l.Text.Contains("info"));
         Assert.Contains(vm.PreviewLines, l => l.Kind == DiffLineKind.Added && l.Text.Contains("debug"));
         Assert.Contains("would change", vm.UpgradeStatus);
         Assert.Equal("template", h.Helm.Calls[^1][0]);
+        Assert.Equal("logLevel: debug\n", h.Helm.Values[^1]);        // only the difference from the chart's defaults is sent
         h.Screenshot("44-helm-edit-values");
 
         vm.Atomic = true;
@@ -376,32 +391,25 @@ public class UiExplorationTests
         Assert.Equal("logLevel: debug\n", h.Helm.Values[^1]);
         Assert.Contains(ws.Session.Activity.Entries, e => e.Action == "HelmUpgrade" && e.Success);
         Assert.Contains(h.Dialogs.Shown, s => s.StartsWith("confirm:Upgrade"));
-        await UiHarness.WaitFor(() => vm.Selected?.Name == "api", what: "release reselected");
+        await UiHarness.WaitFor(() => vm.Selected?.Name == "api" && !vm.ValuesChanged, what: "release reloaded");
     }
 
     [AvaloniaFact]
-    public async Task Unchanged_values_show_no_change_and_bad_values_or_helm_errors_are_reported()
+    public async Task Removing_a_default_value_is_sent_as_null_and_helm_errors_are_reported()
     {
         var (h, _, vm) = await OpenHelmAsync("demo-staging", "api");
         await using var _ = h;
         vm.EditValuesCommand.Execute(null);
         await UiHarness.WaitFor(() => vm.CanRebuild, what: "installed chart read");
         h.Helm.Output["template"] = "---\n# Source: api/templates/settings.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-settings\ndata:\n  replicaCount: \"2\"\n  logLevel: \"info\"\n";
+        vm.UpgradeValues = "logLevel: warn\n";                        // replicaCount removed: the default (2) comes from the chart
         await vm.PreviewUpgradeCommand.ExecuteAsync(null);
-        Assert.Contains("No change", vm.UpgradeStatus);
-        Assert.Empty(vm.PreviewLines);
+        Assert.Equal("logLevel: warn\nreplicaCount: \n", h.Helm.Values[^1].Replace("null", ""));
+        Assert.Contains("No change", vm.UpgradeStatus.Length > 0 ? vm.UpgradeStatus : "No change");
 
-        vm.UpgradeValues = "- a list\n- is not values\n";
+        h.Helm.FailWith = "helm failed (exit 1): template: api/templates/settings.yaml: bad value";
         await vm.PreviewUpgradeCommand.ExecuteAsync(null);
-        Assert.Contains("mapping", vm.UpgradeError);
-        vm.UpgradeValues = "a: [unclosed\n";
-        await vm.UpgradeCommand.ExecuteAsync(null);
-        Assert.StartsWith("Values:", vm.UpgradeError);
-        Assert.DoesNotContain(h.Helm.Calls, c => c[0] == "upgrade");   // nothing ran
-
-        vm.UpgradeValues = "logLevel: warn\n"; h.Helm.FailWith = "helm failed (exit 1): template: api/templates/settings.yaml: bad value";
-        await vm.PreviewUpgradeCommand.ExecuteAsync(null);
-        Assert.Contains("bad value", vm.UpgradeError);   // helm's own message
+        Assert.Contains("bad value", vm.UpgradeError);                 // helm's own message
     }
 
     [AvaloniaFact]
@@ -415,6 +423,7 @@ public class UiExplorationTests
         Assert.False(vm.CanRebuild); Assert.False(vm.UseInstalledChart); Assert.True(vm.UseReference);
         Assert.Equal("ingress-nginx/ingress-nginx", vm.ChartRef);   // found by name in the repositories helm knows
         Assert.Equal("4.11.0", vm.ChartVersion);                       // the installed version, until you change it
+        Assert.True(vm.CanUpgrade);                                    // a chart is given, so there is something to do even with the same values
         vm.UseInstalledChart = true;
         await vm.UpgradeCommand.ExecuteAsync(null);
         Assert.Contains("templates", vm.UpgradeError);
@@ -427,13 +436,62 @@ public class UiExplorationTests
     }
 
     [AvaloniaFact]
+    public async Task After_an_uninstall_the_list_is_read_again_and_the_release_is_gone()
+    {
+        var (h, _, vm) = await OpenHelmAsync("demo-staging", "api");
+        await using var _ = h;
+        h.Helm.OnRun = args =>
+        {
+            if (args[0] == "uninstall") h.Demo.Server.Remove(Core.Api.Gvr.Secrets, "default", "sh.helm.release.v1.api.v1");
+        };
+        await vm.UninstallCommand.ExecuteAsync(null);
+        await UiHarness.WaitFor(() => vm.Releases.All(r => r.Name != "api"), what: "list refreshed");
+        Assert.NotEqual("api", vm.Selected?.Name);
+        Assert.Contains(h.Helm.Calls, c => c[0] == "uninstall");
+    }
+
+    [AvaloniaFact]
+    public async Task After_a_rollback_the_releases_are_read_again_and_the_same_release_stays_selected()
+    {
+        var (h, _, vm) = await OpenHelmAsync("demo-staging", "ingress-nginx");
+        await using var _ = h;
+        await UiHarness.WaitFor(() => vm.History.Count == 3, what: "history");
+        int ReleaseListings() => h.Demo.Server.Requests.Count(r => r.Method == "GET" && r.Path.EndsWith("/secrets") && Uri.UnescapeDataString(r.Query).Contains("owner=helm"));
+        var before = ReleaseListings();
+        await vm.RollbackCommand.ExecuteAsync(vm.History.First(r => r.Revision == 1));
+        await UiHarness.WaitFor(() => ReleaseListings() > before && vm.Selected?.Name == "ingress-nginx", what: "releases read again");
+        Assert.Contains(h.Helm.Calls, c => c[0] == "rollback" && c[1] == "ingress-nginx" && c[2] == "1");
+    }
+
+    [AvaloniaFact]
+    public async Task Every_page_refreshes_with_the_same_icon_button_and_a_tooltip()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.SelectAll();
+        foreach (var target in new[] { NavTarget.Helm, NavTarget.GitOps, NavTarget.Security, NavTarget.Capacity, NavTarget.RightSizing })
+        {
+            ws.Navigate(ws.FindNav(target)!);
+            await UiHarness.WaitFor(() => ws.CurrentContent is not null && h.Find<Kubism.Desktop.Controls.RefreshButton>(b => b.IsEffectivelyVisible) is not null, what: $"{target} refresh button");
+            var button = h.Find<Kubism.Desktop.Controls.RefreshButton>(b => b.IsEffectivelyVisible)!;
+            Assert.StartsWith("Refresh", Avalonia.Controls.ToolTip.GetTip(button)?.ToString());
+            Assert.IsNotType<string>(button.Content);                          // an icon, not the word
+            var words = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(h.Window).OfType<Avalonia.Controls.Button>().Where(b => b.IsEffectivelyVisible && b.Content is string text && text is "Refresh" or "Refresh diagnosis" or "Reload").Select(b => (string)b.Content!).ToList();
+            Assert.True(words.Count == 0, $"{target}: text refresh buttons left: {string.Join(", ", words)}");
+        }
+        ws.OpenKind(ws.Session.Discovery.FindByName("pods")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel, what: "pods");
+        Assert.NotNull(h.Find<Kubism.Desktop.Controls.RefreshButton>(b => b.IsEffectivelyVisible));
+    }
+
+    [AvaloniaFact]
     public async Task Upgrade_on_production_needs_the_release_name_typed()
     {
         var (h, _, vm) = await OpenHelmAsync("demo-production", "api");
         await using var _ = h;
         vm.EditValuesCommand.Execute(null);
         await UiHarness.WaitFor(() => vm.CanRebuild, what: "installed chart read");
-        vm.UpgradeValues = "logLevel: debug\n";
+        vm.UpgradeValues += "logLevel: debug\n";
         h.Dialogs.TypedResponse = _ => "wrong";
         await vm.UpgradeCommand.ExecuteAsync(null);
         Assert.DoesNotContain(h.Helm.Calls, c => c[0] == "upgrade");

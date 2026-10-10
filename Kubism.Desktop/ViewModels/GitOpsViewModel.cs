@@ -114,8 +114,8 @@ public sealed partial class GitOpsViewModel : ViewModelBase, IClosable
         {
             list.Add(new ActionItem("Sync", () => Run("Sync", false, _ => actions.ArgoSyncAsync(ns, name, false, _ws.Session.SessionToken))) { Verb = "patch" });
             list.Add(new ActionItem("Sync and prune…", () => Run("Sync and prune", true, c => actions.ArgoSyncAsync(ns, name, true, _ws.Session.SessionToken, c))) { Verb = "patch" });
-            list.Add(new ActionItem("Refresh", () => Run("Refresh", false, _ => actions.ArgoRefreshAsync(ns, name, false, _ws.Session.SessionToken))) { Verb = "patch" });
-            list.Add(new ActionItem("Hard refresh", () => Run("Hard refresh", false, _ => actions.ArgoRefreshAsync(ns, name, true, _ws.Session.SessionToken))) { Verb = "patch" });
+            list.Add(new ActionItem("Refresh from Git", () => Run("Refresh", false, _ => actions.ArgoRefreshAsync(ns, name, false, _ws.Session.SessionToken))) { Verb = "patch" });
+            list.Add(new ActionItem("Hard refresh from Git", () => Run("Hard refresh", false, _ => actions.ArgoRefreshAsync(ns, name, true, _ws.Session.SessionToken))) { Verb = "patch" });
         }
         else
         {

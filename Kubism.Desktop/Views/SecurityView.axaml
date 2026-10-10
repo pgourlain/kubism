@@ -3,6 +3,7 @@
              xmlns:vm="using:Kubism.Desktop.ViewModels"
              xmlns:sec="using:Kubism.Core.Security"
              xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
              x:Class="Kubism.Desktop.Views.SecurityView"
              x:DataType="vm:SecurityViewModel">
   <Grid RowDefinitions="Auto,*" Margin="16">
@@ -15,7 +16,7 @@
         <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
         <CheckBox Content="High only" IsChecked="{Binding HighOnly}" />
         <Button Content="Open object" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding Selected, Converter={x:Static app:Converters.NotNull}}" ToolTip.Tip="Open the selected finding's object" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+        <c:RefreshButton Command="{Binding RefreshCommand}" />
       </StackPanel>
     </Grid>
     <TabControl Grid.Row="1" SelectedIndex="{Binding Tab, Mode=TwoWay}">

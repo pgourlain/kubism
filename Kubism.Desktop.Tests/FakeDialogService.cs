@@ -63,10 +63,13 @@ public sealed class FakeHelmRunner : Kubism.Core.Helm.IHelmRunner
     /// <summary>What a call prints, by its first argument ("template" output is the rendered manifest).</summary>
     public Dictionary<string, string> Output { get; } = new() { ["search"] = "[]" };
     public string? FailWith { get; set; }
+    /// <summary>Lets a test make helm "do" something to the fake cluster (remove a release's secrets on uninstall…).</summary>
+    public Action<string[]>? OnRun { get; set; }
 
     public Task<string> RunAsync(IReadOnlyList<string> args, CancellationToken ct)
     {
         Calls.Add([.. args]);
+        OnRun?.Invoke([.. args]);
         var f = args.ToList().IndexOf("-f");
         if (f >= 0 && File.Exists(args[f + 1])) Values.Add(File.ReadAllText(args[f + 1]));
         if (FailWith is not null && args[0] is "template" or "upgrade") throw new InvalidOperationException(FailWith);

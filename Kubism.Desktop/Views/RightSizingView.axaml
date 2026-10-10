@@ -21,7 +21,7 @@
           <ComboBox.ItemTemplate><DataTemplate x:DataType="x:Int32"><TextBlock Text="{Binding StringFormat='{}{0} d'}" /></DataTemplate></ComboBox.ItemTemplate>
         </ComboBox>
         <Button Content="Test connection" Command="{Binding TestConnectionCommand}" />
-        <Button Content="Refresh" Command="{Binding LoadCommand}" />
+        <c:RefreshButton Command="{Binding LoadCommand}" />
       </StackPanel>
     </Grid>
 

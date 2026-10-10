@@ -185,3 +185,37 @@ public class HelmUpgradeTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => HelmUpgrade.PreviewAsync(helm, new HelmUpgradeRequest("d", "r", "", null, "greeting: [unclosed\n", false, false, Chart()), current, default));   // helm's own error is surfaced
     }
 }
+
+public class HelmValuesTests
+{
+    private static JsonObject J(string json) => (JsonObject)JsonNode.Parse(json)!;
+
+    [Fact]
+    public void Overrides_keep_only_what_differs_from_the_chart_defaults()
+    {
+        var defaults = J("""{"replicaCount":1,"image":{"repository":"nginx","tag":"1.25"},"ports":[80],"debug":false}""");
+        var edited = J("""{"replicaCount":3,"image":{"repository":"nginx","tag":"1.27"},"ports":[80],"debug":false,"extra":{"a":1}}""");
+        Assert.Equal("""{"replicaCount":3,"image":{"tag":"1.27"},"extra":{"a":1}}""", HelmValues.Overrides(defaults, edited).ToJsonString());
+        Assert.Empty(HelmValues.Overrides(defaults, J(defaults.ToJsonString())));   // nothing edited, nothing to send
+    }
+
+    [Fact]
+    public void Lists_are_replaced_whole_and_removed_keys_become_null_to_delete_them()
+    {
+        var defaults = J("""{"ports":[80,443],"annotations":{"a":"1","b":"2"},"keep":true}""");
+        var edited = J("""{"ports":[80],"annotations":{"a":"1"},"keep":true}""");
+        var o = HelmValues.Overrides(defaults, edited);
+        Assert.Equal("""{"ports":[80],"annotations":{"b":null}}""", o.ToJsonString());
+        // Applying them on top of the defaults gives back the edit (helm treats null as "delete this key").
+        Assert.Null(o["annotations"]!["b"]);
+    }
+
+    [Fact]
+    public void Same_ignores_key_order_and_treats_missing_as_empty()
+    {
+        Assert.True(HelmValues.Same(J("""{"a":1,"b":{"c":[1,2]}}"""), J("""{"b":{"c":[1,2]},"a":1}""")));
+        Assert.True(HelmValues.Same(null, J("{}")));
+        Assert.False(HelmValues.Same(J("""{"a":1}"""), J("""{"a":2}""")));
+        Assert.True(HelmValues.Same(Kubism.Core.YamlJson.Parse("a: 1\nb: [x]\n"), J("""{"b":["x"],"a":1}""")));   // what the editor holds against what helm stored
+    }
+}

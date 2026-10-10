@@ -3,6 +3,7 @@
              xmlns:vm="using:Kubism.Desktop.ViewModels"
              xmlns:d="using:Kubism.Core.Delivery"
              xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
              x:Class="Kubism.Desktop.Views.GitOpsView"
              x:DataType="vm:GitOpsViewModel">
   <Grid RowDefinitions="Auto,Auto,*" Margin="16">
@@ -15,7 +16,7 @@
         <TextBlock Text="Updating…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter by name or source" Width="200" />
         <CheckBox Content="Needs attention" IsChecked="{Binding ProblemsOnly}" />
-        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+        <c:RefreshButton Command="{Binding RefreshCommand}" />
       </StackPanel>
     </Grid>
     <TextBlock Grid.Row="1" Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />

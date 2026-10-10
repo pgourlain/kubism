@@ -18,7 +18,7 @@
           <TextBlock Text="Helm releases" Classes="h1" />
           <TextBlock Text="Read from release secrets; no helm binary needed to browse." Classes="muted" />
         </StackPanel>
-        <Button Grid.Column="1" Content="Refresh" Command="{Binding LoadCommand}" VerticalAlignment="Top" />
+        <c:RefreshButton Grid.Column="1" Command="{Binding LoadCommand}" ToolTip.Tip="Refresh the releases" />
       </Grid>
       <Border Grid.Row="1" IsVisible="{Binding HasFailing}" Background="{DynamicResource KubismErrorBrush}" Padding="8,4" Margin="0,0,0,6" CornerRadius="4">
         <TextBlock Text="{Binding FailingSummary}" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -51,7 +51,7 @@
                 <TextBlock Text="{Binding DiagHeadline}" TextWrapping="Wrap" FontWeight="SemiBold"
                            Foreground="{Binding DiagIsProblem, Converter={x:Static app:Converters.ProblemBrush}}" />
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding DiagLoading}" Height="4" />
-                <Button Content="Refresh diagnosis" Command="{Binding RefreshDiagnosisCommand}" HorizontalAlignment="Left" IsVisible="{Binding DiagIsProblem}" />
+                <c:RefreshButton Command="{Binding RefreshDiagnosisCommand}" HorizontalAlignment="Left" IsVisible="{Binding DiagIsProblem}" ToolTip.Tip="Refresh the diagnosis" AutomationProperties.Name="Refresh diagnosis" />
               </StackPanel>
             </Border>
             <Border Classes="card" IsVisible="{Binding DiagEvents.Count}">
@@ -131,40 +131,48 @@
         </Grid>
       </TabItem>
       <TabItem Header="Upgrade">
-        <ScrollViewer>
-          <StackPanel Spacing="8" Margin="0,8,8,8">
-            <TextBlock Text="Change the values of this release and upgrade it with helm. The values below are the ones supplied when it was installed (helm get values): what you remove returns to the chart's default." Classes="muted" TextWrapping="Wrap" />
-            <RadioButton GroupName="chart" IsChecked="{Binding UseInstalledChart}" IsEnabled="{Binding CanRebuild}"><TextBlock Text="The installed chart, rebuilt from the release (same chart and version: only the values change)" TextWrapping="Wrap" /></RadioButton>
-            <TextBlock Text="{Binding RebuildBlockedReason}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" IsVisible="{Binding !CanRebuild}" FontSize="12" Margin="24,0,0,0" />
-            <RadioButton GroupName="chart" IsChecked="{Binding UseReference}"><TextBlock Text="A chart from a repository, an OCI registry or a folder (to change the chart version too)" TextWrapping="Wrap" /></RadioButton>
-            <Grid ColumnDefinitions="*,120" ColumnSpacing="8" Margin="24,0,0,0" IsEnabled="{Binding UseReference}">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto" Margin="0,8,0,0" RowSpacing="8">
+          <TextBlock Text="Edit the values and upgrade the release with helm. Every value is shown (the chart's defaults with your overrides); only what you change is sent." Classes="muted" TextWrapping="Wrap" />
+          <Expander Grid.Row="1" Header="Use another chart or version (advanced)" IsExpanded="{Binding UseReference, Mode=TwoWay}" IsVisible="{Binding CanRebuild}">
+            <Grid ColumnDefinitions="*,120" ColumnSpacing="8" Margin="0,4,0,0">
               <TextBox Text="{Binding ChartRef}" PlaceholderText="repo/chart · oci://registry/chart · ./folder" AutomationProperties.Name="Chart reference" />
               <TextBox Grid.Column="1" Text="{Binding ChartVersion}" PlaceholderText="version" AutomationProperties.Name="Chart version" />
             </Grid>
-            <TextBlock Text="VALUES" Classes="sectionTitle" />
-            <c:YamlEditor Height="170" Text="{Binding UpgradeValues, Mode=TwoWay}" IsReadOnly="False" />
-            <StackPanel Orientation="Horizontal" Spacing="14">
-              <CheckBox Content="Wait until ready" IsChecked="{Binding Wait}" />
-              <CheckBox Content="Atomic (roll back if it fails)" IsChecked="{Binding Atomic}" />
+          </Expander>
+          <Border Grid.Row="2" Classes="card" IsVisible="{Binding !CanRebuild}" Padding="8">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding RebuildBlockedReason}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" FontSize="12" />
+              <Grid ColumnDefinitions="*,120" ColumnSpacing="8">
+                <TextBox Text="{Binding ChartRef}" PlaceholderText="repo/chart · oci://registry/chart · ./folder" AutomationProperties.Name="Chart reference (required)" />
+                <TextBox Grid.Column="1" Text="{Binding ChartVersion}" PlaceholderText="version" AutomationProperties.Name="Chart version (required)" />
+              </Grid>
             </StackPanel>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="Preview changes" Command="{Binding PreviewUpgradeCommand}" IsEnabled="{Binding !UpgradeBusy}" />
-              <Button Classes="primary" Content="Upgrade" Command="{Binding UpgradeCommand}" IsEnabled="{Binding !UpgradeBusy}" />
-              <Button Content="Reset values" Command="{Binding ResetValuesCommand}" />
-            </StackPanel>
+          </Border>
+          <c:YamlEditor Grid.Row="3" MinHeight="140" Text="{Binding UpgradeValues, Mode=TwoWay}" IsReadOnly="False" />
+          <TextBlock Grid.Row="4" Text="{Binding ValuesState}" FontSize="12" Classes="muted" TextWrapping="Wrap" />
+          <WrapPanel Grid.Row="5">
+            <Button Classes="primary" Margin="0,0,8,4" Content="Upgrade" Command="{Binding UpgradeCommand}" IsEnabled="{Binding CanUpgrade}" ToolTip.Tip="Upgrade the release with these values" />
+            <Button Margin="0,0,8,4" Content="Preview changes" Command="{Binding PreviewUpgradeCommand}" IsEnabled="{Binding CanUpgrade}" ToolTip.Tip="Render the manifests with these values and show what would change" />
+            <Button Margin="0,0,8,4" Content="Reset values" Command="{Binding ResetValuesCommand}" IsEnabled="{Binding ValuesChanged}" ToolTip.Tip="Back to the installed values" />
+            <CheckBox Content="Wait until ready" IsChecked="{Binding Wait}" Margin="6,0,8,4" />
+            <CheckBox Content="Atomic" IsChecked="{Binding Atomic}" ToolTip.Tip="Roll back automatically if the upgrade fails" />
+          </WrapPanel>
+          <StackPanel Grid.Row="6" Spacing="4">
             <TextBlock Text="{Binding UpgradeError}" Foreground="{DynamicResource KubismErrorBrush}" TextWrapping="Wrap" IsVisible="{Binding UpgradeError, Converter={x:Static app:Converters.NotNull}}" />
             <TextBlock Text="{Binding UpgradeStatus}" TextWrapping="Wrap" />
-            <Border Classes="card" Padding="0" IsVisible="{Binding PreviewLines.Count}">
-              <ItemsControl ItemsSource="{Binding PreviewLines}" MaxHeight="320">
+          </StackPanel>
+          <Border Grid.Row="7" Classes="card" Padding="0" IsVisible="{Binding PreviewLines.Count}">
+            <ScrollViewer MaxHeight="200">
+              <ItemsControl ItemsSource="{Binding PreviewLines}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:DiffLine">
                     <TextBlock Text="{Binding Text}" FontFamily="Menlo,Consolas,monospace" FontSize="12" Margin="8,0" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.gap="{Binding IsGap}" />
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-            </Border>
-          </StackPanel>
-        </ScrollViewer>
+            </ScrollViewer>
+          </Border>
+        </Grid>
       </TabItem>
       <TabItem Header="Graph">
         <Grid RowDefinitions="Auto,*">

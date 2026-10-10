@@ -116,9 +116,34 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     [ObservableProperty] private string _upgradeStatus = "";
     [ObservableProperty] private string? _upgradeError;
     [ObservableProperty] private string? _rebuildBlockedReason;
+    private System.Text.Json.Nodes.JsonObject _baseline = new();
+    [ObservableProperty] private bool _valuesChanged;
+    [ObservableProperty] private string? _valuesError;
+    /// <summary>Upgrade is offered once something would change: the values differ from the installed ones, or another chart is given.</summary>
+    public bool CanUpgrade => ValuesError is null && !UpgradeBusy && (ValuesChanged || UseReference && ChartRef.Trim().Length > 0);
+    public string ValuesState => ValuesError ?? (ValuesChanged ? "Modified: Upgrade and Preview apply the difference from the installed values." : "Same as the installed values. Change what you need, then Upgrade.");
+    partial void OnUpgradeValuesChanged(string value) => EvaluateValues();
+    partial void OnUpgradeBusyChanged(bool value) => OnPropertyChanged(nameof(CanUpgrade));
+    partial void OnChartRefChanged(string value) => OnPropertyChanged(nameof(CanUpgrade));
+    partial void OnValuesChangedChanged(bool value) { OnPropertyChanged(nameof(CanUpgrade)); OnPropertyChanged(nameof(ValuesState)); }
+    partial void OnValuesErrorChanged(string? value) { OnPropertyChanged(nameof(CanUpgrade)); OnPropertyChanged(nameof(ValuesState)); }
+
+    private void EvaluateValues()
+    {
+        try
+        {
+            var parsed = YamlJson.Parse(UpgradeValues);
+            if (parsed is not (null or System.Text.Json.Nodes.JsonObject)) throw new FormatException("The values must be a YAML mapping (key: value).");
+            ValuesError = null;
+            ValuesChanged = !HelmValues.Same(parsed, _baseline);
+        }
+        catch (Exception ex) { ValuesError = ex.Message; ValuesChanged = false; }
+    }
+
     public bool CanRebuild => RebuildBlockedReason is null;
-    public bool UseReference { get => !UseInstalledChart; set { if (value) UseInstalledChart = false; } }
-    partial void OnUseInstalledChartChanged(bool value) => OnPropertyChanged(nameof(UseReference));
+    /// <summary>Bound to the "another chart" expander: collapsed means the installed chart, which is the normal case.</summary>
+    public bool UseReference { get => !UseInstalledChart; set => UseInstalledChart = !value; }
+    partial void OnUseInstalledChartChanged(bool value) { OnPropertyChanged(nameof(UseReference)); OnPropertyChanged(nameof(CanUpgrade)); }
     partial void OnRebuildBlockedReasonChanged(string? value) => OnPropertyChanged(nameof(CanRebuild));
     [ObservableProperty] private RelationGraph? _graph;
     [ObservableProperty] private string _graphStatus = "";
@@ -160,6 +185,9 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         else _ = LoadAsync();
     }
 
+    /// <summary>After a change helm made (upgrade, rollback): read the list again, even if the release is already in it, and select it.</summary>
+    private void ReloadAndSelect(string ns, string name) { _pendingSelect = (ns, name); _ = LoadAsync(); }
+
     partial void OnTabChanged(int value)
     {
         if (value == GraphTabIndex) _ = LoadGraphAsync();
@@ -172,13 +200,16 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     private void EditValues() { Tab = UpgradeTabIndex; if (Tab == UpgradeTabIndex) _ = PrepareUpgradeAsync(); }
 
     [RelayCommand]
-    private void ResetValues() { if (Selected is { } r) UpgradeValues = YamlJson.ToYaml(r.UserValues ?? new System.Text.Json.Nodes.JsonObject()); PreviewLines.Clear(); UpgradeError = null; }
+    private void ResetValues() { UpgradeValues = YamlJson.ToYaml(_baseline); PreviewLines.Clear(); UpgradeError = null; UpgradeStatus = ""; }
 
     private void ResetUpgrade(HelmRelease? r)
     {
         _upgradeCts?.Cancel(); _releaseChart = null;
         PreviewLines.Clear(); UpgradeError = null; UpgradeStatus = ""; RebuildBlockedReason = null; UseInstalledChart = true; ChartRef = "";
-        UpgradeValues = r is null ? "" : YamlJson.ToYaml(r.UserValues ?? new System.Text.Json.Nodes.JsonObject());
+        // Like Lens: the editor holds every value (chart defaults with the user's overrides) and the user changes what they want.
+        _baseline = r?.ComputedValues ?? new System.Text.Json.Nodes.JsonObject();
+        UpgradeValues = YamlJson.ToYaml(_baseline);
+        EvaluateValues();
         ChartVersion = r?.ChartVersion ?? "";
     }
 
@@ -196,6 +227,7 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
             RebuildBlockedReason = HelmUpgrade.CannotRebuildReason(_releaseChart);
             UseInstalledChart = RebuildBlockedReason is null;
             if (RebuildBlockedReason is not null && ChartRef.Length == 0) ChartRef = await SuggestChartAsync(r, ct) ?? "";
+            OnPropertyChanged(nameof(CanUpgrade));
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { UpgradeError = ex.Message; }
@@ -217,15 +249,17 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     {
         UpgradeError = null;
         if (Selected is not { } r) return null;
+        System.Text.Json.Nodes.JsonObject edited;
         try
         {
             var parsed = YamlJson.Parse(UpgradeValues);
-            if (parsed is not (null or System.Text.Json.Nodes.JsonObject)) throw new FormatException("The values must be a YAML mapping (key: value).");
+            edited = parsed as System.Text.Json.Nodes.JsonObject ?? (parsed is null ? new System.Text.Json.Nodes.JsonObject() : throw new FormatException("The values must be a YAML mapping (key: value)."));
         }
         catch (Exception ex) { UpgradeError = "Values: " + ex.Message; return null; }
-        if (!UseInstalledChart && ChartRef.Trim().Length == 0) { UpgradeError = "Give a chart reference (repo/name, oci://…, or a folder), or reuse the installed chart."; return null; }
+        if (!UseInstalledChart && ChartRef.Trim().Length == 0) { UpgradeError = "Give a chart reference (repo/name, oci://…, or a folder), or close \"another chart\" to use the installed one."; return null; }
         if (UseInstalledChart && RebuildBlockedReason is { } why) { UpgradeError = why; return null; }
-        return new HelmUpgradeRequest(r.Namespace, r.Name, UseInstalledChart ? "" : ChartRef.Trim(), UseInstalledChart ? null : ChartVersion.Trim(), UpgradeValues, Wait, Atomic, _releaseChart);
+        return new HelmUpgradeRequest(r.Namespace, r.Name, UseInstalledChart ? "" : ChartRef.Trim(), UseInstalledChart ? null : ChartVersion.Trim(),
+            YamlJson.ToYaml(HelmValues.Overrides(_baseline, edited)), Wait, Atomic, _releaseChart);
     }
 
     /// <summary>Renders the chart with the new values (no cluster needed) and shows what would change against the installed manifest.</summary>
@@ -265,7 +299,7 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
             var ok = await _ws.RunActionAsync("Upgrade", $"release {r.Name}", true, r.Name, c => _ws.Session.Actions.UpgradeHelmReleaseAsync(req, _ws.Session.SessionToken, c));
             if (!ok) { UpgradeStatus = ""; return; }
             UpgradeStatus = "Upgraded."; PreviewLines.Clear();
-            SelectWhenLoaded(r.Namespace, r.Name);
+            ReloadAndSelect(r.Namespace, r.Name);
         }
         finally { UpgradeBusy = false; }
     }
@@ -345,19 +379,24 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     }
 
     [RelayCommand]
-    private Task Rollback(HelmRelease? revision)
+    private async Task Rollback(HelmRelease? revision)
     {
-        if (revision is null || Selected is null) return Task.CompletedTask;
-        return _ws.RunActionAsync("Rollback", $"{Selected.Name} to revision {revision.Revision}", true, Selected.Name,
-            c => _ws.Session.Actions.RollbackHelmReleaseAsync(Selected.Namespace, Selected.Name, revision.Revision, _ws.Session.SessionToken, c));
+        if (revision is null || Selected is not { } r) return;
+        var ok = await _ws.RunActionAsync("Rollback", $"{r.Name} to revision {revision.Revision}", true, r.Name,
+            c => _ws.Session.Actions.RollbackHelmReleaseAsync(r.Namespace, r.Name, revision.Revision, _ws.Session.SessionToken, c));
+        // The list shows the revision and status helm just wrote: read it again and stay on the same release.
+        if (ok) ReloadAndSelect(r.Namespace, r.Name);
     }
 
     [RelayCommand]
-    private Task Uninstall()
+    private async Task Uninstall()
     {
-        if (Selected is null) return Task.CompletedTask;
-        var r = Selected;
-        return _ws.RunActionAsync("Uninstall", r.Name, true, r.Name, c => _ws.Session.Actions.UninstallHelmReleaseAsync(r.Namespace, r.Name, _ws.Session.SessionToken, c));
+        if (Selected is not { } r) return;
+        var ok = await _ws.RunActionAsync("Uninstall", r.Name, true, r.Name, c => _ws.Session.Actions.UninstallHelmReleaseAsync(r.Namespace, r.Name, _ws.Session.SessionToken, c));
+        if (!ok) return;
+        // The release is gone: clear the selection (and its tabs) and reload the list.
+        Selected = null;
+        await LoadAsync();
     }
 
     public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }
