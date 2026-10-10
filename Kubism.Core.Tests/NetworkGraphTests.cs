@@ -111,6 +111,29 @@ public class NetworkGraphTests
     }
 
     [Fact]
+    public void Edges_carry_the_ports_at_the_entry_of_the_next_box_and_ingresses_carry_their_filters()
+    {
+        // into an Ingress: the ports of the controller's Service; into a Service: the Service ports; into a workload: the container ports
+        Assert.Equal(["80", "443"], E("x:svc/ingress-nginx/ingress-nginx-controller", "i:shop/shop").Ports);
+        Assert.Equal(["80"], E("i:shop/shop", "s:shop/web").Ports);
+        Assert.Equal(["80"], E("i:shop/shop", "s:shop/api").Ports);
+        Assert.Equal(["8080"], E("s:shop/web", "w:shop/Deployment/web").Ports);                // http → 8080
+        Assert.Equal(["3000"], E("s:shop/api", "w:shop/Deployment/api").Ports);
+        Assert.Equal(["?"], E("s:shop/broken-port", "w:shop/Deployment/web").Ports);          // unresolved named port
+        Assert.Equal(["9999"], E("i:shop/portbad", "s:shop/web").Ports);                       // the port the Ingress asked for, which the Service lacks
+        Assert.Equal(["9000"], E("x:svc/shop/worker-lb", "s:shop/worker-lb").Ports);
+        Assert.Equal(["9100"], E("x:host/tools/DaemonSet/node-agent", "w:tools/DaemonSet/node-agent").Ports);
+        Assert.Empty(E("x:ext/agic", "i:shop/agw").Ports);                                       // a controller outside the cluster: ports unknown, none shown
+        // the filter ("/") is inside the Ingress, not on the arrow
+        Assert.Equal(["shop.example.com: /, /api"], N("i:shop/shop").FilterLines);
+        Assert.Equal(["docs.example.com: /"], N("i:shop/docs").FilterLines);
+        Assert.Equal(["grafana.example.com: /", "default backend"], N("i:tools/grafana").FilterLines);
+        Assert.Empty(N("s:shop/web").FilterLines);
+        // the Ingress's two rules for the same Service merge their entry ports once
+        Assert.Equal(["3000"], E("i:tools/grafana", "s:tools/grafana").Ports);
+    }
+
+    [Fact]
     public void Routes_answer_which_url_goes_through_which_ingress_to_which_pods()
     {
         var routes = Graph.View().Routes;

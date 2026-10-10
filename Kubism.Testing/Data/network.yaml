@@ -76,7 +76,7 @@
 ---
 {"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "grafana-abc12", "namespace": "tools", "labels": {"kubernetes.io/service-name": "grafana"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "grafana-5b-a"}}], "ports": []}
 ---
-{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "grafana", "namespace": "tools", "annotations": {}}, "spec": {"rules": [{"host": "grafana.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}], "ingressClassName": "nginx"}}
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "grafana", "namespace": "tools", "annotations": {}}, "spec": {"rules": [{"host": "grafana.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}], "ingressClassName": "nginx", "defaultBackend": {"service": {"name": "grafana", "port": {"number": 3000}}}}}
 ---
 {"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "intranet", "namespace": "tools", "annotations": {}}, "spec": {"rules": [{"host": "wiki.internal", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}], "ingressClassName": "nginx-private"}}
 ---

@@ -80,7 +80,7 @@ public sealed partial class NetworkGraph
     {
         private readonly Dictionary<string, ServiceInfo> _svc = [];
         private readonly Dictionary<string, NetworkNode> _nodes = [];
-        private readonly Dictionary<(string, string), (List<string> labels, bool problem)> _edges = [];
+        private readonly Dictionary<(string, string), (List<string> labels, List<string> ports, bool problem)> _edges = [];
         private readonly Dictionary<string, List<NetworkProblem>> _problems = [];
         private readonly Dictionary<string, List<string>> _lines = [];
         private readonly HashSet<string> _workloadsBuilt = [];
@@ -94,7 +94,7 @@ public sealed partial class NetworkGraph
             foreach (var s in _svc.Values.Where(s => !s.IsController).OrderBy(s => s.Ns, StringComparer.Ordinal).ThenBy(s => s.Obj.Name, StringComparer.Ordinal)) AddService(s);
             Propagate();
             foreach (var n in _nodes.Values) g._nodes.Add(n with { Problems = Problems(n.Id), Lines = Lines(n.Id) });
-            foreach (var ((from, to), (labels, problem)) in _edges) g._edges.Add(new NetworkEdge(from, to, Join(labels), problem));
+            foreach (var ((from, to), (labels, ports, problem)) in _edges) g._edges.Add(new NetworkEdge(from, to, Join(labels), problem) { Ports = ports });
             g._routes.AddRange(_routeList);
         }
 
@@ -105,11 +105,12 @@ public sealed partial class NetworkGraph
 
         private static string Join(List<string> labels) => labels.Count <= 3 ? string.Join("; ", labels) : string.Join("; ", labels.Take(3)) + $"; +{labels.Count - 3} more";
 
-        private void Edge(string from, string to, string label, bool problem = false)
+        private void Edge(string from, string to, string label, bool problem = false, IEnumerable<string>? ports = null)
         {
-            if (!_edges.TryGetValue((from, to), out var e)) _edges[(from, to)] = e = ([], false);
+            if (!_edges.TryGetValue((from, to), out var e)) _edges[(from, to)] = e = ([], [], false);
             if (label.Length > 0 && !e.labels.Contains(label)) e.labels.Add(label);
-            _edges[(from, to)] = (e.labels, e.problem || problem);
+            foreach (var p in ports ?? []) if (!e.ports.Contains(p)) e.ports.Add(p);
+            _edges[(from, to)] = (e.labels, e.ports, e.problem || problem);
         }
 
         private void Node(NetworkNode n) { if (!_nodes.ContainsKey(n.Id)) _nodes[n.Id] = n; }
@@ -220,7 +221,11 @@ public sealed partial class NetworkGraph
             }
             if (ing.At("spec", "defaultBackend", "service") is JsonObject db) Backend(ing, id, ns, "*", "", "", className, singleHost, false, db, ruleLines, isDefault: true);
 
-            Node(new NetworkNode(id, NetworkNodeKind.Ingress, ing.Name, ns, hosts.Count == 0 ? "no host" : string.Join(", ", hosts.Take(3)) + (hosts.Count > 3 ? $" +{hosts.Count - 3}" : ""), ExposureLevel.InCluster, [], [], ing));
+            // What the Ingress matches on the way in, one line per host: drawn inside its box.
+            var filters = ruleObjs.GroupBy(r => KubeObject.Str(r, "host") ?? "*").Select(gr =>
+                $"{gr.Key}: {string.Join(", ", gr.SelectMany(r => (r["http"]?["paths"] as JsonArray ?? []).OfType<JsonObject>().Select(pth => KubeObject.Str(pth, "path") ?? "/")).Distinct().DefaultIfEmpty("/"))}").ToList();
+            if (ing.At("spec", "defaultBackend", "service") is not null) filters.Add("default backend");
+            Node(new NetworkNode(id, NetworkNodeKind.Ingress, ing.Name, ns, hosts.Count == 0 ? "no host" : string.Join(", ", hosts.Take(3)) + (hosts.Count > 3 ? $" +{hosts.Count - 3}" : ""), ExposureLevel.InCluster, [], [], ing, Filters: filters));
             Line(id, $"class: {className ?? "(none)"}");
             foreach (var l in ruleLines) Line(id, l);
 
@@ -278,16 +283,16 @@ public sealed partial class NetworkGraph
                 var lines = new List<string> { $"Service {s.Ns}/{s.Obj.Name} ({s.Type})", $"ports: {PortsText(s)}", $"controller pods: {s.Pods.Count}" };
                 if (s.Address.Length > 0) lines.Add($"address: {s.Address}");
                 if (note is not null) lines.Add(note);
-                AddExposure($"x:svc/{s.Ns}/{s.Obj.Name}", $"{s.Ns}/{s.Obj.Name}", s.Ns, detail + (note is null ? "" : " · private network"), level, id, lines, "", s.Obj);
+                AddExposure($"x:svc/{s.Ns}/{s.Obj.Name}", $"{s.Ns}/{s.Obj.Name}", s.Ns, detail + (note is null ? "" : " · private network"), level, id, lines, "", s.Obj, s.Ports.Select(p => p.Number.ToString()));
                 if (!s.Exposed) Line(id, "The ingress controller's Service is ClusterIP: this Ingress is NOT reachable from outside the cluster.");
             }
         }
 
-        private void AddExposure(string xid, string label, string? ns, string detail, ExposureLevel level, string toId, List<string> lines, string edgeLabel, KubeObject? source = null)
+        private void AddExposure(string xid, string label, string? ns, string detail, ExposureLevel level, string toId, List<string> lines, string edgeLabel, KubeObject? source = null, IEnumerable<string>? ports = null)
         {
             Node(new NetworkNode(xid, NetworkNodeKind.Exposure, label, ns, detail, level, [], [], source));
             foreach (var l in lines) Line(xid, l);
-            Edge(xid, toId, edgeLabel);
+            Edge(xid, toId, edgeLabel, false, ports);
         }
 
         private static string? InternalLbNote(ServiceInfo s)
@@ -318,7 +323,7 @@ public sealed partial class NetworkGraph
                 Node(new NetworkNode(sid, NetworkNodeKind.Service, name, ns, "does not exist", ExposureLevel.InCluster, [], [], null, Missing: true));
                 Problem(sid, "missing-service", $"Ingress {ing.Name} routes to Service {name}, which does not exist.", FindingSeverity.High);
                 Problem(ingId, "missing-service", $"Backend Service {name} does not exist.", FindingSeverity.High);
-                Edge(ingId, sid, $"{edgeWhere} → :{portText}", true);
+                Edge(ingId, sid, $"{edgeWhere} → :{portText}", true, [portText]);
                 Route(portText, true);
                 lines.Add($"{where} → {name}:{portText}  (Service MISSING)");
                 return;
@@ -328,12 +333,12 @@ public sealed partial class NetworkGraph
             {
                 // The fault is the Ingress's: the Service is fine and may serve other Ingresses correctly, so only the Ingress and the hop are flagged.
                 Problem(ingId, "missing-service-port", $"Service {name} has no port {portText} (it has {PortsText(svc)}).", FindingSeverity.High);
-                Edge(ingId, sid, $"{edgeWhere} → :{portText}", true);
+                Edge(ingId, sid, $"{edgeWhere} → :{portText}", true, [portText]);
                 Route(portText, false);
                 lines.Add($"{where} → {name}:{portText}  (port NOT on the Service)");
                 return;
             }
-            Edge(ingId, sid, $"{edgeWhere} → :{port.Number}");
+            Edge(ingId, sid, $"{edgeWhere} → :{port.Number}", false, [port.Number.ToString()]);
             Route(port.Number.ToString(), false);
             lines.Add($"{where} → {name}:{port.Number}");
         }
@@ -354,7 +359,7 @@ public sealed partial class NetworkGraph
                 var lines = new List<string> { $"{s.Type}{(s.Address.Length > 0 ? " " + s.Address : "")}", $"ports: {PortsText(s)}" };
                 if (s.ExternalIps.Length > 0) lines.Add($"externalIPs: {string.Join(", ", s.ExternalIps)}");
                 if (note is not null) lines.Add(note);
-                AddExposure(xid, $"{s.Type} {s.Ns}/{s.Obj.Name}", s.Ns, (s.Address.Length > 0 ? s.Address : s.Type) + (note is null ? "" : " · private network"), ExposureLevel.Outside, s.Id, lines, PortsText(s), s.Obj);
+                AddExposure(xid, $"{s.Type} {s.Ns}/{s.Obj.Name}", s.Ns, (s.Address.Length > 0 ? s.Address : s.Type) + (note is null ? "" : " · private network"), ExposureLevel.Outside, s.Id, lines, PortsText(s), s.Obj, s.Ports.Select(p => p.Number.ToString()));
                 Problem(s.Id, "exposed-directly", $"Exposed outside the cluster directly ({s.Type}), not through an Ingress.", FindingSeverity.Low);
             }
             if (s.Type == "ExternalName") return;
@@ -368,17 +373,18 @@ public sealed partial class NetworkGraph
             foreach (var group in s.Pods.GroupBy(p => WorkloadOf(p)))
             {
                 var wid = AddWorkload(group.Key, group.ToList());
-                var labels = new List<string>(); var problem = false;
+                var labels = new List<string>(); var problem = false; var entry = new List<string>();
                 foreach (var port in s.Ports)
                 {
-                    var (text, bad) = ResolvePort(port, group.ToList(), s, wid);
-                    labels.Add(text); problem |= bad;
+                    var (text, bad, container) = ResolvePort(port, group.ToList(), s, wid);
+                    labels.Add(text); problem |= bad; entry.Add(container);
                 }
-                Edge(s.Id, wid, string.Join(", ", labels), problem);
+                Edge(s.Id, wid, string.Join(", ", labels), problem, entry);
             }
         }
 
-        private (string Text, bool Problem) ResolvePort(Port port, List<KubeObject> pods, ServiceInfo s, string wid)
+        /// <returns>The hop's text, whether it is broken, and the container port it ends on ("?" when a named port matches nothing).</returns>
+        private (string Text, bool Problem, string Container) ResolvePort(Port port, List<KubeObject> pods, ServiceInfo s, string wid)
         {
             var declared = pods.SelectMany(ContainerPorts).ToList();
             var proto = port.Protocol == "TCP" ? "" : "/" + port.Protocol;
@@ -386,16 +392,16 @@ public sealed partial class NetworkGraph
             {
                 if (pods.All(p => ContainerPorts(p).Any()) && declared.All(c => c.Number != number))
                     Problem(wid, "port-not-declared", $"No container declares port {number} (targeted by Service {s.Obj.Name}); it may still listen on it.", FindingSeverity.Low);
-                return ($"{port.Number}{proto} → {number}", false);
+                return ($"{port.Number}{proto} → {number}", false, number.ToString());
             }
             var named = declared.FirstOrDefault(c => c.Name == port.TargetRaw);
             if (named is null)
             {
                 // The fault is the Service's (and the hop's); the workload may serve other Services fine, so it is not flagged.
                 Problem(s.Id, "target-port-unresolved", $"targetPort '{port.TargetRaw}' matches no container port of the selected pods.", FindingSeverity.High);
-                return ($"{port.Number}{proto} → {port.TargetRaw} (?)", true);
+                return ($"{port.Number}{proto} → {port.TargetRaw} (?)", true, "?");
             }
-            return ($"{port.Number}{proto} → {port.TargetRaw} ({named.Number})", false);
+            return ($"{port.Number}{proto} → {port.TargetRaw} ({named.Number})", false, named.Number.ToString());
         }
 
         private static IEnumerable<ContainerPort> ContainerPorts(KubeObject pod) =>
@@ -437,7 +443,7 @@ public sealed partial class NetworkGraph
             if (hostNet || hostPorts.Count > 0)
             {
                 var text = hostNet ? "hostNetwork: the pods use the node's network" : $"hostPort {string.Join(", ", hostPorts.Select(p => p.HostPort))}";
-                AddExposure($"x:host/{w.Namespace}/{w.Kind}/{w.Name}", $"Node port of {w.Name}", w.Namespace, text, ExposureLevel.Outside, id, [text, "Reachable on the node's address, outside the cluster network."], "");
+                AddExposure($"x:host/{w.Namespace}/{w.Kind}/{w.Name}", $"Node port of {w.Name}", w.Namespace, text, ExposureLevel.Outside, id, [text, "Reachable on the node's address, outside the cluster network."], "", null, hostPorts.Select(p => p.HostPort!.Value.ToString()));
                 Problem(id, "host-network", text + ": reachable on the node's address.", FindingSeverity.Medium);
             }
             return id;

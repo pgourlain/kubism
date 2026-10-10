@@ -307,7 +307,8 @@ public class McpNetworkTests
         Assert.Contains("DNS, firewalls", r["limits"]!.ToString());
         Assert.Equal("outside the cluster", Node(r, "i:shop/shop")["exposure"]!.ToString());
         Assert.Equal("outside the cluster", Node(r, "x:svc/ingress-nginx/ingress-nginx-controller")["exposure"]!.ToString());
-        Assert.Contains(r["edges"]!.AsArray(), e => e!["from"]!.ToString() == "s:shop/web" && e["ports"]!.ToString() == "80 → http (8080)");
+        Assert.Contains(r["edges"]!.AsArray(), e => e!["from"]!.ToString() == "s:shop/web" && e["hop"]!.ToString() == "80 → http (8080)" && e["entryPorts"]!.AsArray().Select(x => x!.ToString()).SequenceEqual(new[] { "8080" }));
+        Assert.Contains("shop.example.com: /, /api", Node(r, "i:shop/shop")["matches"]!.AsArray().Select(x => x!.ToString()));
         Assert.Contains(Node(r, "i:shop/admin")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "tls-secret-missing");     // looked up by GET
         Assert.Contains(Node(r, "s:shop/docs-svc")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "missing-service");
         Assert.True(Node(r, "s:shop/docs-svc")["missing"]!.GetValue<bool>());

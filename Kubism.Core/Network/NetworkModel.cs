@@ -15,15 +15,22 @@ public sealed record NetworkProblem(string Code, string Description, FindingSeve
 
 /// <summary>One node. <see cref="Namespace"/> is null for something outside the cluster. <see cref="Lines"/> are the details shown when the node is selected.</summary>
 public sealed record NetworkNode(string Id, NetworkNodeKind Kind, string Label, string? Namespace, string Detail, ExposureLevel Exposure,
-    IReadOnlyList<NetworkProblem> Problems, IReadOnlyList<string> Lines, KubeObject? Source = null, bool Missing = false, string? Note = null)
+    IReadOnlyList<NetworkProblem> Problems, IReadOnlyList<string> Lines, KubeObject? Source = null, bool Missing = false, string? Note = null, IReadOnlyList<string>? Filters = null)
 {
+    /// <summary>For an Ingress: what it matches on the way in, one line per host ("shop.example.com: /, /api", "default backend"). Drawn inside the box.</summary>
+    public IReadOnlyList<string> FilterLines { get; init; } = Filters ?? [];
     public bool HasProblem => Problems.Count > 0;
     public FindingSeverity? Worst => Problems.Count == 0 ? null : Problems.Max(p => p.Severity);
     public string KindText => Kind switch { NetworkNodeKind.Exposure => "Exposure", NetworkNodeKind.Ingress => "Ingress", NetworkNodeKind.Service => "Service", _ => "Workload" };
 }
 
+/// <param name="Label">The full text of the hop (paths, port mapping), for tooltips and the MCP tool.</param>
 /// <param name="Problem">The ports on this hop do not line up (missing service or port, unresolved target port).</param>
-public sealed record NetworkEdge(string From, string To, string Label, bool Problem);
+public sealed record NetworkEdge(string From, string To, string Label, bool Problem)
+{
+    /// <summary>The ports at the entry of <see cref="To"/>: the controller's ports into an Ingress, the Service ports into a Service, the container ports into a workload ("?" when unresolved).</summary>
+    public IReadOnlyList<string> Ports { get; init; } = [];
+}
 
 /// <summary>What is known about a TLS secret named by an Ingress. Only existence and the public certificate's expiry are read; nothing of the secret is kept.</summary>
 public sealed record TlsSecretStatus(bool? Exists, DateTimeOffset? NotAfter, string? Detail = null);

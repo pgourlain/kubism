@@ -286,6 +286,7 @@ public sealed class KubismReadTools(McpContext ctx)
                     ["id"] = p.Id, ["kind"] = p.Node.KindText, ["name"] = p.Node.Label, ["namespace"] = p.Node.Namespace, ["context"] = p.IsContext,
                     ["exposure"] = p.Node.Exposure switch { Core.Network.ExposureLevel.Outside => "outside the cluster", Core.Network.ExposureLevel.Unknown => "unknown", _ => "in-cluster only" },
                     ["detail"] = p.Node.Detail, ["missing"] = p.Node.Missing,
+                    ["matches"] = new JsonArray(p.Node.FilterLines.Select(l => (JsonNode?)JsonValue.Create(l)).ToArray()),
                     ["lines"] = new JsonArray(p.Node.Lines.Select(l => (JsonNode?)JsonValue.Create(l)).ToArray()),
                     ["problems"] = new JsonArray(p.Node.Problems.Select(x => (JsonNode?)new JsonObject { ["code"] = x.Code, ["severity"] = x.Severity.ToString(), ["description"] = x.Description }).ToArray()),
                 }).ToArray()),
@@ -294,7 +295,7 @@ public sealed class KubismReadTools(McpContext ctx)
                     ["url"] = r.Url, ["ingress"] = r.Ingress, ["class"] = r.Route.Class, ["exposure"] = r.ExposureText, ["comesInThrough"] = r.Via,
                     ["backend"] = r.Backend, ["pods"] = r.Target, ["problems"] = r.Problems,
                 }).ToArray()),
-                ["edges"] = new JsonArray(view.Edges.Select(e => (JsonNode?)new JsonObject { ["from"] = e.From, ["to"] = e.To, ["ports"] = e.Label, ["problem"] = e.Problem }).ToArray()),
+                ["edges"] = new JsonArray(view.Edges.Select(e => (JsonNode?)new JsonObject { ["from"] = e.From, ["to"] = e.To, ["hop"] = e.Label, ["entryPorts"] = new JsonArray(e.Ports.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()), ["problem"] = e.Problem }).ToArray()),
             };
             return Json(o);
         });
