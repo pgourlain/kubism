@@ -170,6 +170,18 @@
             </StackPanel>
           </ScrollViewer>
         </TabItem>
+        <TabItem Header="Graph">
+          <Grid RowDefinitions="Auto,*">
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="4,6">
+              <TextBlock Text="{Binding GraphStatus}" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding GraphLoading}" VerticalAlignment="Center" />
+              <TextBlock Text="Click an object to open it" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+            </StackPanel>
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+              <c:RelationGraphControl Graph="{Binding Graph}" NodeCommand="{Binding OpenGraphNodeCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" />
+            </ScrollViewer>
+          </Grid>
+        </TabItem>
       </TabControl>
     </Grid>
   </Border>

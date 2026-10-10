@@ -20,6 +20,7 @@
     <DataTemplate DataType="vm:RightSizingViewModel"><v:RightSizingView /></DataTemplate>
     <DataTemplate DataType="vm:HelmViewModel"><v:HelmView /></DataTemplate>
     <DataTemplate DataType="vm:ActivityViewModel"><v:ActivityView /></DataTemplate>
+    <DataTemplate DataType="vm:CompareViewModel"><v:CompareView /></DataTemplate>
     <DataTemplate DataType="vm:CreateYamlViewModel"><v:CreateYamlView /></DataTemplate>
     <DataTemplate DataType="vm:LogViewModel"><v:LogView /></DataTemplate>
     <DataTemplate DataType="vm:TerminalViewModel"><v:TerminalView /></DataTemplate>
@@ -41,6 +42,7 @@
           <SolidColorBrush x:Key="KubismWarnBrush" Color="#8A5A00" />
           <SolidColorBrush x:Key="KubismErrorBrush" Color="#CF222E" />
           <SolidColorBrush x:Key="KubismAccentBrush" Color="#0A7066" />
+          <SolidColorBrush x:Key="KubismHelmBrush" Color="#3B5BDB" />
           <SolidColorBrush x:Key="KubismAccentSoftBrush" Color="#1A0A7066" />
           <SolidColorBrush x:Key="KubismOnAccentBrush" Color="#FFFFFF" />
           <SolidColorBrush x:Key="KubismNewRowBrush" Color="#1A0A7066" />
@@ -58,6 +60,7 @@
           <SolidColorBrush x:Key="KubismWarnBrush" Color="#D29922" />
           <SolidColorBrush x:Key="KubismErrorBrush" Color="#F85149" />
           <SolidColorBrush x:Key="KubismAccentBrush" Color="#2DD4BF" />
+          <SolidColorBrush x:Key="KubismHelmBrush" Color="#8DA2FF" />
           <SolidColorBrush x:Key="KubismAccentSoftBrush" Color="#1F2DD4BF" />
           <SolidColorBrush x:Key="KubismOnAccentBrush" Color="#06201C" />
           <SolidColorBrush x:Key="KubismNewRowBrush" Color="#1F2DD4BF" />

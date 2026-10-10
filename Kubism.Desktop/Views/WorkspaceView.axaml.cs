@@ -21,6 +21,14 @@ public partial class WorkspaceView : UserControl
         }
     }
 
+    /// <summary>The graph tab needs room: grow the panel to fit the drawing, within what the window can spare.</summary>
+    private void WidenFor(double wanted)
+    {
+        var max = Math.Min(900, Math.Max(300, Bounds.Width - MainGrid.ColumnDefinitions[0].ActualWidth - 260));
+        var target = Math.Min(wanted, max);
+        if (DetailsCol.Width.IsAbsolute && DetailsCol.Width.Value < target) { DetailsCol.Width = new GridLength(target); _detailsWidth = target; }
+    }
+
     private double _dragStartX, _dragStartWidth;
     private double _dragStartY, _dragStartHeight;
 
@@ -30,7 +38,11 @@ public partial class WorkspaceView : UserControl
         DataContextChanged += (_, _) =>
         {
             if (DataContext is not WorkspaceViewModel w) return;
-            w.Details.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(DetailsViewModel.IsOpen)) SyncDetailsColumn(w); };
+            w.Details.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DetailsViewModel.IsOpen)) SyncDetailsColumn(w);
+                else if (e.PropertyName == nameof(DetailsViewModel.Graph) && w.Details is { IsOpen: true, Graph: { } g }) WidenFor(Controls.RelationGraphControl.WidthFor(g));
+            };
             SyncDetailsColumn(w);
         };
         // Own drag handle (not a GridSplitter): the splitter turns the star column into a fixed width, which left a gap when the panel closed.

@@ -196,7 +196,7 @@ public class UiMultiClusterAndPolishTests
     {
         var v = theme == "Light" ? ThemeVariant.Light : ThemeVariant.Dark;
         var panel = BrushColor(v, "KubismPanelBrush"); var side = BrushColor(v, "KubismSidebarBrush");
-        foreach (var key in new[] { "KubismMutedBrush", "KubismOkBrush", "KubismWarnBrush", "KubismErrorBrush", "KubismAccentBrush" })
+        foreach (var key in new[] { "KubismMutedBrush", "KubismOkBrush", "KubismWarnBrush", "KubismErrorBrush", "KubismAccentBrush", "KubismHelmBrush" })
             foreach (var bg in new[] { panel, side })
                 Assert.True(Contrast(BrushColor(v, key), bg) >= 4.5, $"{theme}: {key} on {bg} = {Contrast(BrushColor(v, key), bg):0.00}");
         foreach (var key in new[] { "KubismProductionBrush", "KubismReadOnlyBrush" })

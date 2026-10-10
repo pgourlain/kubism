@@ -30,7 +30,7 @@ public partial class App : Application
             AppServicesOptions? so = null;
             if (options.Demo)
             {
-                _demo = DemoEnvironment.StartAsync().GetAwaiter().GetResult();
+                _demo = DemoEnvironment.StartAsync(withDrift: true).GetAwaiter().GetResult();
                 so = new AppServicesOptions
                 {
                     SettingsPath = Path.Combine(Path.GetDirectoryName(_demo.KubeconfigPath)!, "settings.json"),

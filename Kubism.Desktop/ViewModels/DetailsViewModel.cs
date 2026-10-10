@@ -56,6 +56,12 @@ public sealed partial class DetailsViewModel : ViewModelBase
     [ObservableProperty] private Severity _statusSeverity;
     [ObservableProperty] private IReadOnlyList<double> _cpuHistory = [];
     [ObservableProperty] private IReadOnlyList<double> _memoryHistory = [];
+    [ObservableProperty] private RelationGraph? _graph;
+    [ObservableProperty] private string _graphStatus = "";
+    [ObservableProperty] private bool _graphLoading;
+    private CancellationTokenSource? _graphCts;
+    private string? _graphUid;
+    public const int GraphTab = 4;
     [ObservableProperty] private bool _hasUsage;
     [ObservableProperty] private string _usageText = "";
     private IDisposable? _metricsLease;
@@ -86,6 +92,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
         IsSecret = obj.Kind == "Secret" && obj.ApiVersion == "v1";
         if (!IsEditing) { Rebuild(); }
         _ = LoadAsync(obj);
+        if (SelectedTab == GraphTab) _ = LoadGraphAsync();
     }
 
     /// <summary>Live refresh of the selected object (informer update).</summary>
@@ -126,9 +133,11 @@ public sealed partial class DetailsViewModel : ViewModelBase
     [RelayCommand]
     public void Close()
     {
-        IsOpen = false; IsEditing = false; _cts?.Cancel(); Object = null;
+        IsOpen = false; IsEditing = false; _cts?.Cancel(); _graphCts?.Cancel(); Object = null; Graph = null; _graphUid = null;
         if (_metricsService is not null) { _metricsService.Updated -= RefreshUsage; _metricsLease?.Dispose(); _metricsService = null; _metricsLease = null; }
     }
+
+    partial void OnSelectedTabChanged(int value) { if (value == GraphTab && IsOpen) _ = LoadGraphAsync(); }
 
     partial void OnShowManagedFieldsChanged(bool value) { if (!IsEditing) BuildYaml(); }
 
@@ -222,6 +231,36 @@ public sealed partial class DetailsViewModel : ViewModelBase
         return rel;
     }
 
+
+    // ---------- relation graph ----------
+
+    /// <summary>Loads the neighbourhood of the selected object and draws it (only when the Graph tab is shown).</summary>
+    public async Task LoadGraphAsync()
+    {
+        var obj = Object;
+        if (obj is null || _graphUid == obj.Uid && Graph is not null) return;
+        _graphCts?.Cancel();
+        _graphCts = new CancellationTokenSource();
+        var ct = CancellationTokenSource.CreateLinkedTokenSource(_graphCts.Token, _ws.Session.SessionToken).Token;
+        GraphLoading = true; GraphStatus = "";
+        try
+        {
+            var graph = await GraphLoader.LoadAsync(_ws, obj, ct).ConfigureAwait(false);
+            _ws.Ui.Post(() =>
+            {
+                if (Object?.Uid != obj.Uid) return;
+                Graph = graph; _graphUid = obj.Uid;
+                GraphStatus = graph.Nodes.Count <= 1 ? "No related objects" : $"{graph.Nodes.Count} objects" + (graph.Truncated ? " (more not shown)" : "");
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { AppLog.Warn($"Graph load failed: {ex.Message}"); _ws.Ui.Post(() => GraphStatus = ex.Message); }
+        finally { _ws.Ui.Post(() => GraphLoading = false); }
+    }
+
+    [RelayCommand]
+    private void OpenGraphNode(GraphNode? node) { if (node is not null) _ws.OpenGraphNode(node); }
+
     // ---------- editing ----------
 
     [RelayCommand]
@@ -286,26 +325,8 @@ public sealed partial class DetailsViewModel : ViewModelBase
         HasConflict = false; EditError = null;
     }
 
-    /// <summary>Simple line diff: "- " lines only in theirs? no: "-" are in my text, "+" are on the server.</summary>
-    public static string Diff(string mine, string server)
-    {
-        var a = mine.Replace("\r", "").Split('\n'); var b = server.Replace("\r", "").Split('\n');
-        var lcs = new int[a.Length + 1, b.Length + 1];
-        for (var i = a.Length - 1; i >= 0; i--)
-            for (var j = b.Length - 1; j >= 0; j--)
-                lcs[i, j] = a[i] == b[j] ? lcs[i + 1, j + 1] + 1 : Math.Max(lcs[i + 1, j], lcs[i, j + 1]);
-        var sb = new System.Text.StringBuilder();
-        int x = 0, y = 0;
-        while (x < a.Length && y < b.Length)
-        {
-            if (a[x] == b[y]) { sb.Append("  ").AppendLine(a[x]); x++; y++; }
-            else if (lcs[x + 1, y] >= lcs[x, y + 1]) { sb.Append("- ").AppendLine(a[x]); x++; }
-            else { sb.Append("+ ").AppendLine(b[y]); y++; }
-        }
-        for (; x < a.Length; x++) sb.Append("- ").AppendLine(a[x]);
-        for (; y < b.Length; y++) sb.Append("+ ").AppendLine(b[y]);
-        return sb.ToString();
-    }
+    /// <summary>"-" lines are in my text, "+" lines are on the server.</summary>
+    public static string Diff(string mine, string server) => LineDiff.Unified(mine, server);
 
     [RelayCommand]
     private async Task CopyYamlAsync() => await _ws.Clipboard.SetTextAsync(YamlText);

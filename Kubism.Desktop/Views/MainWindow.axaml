@@ -124,7 +124,7 @@
       <Border Classes="card" Width="640" MaxHeight="520" VerticalAlignment="Top" Margin="0,70,0,0" Padding="8">
         <Grid RowDefinitions="Auto,Auto,*">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBox Name="SearchBox" Text="{Binding Search.Query, Mode=TwoWay}" PlaceholderText="Search all connected clusters: name, or label key=value" AutomationProperties.Name="Global search" KeyDown="OnSearchKeyDown" />
+            <TextBox Name="SearchBox" Text="{Binding Search.Query, Mode=TwoWay}" PlaceholderText="Search all clusters: name · key=value · image:nginx · ns:staging · kind:deploy" AutomationProperties.Name="Global search" KeyDown="OnSearchKeyDown" />
             <Button Grid.Column="1" Content="Search" Command="{Binding Search.SearchCommand}" Margin="6,0,0,0" />
           </Grid>
           <TextBlock Grid.Row="1" Text="{Binding Search.Summary}" Classes="muted" Margin="2,6" />

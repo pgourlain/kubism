@@ -7,17 +7,20 @@ namespace Kubism.Desktop;
 /// <summary>--demo: an in-process fake API server and Prometheus with sample objects; no cluster needed.</summary>
 public sealed class DemoEnvironment : IAsyncDisposable
 {
-    private DemoEnvironment(FakeApiServer server, FakePrometheus prom, string kubeconfigPath)
+    private DemoEnvironment(FakeApiServer server, FakePrometheus prom, string kubeconfigPath, FakeApiServer? drifted)
     {
-        Server = server; Prometheus = prom; KubeconfigPath = kubeconfigPath;
+        Server = server; Prometheus = prom; KubeconfigPath = kubeconfigPath; Drifted = drifted;
     }
+
+    /// <summary>A third cluster ("demo-dev") that drifted from the other two: another image tag, fewer replicas, a missing deployment, extra config. Only with <c>withDrift</c>.</summary>
+    public FakeApiServer? Drifted { get; }
 
     public FakeApiServer Server { get; }
     public FakePrometheus Prometheus { get; }
     public string KubeconfigPath { get; }
     public const double Mi = 1024 * 1024;
 
-    public static async Task<DemoEnvironment> StartAsync()
+    public static async Task<DemoEnvironment> StartAsync(bool withDrift = false)
     {
         var server = await FakeApiServer.StartAsync();
         var prom = await FakePrometheus.StartAsync();
@@ -39,6 +42,9 @@ public sealed class DemoEnvironment : IAsyncDisposable
         }
         SeedHelm(server);
         server.NodeMetrics["node-1"] = ("1200m", "6Gi"); server.NodeMetrics["node-2"] = ("900m", "5Gi");
+        var drifted = withDrift ? await StartDriftedAsync() : null;
+        var devCluster = drifted is null ? "" : "- {name: demo-dev, cluster: {server: " + drifted.Url + "}}";
+        var devContext = drifted is null ? "" : "- {name: demo-dev, context: {cluster: demo-dev, user: demo-user, namespace: default}}";
         var dir = Path.Combine(Path.GetTempPath(), "kubism-demo-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "demo-kubeconfig");
@@ -50,6 +56,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
             - name: demo
               cluster:
                 server: {{server.Url}}
+            {{devCluster}}
             users:
             - name: demo-user
               user:
@@ -59,8 +66,31 @@ public sealed class DemoEnvironment : IAsyncDisposable
               context: {cluster: demo, user: demo-user, namespace: default}
             - name: demo-production
               context: {cluster: demo, user: demo-user, namespace: production}
+            {{devContext}}
             """.Replace("\r\n", "\n"));
-        return new DemoEnvironment(server, prom, path);
+        return new DemoEnvironment(server, prom, path, drifted);
+    }
+
+    private static async Task<FakeApiServer> StartDriftedAsync()
+    {
+        var dev = await FakeApiServer.StartAsync();
+        void Edit(Gvr gvr, string ns, string name, Action<JsonObject> change)
+        {
+            if (dev.Get(gvr, ns, name) is { } o) { change(o); dev.Upsert(o, silent: true); }
+        }
+        // web: older image, fewer replicas, no resource requests.
+        Edit(Gvr.Deployments, "default", "web", o =>
+        {
+            o["spec"]!["replicas"] = 2;
+            var c = o["spec"]!["template"]!["spec"]!["containers"]![0]!;
+            c["image"] = "nginx:1.25";
+            c["resources"] = new JsonObject { ["requests"] = new JsonObject { ["cpu"] = "50m", ["memory"] = "64Mi" } };
+        });
+        dev.Remove(Gvr.Deployments, "default", "api");
+        Edit(Gvr.ConfigMaps, "default", "app-config", o => { var d = o["data"] as JsonObject ?? (JsonObject)(o["data"] = new JsonObject()); d["LOG_LEVEL"] = "debug"; d["FEATURE_X"] = "on"; });
+        Edit(Gvr.Secrets, "default", "db-credentials", o => { if (o["data"] is JsonObject d && d.Count > 0) d[d.First().Key] = Convert.ToBase64String("another-value"u8.ToArray()); });
+        dev.Upsert(JsonNode.Parse("""{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"legacy-importer","namespace":"default","uid":"dep-dev-legacy","labels":{"app":"legacy-importer"}},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"legacy-importer"}},"template":{"metadata":{"labels":{"app":"legacy-importer"}},"spec":{"containers":[{"name":"main","image":"registry.example.com/importer:0.9"}]}}},"status":{"replicas":1,"readyReplicas":1,"availableReplicas":1,"updatedReplicas":1}}""")!.AsObject(), silent: true);
+        return dev;
     }
 
     /// <summary>Helm release secrets: healthy releases with history, one failed upgrade (crashing pod) and one stuck in pending-upgrade.</summary>
@@ -104,6 +134,21 @@ public sealed class DemoEnvironment : IAsyncDisposable
         if (crashy is not null) { crashy["metadata"]!["labels"]!["app.kubernetes.io/instance"] = "payments"; server.Upsert(crashy); }
         var ev = server.Get(Gvr.Events, "default", "crashy-0.1");
         if (ev is not null) { ev["lastTimestamp"] = now.AddMinutes(-4).ToString("O"); server.Upsert(ev); }
+        // A healthy release that rendered the "api" deployment, its service and its config (Helm stamps these annotations on everything it installs),
+        // plus the failed "payments" release owning the crash-looping pod: the graph shows both under their release.
+        Rev("api", "default", 1, "deployed", "Install complete", now.AddDays(-12), "api", "1.4.2", "3.1.0", J("{\"replicaCount\":2}"), J("{}"), Manifest("Deployment", "api"));
+        void Stamp(Gvr gvr, string ns, string name, string release)
+        {
+            if (server.Get(gvr, ns, name) is not { } o) return;
+            var meta = (JsonObject)o["metadata"]!;
+            var ann = meta["annotations"] as JsonObject ?? (JsonObject)(meta["annotations"] = new JsonObject());
+            ann["meta.helm.sh/release-name"] = release; ann["meta.helm.sh/release-namespace"] = ns;
+            var labels = meta["labels"] as JsonObject ?? (JsonObject)(meta["labels"] = new JsonObject());
+            labels["app.kubernetes.io/managed-by"] = "Helm";
+            server.Upsert(o);
+        }
+        Stamp(Gvr.Deployments, "default", "api", "api"); Stamp(Gvr.Services, "default", "api", "api"); Stamp(Gvr.ConfigMaps, "default", "app-config", "api");
+        Stamp(Gvr.Pods, "default", "crashy-0", "payments");
         // Stuck upgrade (--wait timeout): pending for 20 minutes.
         Rev("reporting", "staging", 1, "pending-upgrade", "Preparing upgrade", now.AddMinutes(-20), "reporting", "1.2.0", "1.2.0", J("{\"replicaCount\":1}"), J("{\"replicaCount\":2}"), Manifest("Deployment", "stuck-pending"));
         var stuck = server.Get(Gvr.Pods, "staging", "stuck-pending");
@@ -114,6 +159,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
     {
         await Prometheus.DisposeAsync();
         await Server.DisposeAsync();
+        if (Drifted is not null) await Drifted.DisposeAsync();
         try { Directory.Delete(Path.GetDirectoryName(KubeconfigPath)!, true); } catch { }
     }
 }

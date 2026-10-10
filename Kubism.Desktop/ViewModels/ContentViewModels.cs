@@ -6,6 +6,7 @@ using Kubism.Core;
 using Kubism.Core.Actions;
 using Kubism.Core.Api;
 using Kubism.Core.Helm;
+using Kubism.Core.Views;
 
 namespace Kubism.Desktop.ViewModels;
 
@@ -98,6 +99,12 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     public ObservableCollection<DiagPod> DiagPods { get; } = [];
     public ObservableCollection<HelmRelease> Failing { get; } = [];
     private CancellationTokenSource? _diagCts;
+    private CancellationTokenSource? _graphCts;
+    private (string ns, string name)? _pendingSelect;
+    public const int GraphTabIndex = 6;
+    [ObservableProperty] private RelationGraph? _graph;
+    [ObservableProperty] private string _graphStatus = "";
+    [ObservableProperty] private bool _graphLoading;
     public bool CanWrite => _ws.Session.Actions.CanRunHelm;
     public string WriteTooltip => CanWrite ? "" : "The helm binary was not found on PATH: rollback and uninstall are disabled";
 
@@ -114,17 +121,54 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
             HasFailing = Failing.Count > 0;
             FailingSummary = HasFailing ? $"{Failing.Count} release(s) failed or stuck: {string.Join(", ", Failing.Select(f => f.Name))}" : "";
             // One glance: jump straight to the first failing release and its diagnosis.
-            if (Selected is null && Failing.Count > 0) Selected = Failing[0];
+            if (_pendingSelect is { } p && all.FirstOrDefault(r => r.Namespace == p.ns && r.Name == p.name) is { } wanted) { Selected = wanted; _pendingSelect = null; }
+            else if (Selected is null && Failing.Count > 0) Selected = Failing[0];
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Error = ex.Message; }
         finally { IsLoading = false; }
     }
 
+    /// <summary>Select a release once the list has loaded (used when a graph box opens it).</summary>
+    public void SelectWhenLoaded(string ns, string name)
+    {
+        _pendingSelect = (ns, name);
+        if (Releases.FirstOrDefault(r => r.Namespace == ns && r.Name == name) is { } r) { Selected = r; _pendingSelect = null; }
+        else _ = LoadAsync();
+    }
+
+    partial void OnTabChanged(int value) { if (value == GraphTabIndex) _ = LoadGraphAsync(); }
+
+    /// <summary>The release at the top, then what it rendered and what runs below.</summary>
+    public async Task LoadGraphAsync()
+    {
+        var r = Selected;
+        _graphCts?.Cancel();
+        if (r is null) { Graph = null; GraphStatus = ""; return; }
+        _graphCts = new CancellationTokenSource();
+        var ct = CancellationTokenSource.CreateLinkedTokenSource(_graphCts.Token, _ws.Session.SessionToken).Token;
+        GraphLoading = true;
+        try
+        {
+            var graph = await GraphLoader.LoadAsync(_ws, new Core.Helm.HelmReleaseInfo(r.Name, r.Namespace, r.Revision, r.Status).ToObject(), ct);
+            if (Selected != r) return;
+            Graph = graph;
+            GraphStatus = graph.Nodes.Count <= 1 ? "This release's objects carry no Helm annotation, so none could be matched" : $"{graph.Nodes.Count} objects" + (graph.Truncated ? " (more not shown)" : "");
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { GraphStatus = ex.Message; }
+        finally { GraphLoading = false; }
+    }
+
+    [RelayCommand]
+    private void OpenGraphNode(GraphNode? node) { if (node is not null && node.Kind != Core.Helm.HelmReleaseInfo.Kind) _ws.OpenGraphNode(node); }
+
     partial void OnSelectedChanged(HelmRelease? value)
     {
         History.Clear();
+        Graph = null; GraphStatus = "";
         if (value is null) return;
+        if (Tab == GraphTabIndex) _ = LoadGraphAsync();
         ValuesText = YamlJson.ToYaml(value.ComputedValues);
         UserValuesText = YamlJson.ToYaml(value.UserValues ?? new JsonObject());
         ManifestText = value.Manifest ?? ""; NotesText = value.Notes ?? "";
@@ -138,7 +182,7 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         var ct = CancellationTokenSource.CreateLinkedTokenSource(_diagCts.Token, _ws.Session.SessionToken).Token;
         var problem = HelmDiagnostics.IsProblem(r, DateTimeOffset.UtcNow);
         DiagIsProblem = problem; DiagHeadline = HelmDiagnostics.Headline(r, DateTimeOffset.UtcNow);
-        Tab = problem ? 0 : 1;
+        if (Tab != GraphTabIndex) Tab = problem ? 0 : 1;
         DiagEvents.Clear(); DiagPods.Clear();
         if (!problem) { DiagHeadline = $"Release {r.Status}: no problem detected."; return; }
         DiagLoading = true;

@@ -32,10 +32,10 @@ public sealed class UiHarness : IAsyncDisposable
         }
     }
 
-    public static async Task<UiHarness> StartAsync(Action<ISettingsStore>? configure = null, bool showWindow = true)
+    public static async Task<UiHarness> StartAsync(Action<ISettingsStore>? configure = null, bool showWindow = true, bool withDrift = false)
     {
         var h = new UiHarness();
-        h.Demo = await DemoEnvironment.StartAsync();
+        h.Demo = await DemoEnvironment.StartAsync(withDrift);
         h.DataDir = Path.Combine(Path.GetDirectoryName(h.Demo.KubeconfigPath)!, "data");
         Directory.CreateDirectory(h.DataDir);
         h.Services = AppServices.Build(new AppServicesOptions

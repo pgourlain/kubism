@@ -3,12 +3,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Kubism.Core.Api;
 using Kubism.Core.Discovery;
+using Kubism.Core.Views;
 
 namespace Kubism.Desktop.ViewModels;
 
-public sealed record SearchHit(string Kind, string? Namespace, string Name, WorkspaceViewModel Workspace, ResourceKind ResourceKind)
+public sealed record SearchHit(string Kind, string? Namespace, string Name, WorkspaceViewModel Workspace, ResourceKind ResourceKind, string? Detail = null)
 {
-    public string Display => Namespace is null ? $"{Kind}/{Name}" : $"{Kind}/{Namespace}/{Name}";
+    public string Display => (Namespace is null ? $"{Kind}/{Name}" : $"{Kind}/{Namespace}/{Name}") + (Detail is null ? "" : $"   {Detail}");
 }
 
 public sealed class SearchGroup(string cluster, IReadOnlyList<SearchHit> hits)
@@ -18,7 +19,7 @@ public sealed class SearchGroup(string cluster, IReadOnlyList<SearchHit> hits)
     public string Header => $"{Cluster} ({Hits.Count})";
 }
 
-/// <summary>Search by name or label selector (key=value) across every connected cluster; results grouped by cluster.</summary>
+/// <summary>Search across every connected cluster, results grouped by cluster. Syntax: see <see cref="SearchQuery"/> (name, key=value, image:, ns:, kind:).</summary>
 public sealed partial class GlobalSearchViewModel : ViewModelBase
 {
     private static readonly string[] Resources = ["pods", "deployments", "statefulsets", "daemonsets", "services", "configmaps", "secrets", "ingresses", "namespaces", "nodes", "jobs", "cronjobs", "persistentvolumeclaims"];
@@ -45,8 +46,8 @@ public sealed partial class GlobalSearchViewModel : ViewModelBase
         IsSearching = true;
         try
         {
-            var isLabel = q.Contains('=');
-            var perCluster = await Task.WhenAll(_main.Workspaces.ToList().Select(ws => SearchClusterAsync(ws, q, isLabel, ct)));
+            var query = SearchQuery.Parse(q);
+            var perCluster = await Task.WhenAll(_main.Workspaces.ToList().Select(ws => SearchClusterAsync(ws, query, ct)));
             foreach (var hits in perCluster.Where(h => h.Count > 0)) Groups.Add(new SearchGroup(hits[0].Workspace.Title, hits));
             Summary = Groups.Count == 0 ? "No results" : $"{Groups.Sum(g => g.Hits.Count)} results in {Groups.Count} cluster(s)";
         }
@@ -54,20 +55,25 @@ public sealed partial class GlobalSearchViewModel : ViewModelBase
         finally { IsSearching = false; }
     }
 
-    private static async Task<List<SearchHit>> SearchClusterAsync(WorkspaceViewModel ws, string q, bool isLabel, CancellationToken ct)
+    private const int MaxHitsPerCluster = 500;
+
+    private static async Task<List<SearchHit>> SearchClusterAsync(WorkspaceViewModel ws, SearchQuery query, CancellationToken ct)
     {
         var hits = new List<SearchHit>();
-        foreach (var res in Resources)
+        foreach (var kind in ws.Session.Discovery.Kinds.Where(k => k.CanList && query.WantsKind(k, Resources)).DistinctBy(k => k.Gvr))
         {
             ct.ThrowIfCancellationRequested();
-            var kind = ws.Session.Discovery.Kinds.FirstOrDefault(k => k.Resource == res && k.CanList);
-            if (kind is null) continue;
+            if (hits.Count >= MaxHitsPerCluster) break;
             try
             {
-                var list = await ws.Session.Transport.ListAsync(kind.Gvr, null, new ListOptions { Limit = 500, LabelSelector = isLabel ? q : null }, ct);
+                var ns = kind.Namespaced ? query.Namespace : null;
+                var list = await ws.Session.Transport.ListAsync(kind.Gvr, ns, new ListOptions { Limit = 500, LabelSelector = query.LabelSelector }, ct);
                 foreach (var o in list.Items.Select(i => new KubeObject(i)))
-                    if (isLabel || o.Name.Contains(q, StringComparison.OrdinalIgnoreCase))
-                        hits.Add(new SearchHit(kind.Kind, o.Namespace, o.Name, ws, kind));
+                {
+                    if (!query.Matches(o)) continue;
+                    var detail = query.Images.Count > 0 ? string.Join(", ", SearchQuery.ImagesOf(o).Where(img => query.Images.Any(i => img.Contains(i, StringComparison.OrdinalIgnoreCase))).Distinct()) : null;
+                    hits.Add(new SearchHit(kind.Kind, o.Namespace, o.Name, ws, kind, detail));
+                }
             }
             catch (OperationCanceledException) { throw; }
             catch (KubeApiException) { /* forbidden or unavailable kinds are skipped */ }

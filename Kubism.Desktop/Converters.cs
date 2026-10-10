@@ -74,6 +74,7 @@ public static class Icons
         ["namespaces"] = "M3,7 L12,3 L21,7 L12,11 Z M3,12 L12,16 L21,12 M3,17 L12,21 L21,17",
         ["events"] = "M6,16 V11 A6,6 0 0 1 18,11 V16 L20,18 H4 Z M10,21 H14",
         ["helm"] = "M12,3 V21 M3,12 H21 M5.6,5.6 L18.4,18.4 M18.4,5.6 L5.6,18.4 M16,12 A4,4 0 1 1 8,12 A4,4 0 1 1 16,12",
+        ["compare"] = "M8,4 H4 V20 H8 M16,4 H20 V20 H16 M12,3 V21 M9,9 L12,6 L15,9",
         ["create"] = "M12,4 V20 M4,12 H20",
         ["activity"] = "M2,12 H6 L9,4 L15,20 L18,12 H22",
         ["portforward"] = "M3,12 H17 M13,7 L18,12 L13,17 M21,5 V19",

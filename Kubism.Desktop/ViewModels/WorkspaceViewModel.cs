@@ -114,6 +114,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (Find("namespaces") is { } ns) NavRoots.Add(new NavNode("Namespaces".T(), NavTarget.Kind, ns, "namespaces"));
         if (Find("events") is { } ev) NavRoots.Add(new NavNode("Events".T(), NavTarget.Kind, ev, "events"));
         NavRoots.Add(new NavNode("Helm".T(), NavTarget.Helm, null, "helm"));
+        NavRoots.Add(new NavNode("Compare".T(), NavTarget.Compare, null, "compare"));
         var custom = kinds.Where(k => !BuiltinGroups.Contains(k.Group)).GroupBy(k => k.Group).OrderBy(g => g.Key).ToList();
         var cr = new NavNode("Custom Resources".T()) { IsExpanded = false };
         cr.Children.Add(new NavNode("Definitions (CRDs)", NavTarget.Kind, Find("customresourcedefinitions")));
@@ -200,6 +201,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Helm => new HelmViewModel(this),
             NavTarget.Activity => new ActivityViewModel(this),
             NavTarget.CreateYaml => new CreateYamlViewModel(this),
+            NavTarget.Compare => new CompareViewModel(this),
             _ => null,
         };
         // Dock items own their lifetime (the dock closes them); never dispose one from here.
@@ -347,10 +349,52 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             list.Add(new ActionItem("Trigger now", () => RunActionAsync("Trigger", $"cronjob {name}", false, name, _ => Session.Actions.TriggerCronJobAsync(ns!, name, Session.SessionToken))) { Verb = "create" });
             list.Add(new ActionItem(suspended ? "Resume" : "Suspend", () => RunActionAsync(suspended ? "Resume" : "Suspend", $"cronjob {name}", false, name, _ => Session.Actions.SetCronJobSuspendedAsync(ns!, name, !suspended, Session.SessionToken))) { Verb = "patch" });
         }
+        if (Main.Workspaces.Count > 0 && kind.Verbs.Contains("list"))
+            list.Add(new ActionItem("Compare…", () => CompareObjectAsync(kind, o)));
         list.Add(ActionItem.Separator());
         list.Add(new ActionItem("Copy name", () => Clipboard.SetTextAsync(name)));
         list.Add(new ActionItem("Delete".T(), () => DeleteOneAsync(kind, o), "Delete", destructive: true) { Verb = "delete" });
         return list;
+    }
+
+    /// <summary>Opens Compare on this object's kind and namespace, against another connected cluster (or another namespace of this one when it is the only cluster).</summary>
+    /// <summary>Opens the object a graph box stands for: its list filtered on its name, or the Helm page for a release.</summary>
+    public void OpenGraphNode(Core.Views.GraphNode node)
+    {
+        if (node.Kind == Core.Helm.HelmReleaseInfo.Kind && node.Namespace is { } hns)
+        {
+            var helm = FindNav(NavTarget.Helm);
+            if (helm is null) return;
+            Details.Close();
+            Namespaces.Select(hns);
+            if (SelectedNav != helm) SelectedNav = helm;
+            if (CurrentContent is HelmViewModel h) h.SelectWhenLoaded(hns, node.Name);
+            return;
+        }
+        var kind = Session.Discovery.Kinds.Where(k => k.Kind == node.Kind && k.CanList).OrderBy(k => k.Group.Length == 0 ? 0 : 1).FirstOrDefault();
+        if (kind is null) return;
+        if (node.Namespace is not null) Namespaces.Select(node.Namespace);
+        OpenKind(kind);
+        if (CurrentContent is ResourceListViewModel list) list.Filter = node.Name;
+    }
+
+    private async Task CompareObjectAsync(ResourceKind kind, KubeObject o)
+    {
+        var others = Main.Workspaces.Where(w => w != this).ToList();
+        WorkspaceViewModel? target = this;
+        if (others.Count == 1) target = others[0];
+        else if (others.Count > 1)
+        {
+            var pick = await Dialogs.ChooseAsync("Compare with", others.Select(w => w.Title).ToList());
+            if (pick is null) return;
+            target = others.First(w => w.Title == pick);
+        }
+        var node = FindNav(NavTarget.Compare);
+        if (node is null) return;
+        Details.Close();
+        if (SelectedNav != node) SelectedNav = node;
+        else CurrentContent = new CompareViewModel(this);
+        if (CurrentContent is CompareViewModel cmp) await cmp.PrefillAsync(kind, o.Namespace, o.Name, target);
     }
 
     private Task DeleteOneAsync(ResourceKind kind, KubeObject o)

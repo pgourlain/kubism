@@ -271,9 +271,9 @@ public class UiDemoHelmTests
         var ws = await h.ConnectAsync();
         ws.Namespaces.SelectAll();
         ws.Navigate(ws.FindNav(NavTarget.Helm)!);
-        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Count == 4, what: "demo releases");
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Count == 5, what: "demo releases");
         var vm = (HelmViewModel)ws.CurrentContent!;
-        Assert.Equal(["cert-manager", "ingress-nginx", "payments", "reporting"], vm.Releases.Select(r => r.Name));
+        Assert.Equal(["cert-manager", "api", "ingress-nginx", "payments", "reporting"], vm.Releases.Select(r => r.Name));
         Assert.Equal(3, vm.Releases.First(r => r.Name == "ingress-nginx").Revision);
         Assert.Equal(["payments", "reporting"], vm.Failing.Select(r => r.Name).OrderBy(x => x));
         await UiHarness.WaitFor(() => vm.Selected is not null && !vm.DiagLoading && vm.DiagPods.Count > 0);
