@@ -78,8 +78,22 @@ public static class KubeConfigReader
                 config.AccessToken = "exec-plugin";
             }
         }
-        AppLog.Info($"Kubeconfig {entry.FilePath}, context {entry.ContextName}, user '{S(ctx, "user")}': keys {Keys(user)}; {DescribeToken(config.AccessToken, exec is not null)}");
+        AppLog.Info($"Kubeconfig {entry.FilePath}, context {entry.ContextName}, user '{S(ctx, "user")}': keys {Keys(user)}; {DescribeToken(config.AccessToken, exec is not null)}; {DescribeClientCert(config, dir)}");
         return new Result(config, exec);
+    }
+
+    /// <summary>Whether a client certificate is configured and loadable here (subject, expiry, private key). Never the key.</summary>
+    private static string DescribeClientCert(KubernetesClientConfiguration config, string dir)
+    {
+        if (config.ClientCertificateData is null && config.ClientCertificateFilePath is null) return "no client certificate";
+        try
+        {
+            var pem = config.ClientCertificateData is { } d ? Encoding.UTF8.GetString(Convert.FromBase64String(d)) : File.ReadAllText(config.ClientCertificateFilePath!);
+            var key = config.ClientCertificateKeyData is { } k ? Encoding.UTF8.GetString(Convert.FromBase64String(k)) : config.ClientKeyFilePath is { } kf ? File.ReadAllText(kf) : null;
+            using var cert = key is null ? X509Certificate2.CreateFromPem(pem) : X509Certificate2.CreateFromPem(pem, key);
+            return $"client certificate {cert.Subject}, valid {cert.NotBefore:yyyy-MM-dd}..{cert.NotAfter:yyyy-MM-dd}{(cert.NotAfter < DateTime.Now ? " EXPIRED" : "")}, private key {(cert.HasPrivateKey ? "loaded" : "MISSING")}";
+        }
+        catch (Exception ex) { return $"client certificate present but unreadable here: {ex.GetType().Name}: {ex.Message}"; }
     }
 
     private static string Keys(YamlMappingNode? user) =>
