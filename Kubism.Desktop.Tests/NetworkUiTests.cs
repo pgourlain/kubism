@@ -85,6 +85,11 @@ public class NetworkUiTests
         Assert.Contains(vm.NodeLines, l => l.Contains("exposure: outside the cluster"));
         await vm.CopyDetailsCommand.ExecuteAsync(null);
         Assert.Contains("shop.example.com", h.Clipboard.Text);
+
+        // a workload lists the nodes its pods run on
+        vm.NodeClickedCommand.Execute(vm.View!.Nodes.Single(p => p.Id == "w:shop/Deployment/web"));
+        Assert.Contains(vm.NodeLines, l => l == "node node-1: web-6d5f-a");
+        Assert.Contains(vm.NodeLines, l => l == "node node-2: web-6d5f-b");
         h.Screenshot("66-network-selected");
     }
 

@@ -168,6 +168,11 @@ public class NetworkGraphTests
         Assert.Contains("2/2 pods ready", web.Detail);
         Assert.Contains("http:8080", web.Detail);
         Assert.Contains("w:shop/StatefulSet/worker", Graph.Nodes.Select(n => n.Id));
+        // the details list the nodes the pods run on, with the pods on each (and which are not ready)
+        Assert.Contains("node node-1: web-6d5f-a", web.Lines);
+        Assert.Contains("node node-2: web-6d5f-b", web.Lines);
+        Assert.Contains("node node-1: worker-0, worker-1 (not ready)", N("w:shop/StatefulSet/worker").Lines);
+        Assert.Contains("node (not scheduled): grafana-5b-a", N("w:tools/Deployment/grafana").Lines);           // the fixture gives it no node
     }
 
     // ---------- problems ----------

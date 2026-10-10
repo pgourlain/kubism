@@ -438,6 +438,9 @@ public sealed partial class NetworkGraph
             Node(new NetworkNode(id, NetworkNodeKind.Workload, $"{w.Kind} {w.Name}", w.Namespace, $"{ready}/{workloadPods.Count} pods ready" + (ports.Count > 0 ? " · " + string.Join(", ", ports.Take(4).Select(p => p.Name is null ? p.Number.ToString() : $"{p.Name}:{p.Number}")) : ""),
                 ExposureLevel.InCluster, [], [], null));
             Line(id, $"{ready} of {workloadPods.Count} pods ready");
+            // Which nodes the pods run on: two pods on two nodes, or both on one, is not visible from the traffic path.
+            foreach (var onNode in workloadPods.GroupBy(p => p.StringAt("spec", "nodeName") ?? "").OrderBy(x => x.Key.Length == 0 ? 1 : 0).ThenBy(x => x.Key, StringComparer.Ordinal))
+                Line(id, $"node {(onNode.Key.Length == 0 ? "(not scheduled)" : onNode.Key)}: " + string.Join(", ", onNode.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name + (PodReady(p) ? "" : " (not ready)"))));
             foreach (var p in ports) Line(id, $"container port {(p.Name is null ? "" : p.Name + " ")}{p.Number}/{p.Protocol}{(p.HostPort is { } hp ? $" (hostPort {hp})" : "")}");
             if (ready < workloadPods.Count) Problem(id, "pods-not-ready", $"{workloadPods.Count - ready} of {workloadPods.Count} pod(s) not ready.", ready == 0 ? FindingSeverity.High : FindingSeverity.Medium);
             if (hostNet || hostPorts.Count > 0)
