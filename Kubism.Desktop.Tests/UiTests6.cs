@@ -297,4 +297,43 @@ public class UiExplorationTests
         await vm.Actions.First(a => a.Header == "Sync and prune…").ExecuteAsync();
         Assert.True(h.Demo.Server.Get(apps, "argocd", "legacy")!["operation"]!["sync"]!["prune"]!.GetValue<bool>());
     }
+
+    [AvaloniaFact]
+    public async Task Capacity_page_shows_nodes_pending_pods_cost_and_the_right_sizing_what_if()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Navigate(ws.FindNav(NavTarget.Capacity)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is CapacityViewModel v && v.Nodes.Count == 2 && v.Pending.Count > 0, what: "capacity");
+        var vm = (CapacityViewModel)ws.CurrentContent!;
+        Assert.Contains("2 nodes", vm.Summary);
+        Assert.Contains("fragmentation", vm.Fragmentation);
+        var big = vm.Pending.Single(p => p.Pod.Name == "report-batch-0");
+        Assert.StartsWith("Fragmented", big.Verdict);   // the free CPU is split over the two nodes
+        Assert.Contains("Insufficient cpu", big.Reason);
+        Assert.All(vm.Nodes, n => Assert.True(n.Node.CpuRequested > 0));
+        h.Screenshot("41-capacity-nodes");
+
+        vm.Tab = CapacityViewModel.CostTab;
+        Assert.True(vm.NeedsPrices);
+        Assert.Contains("Set a price", vm.CostSummary);
+        vm.PriceCpu = "0.03"; vm.PriceMemory = "0.004";
+        vm.ApplyPricesCommand.Execute(null);
+        Assert.False(vm.NeedsPrices);
+        Assert.Equal(0.03, ws.Session.Metadata.PricePerVcpuHour);   // saved with the cluster's settings
+        Assert.Contains("idle", vm.CostSummary);
+        Assert.Contains(vm.CostRows, r => r.Key == "production" && r.Line.MonthlyCost > 0);
+        Assert.Equal(vm.CostRows.Select(r => r.Line.MonthlyCost), vm.CostRows.Select(r => r.Line.MonthlyCost).OrderByDescending(x => x));
+        vm.GroupBy = "Label"; vm.LabelKey = "app";
+        Assert.Contains(vm.CostRows, r => r.Key == "web");
+        h.Screenshot("42-capacity-cost");
+
+        vm.Tab = CapacityViewModel.WhatIfTab;
+        await UiHarness.WaitFor(() => vm.SimRows.Count > 0, what: "simulation");
+        Assert.Contains("Prometheus", vm.SimSource);
+        Assert.Contains("Requests would go from", vm.SimSummary);
+        Assert.Contains(vm.SimRows, r => r.Namespace == "default" && r.Ns.CpuAfter < r.Ns.CpuNow);          // web is over-provisioned
+        Assert.Contains(vm.SimRows, r => r.Namespace == "production" && r.Ns.CpuAfter > r.Ns.CpuNow);       // checkout is under-provisioned: it costs more
+        h.Screenshot("43-capacity-what-if");
+    }
 }

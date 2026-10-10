@@ -103,6 +103,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         NavRoots.Clear();
         NavRoots.Add(new NavNode("Overview".T(), NavTarget.Overview, null, "overview"));
         NavRoots.Add(new NavNode("Right-sizing".T(), NavTarget.RightSizing, null, "rightsizing"));
+        NavRoots.Add(new NavNode("Capacity".T(), NavTarget.Capacity, null, "capacity"));
         if (Find("nodes") is { } nodes) NavRoots.Add(new NavNode("Nodes".T(), NavTarget.Kind, nodes, "node"));
         foreach (var (section, names) in Fixed)
         {
@@ -207,6 +208,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Compare => new CompareViewModel(this),
             NavTarget.Security => new SecurityViewModel(this),
             NavTarget.GitOps => new GitOpsViewModel(this),
+            NavTarget.Capacity => new CapacityViewModel(this),
             _ => null,
         };
         // Dock items own their lifetime (the dock closes them); never dispose one from here.

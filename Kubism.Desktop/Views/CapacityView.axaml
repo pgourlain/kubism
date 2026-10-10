@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.CapacityView"
+             x:DataType="vm:CapacityViewModel">
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <StackPanel>
+        <TextBlock Text="Capacity and cost" Classes="h1" />
+        <TextBlock Text="From what pods request, which is what the scheduler counts, not what they use. Cost is requests times the prices you set." Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
+        <Button Content="Refresh" Command="{Binding LoadCommand}" />
+      </StackPanel>
+    </Grid>
+    <TabControl Grid.Row="1" SelectedIndex="{Binding Tab, Mode=TwoWay}">
+      <TabItem Header="Nodes">
+        <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,8,0,0" RowSpacing="6">
+          <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="1" Text="{Binding Fragmentation}" Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Grid.Row="2" Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
+          <DataGrid Grid.Row="3" ItemsSource="{Binding Nodes}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Nodes">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Node" Binding="{Binding Name}" x:DataType="vm:NodeRow" Width="*" />
+              <DataGridTemplateColumn Header="CPU requested / allocatable" Width="1.6*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:NodeRow">
+                    <StackPanel Margin="8,2" VerticalAlignment="Center">
+                      <c:UsageBar P95="{Binding CpuRequested}" Capacity="{Binding CpuAllocatable}" Height="14" />
+                      <TextBlock Text="{Binding CpuText}" FontSize="11" Classes="muted" />
+                    </StackPanel>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTemplateColumn Header="Memory requested / allocatable" Width="1.6*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:NodeRow">
+                    <StackPanel Margin="8,2" VerticalAlignment="Center">
+                      <c:UsageBar P95="{Binding MemoryRequested}" Capacity="{Binding MemoryAllocatable}" Height="14" />
+                      <TextBlock Text="{Binding MemoryText}" FontSize="11" Classes="muted" />
+                    </StackPanel>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Pods" Binding="{Binding PodsText}" x:DataType="vm:NodeRow" />
+              <DataGridTemplateColumn Header="Status" Width="100">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:NodeRow">
+                    <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+            </DataGrid.Columns>
+          </DataGrid>
+          <TextBlock Grid.Row="4" Text="PODS THAT CANNOT BE PLACED" Classes="sectionTitle" IsVisible="{Binding HasPending}" Margin="0,8,0,0" />
+          <DataGrid Grid.Row="5" MaxHeight="220" ItemsSource="{Binding Pending}" IsVisible="{Binding HasPending}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Pending pods">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Pod" Binding="{Binding Display}" x:DataType="vm:PendingRow" Width="*" />
+              <DataGridTextColumn Header="Asks for" Binding="{Binding Request}" x:DataType="vm:PendingRow" />
+              <DataGridTextColumn Header="Verdict" Binding="{Binding Verdict}" x:DataType="vm:PendingRow" Width="3*" />
+              <DataGridTextColumn Header="Scheduler said" Binding="{Binding Reason}" x:DataType="vm:PendingRow" Width="2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Cost">
+        <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="0,8,0,0" RowSpacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Price per vCPU-hour" VerticalAlignment="Center" Classes="muted" />
+            <TextBox Text="{Binding PriceCpu}" Width="90" AutomationProperties.Name="Price per vCPU hour" />
+            <TextBlock Text="per GiB-hour" VerticalAlignment="Center" Classes="muted" />
+            <TextBox Text="{Binding PriceMemory}" Width="90" AutomationProperties.Name="Price per GiB hour" />
+            <Button Content="Save prices" Command="{Binding ApplyPricesCommand}" />
+            <TextBlock Text="Group by" VerticalAlignment="Center" Classes="muted" Margin="16,0,0,0" />
+            <ComboBox ItemsSource="{Binding GroupChoices}" SelectedItem="{Binding GroupBy}" />
+            <TextBox Text="{Binding LabelKey}" Width="220" IsVisible="{Binding IsLabelGrouping}" PlaceholderText="label key" AutomationProperties.Name="Label key" />
+          </StackPanel>
+          <TextBlock Grid.Row="1" Text="{Binding CostSummary}" TextWrapping="Wrap" />
+          <DataGrid Grid.Row="3" ItemsSource="{Binding CostRows}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Cost">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Group" Binding="{Binding Key}" x:DataType="vm:CostRow" Width="*" />
+              <DataGridTextColumn Header="Pods" Binding="{Binding Pods}" x:DataType="vm:CostRow" />
+              <DataGridTextColumn Header="CPU requested" Binding="{Binding Cpu}" x:DataType="vm:CostRow" />
+              <DataGridTextColumn Header="Memory requested" Binding="{Binding Memory}" x:DataType="vm:CostRow" />
+              <DataGridTextColumn Header="Per month" Binding="{Binding Cost}" x:DataType="vm:CostRow" />
+              <DataGridTextColumn Header="Share" Binding="{Binding Share}" x:DataType="vm:CostRow" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="What if">
+        <Grid RowDefinitions="Auto,Auto,*" Margin="0,8,0,0" RowSpacing="8">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button Content="Simulate the right-sizing recommendations" Command="{Binding SimulateCommand}" IsEnabled="{Binding !IsSimulating}" />
+            <TextBlock Text="Working…" Classes="muted" IsVisible="{Binding IsSimulating}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding SimSource}" Classes="muted" VerticalAlignment="Center" />
+          </StackPanel>
+          <TextBlock Grid.Row="1" Text="{Binding SimSummary}" TextWrapping="Wrap" />
+          <DataGrid Grid.Row="2" ItemsSource="{Binding SimRows}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Simulation">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="vm:SimRow" Width="*" />
+              <DataGridTextColumn Header="CPU requests" Binding="{Binding Cpu}" x:DataType="vm:SimRow" Width="1.4*" />
+              <DataGridTextColumn Header="Memory requests" Binding="{Binding Memory}" x:DataType="vm:SimRow" Width="1.4*" />
+              <DataGridTextColumn Header="Saving per month" Binding="{Binding Saving}" x:DataType="vm:SimRow" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

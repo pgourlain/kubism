@@ -123,6 +123,22 @@ Nothing writes to a cluster except through one class that checks the cluster's s
   <img src="docs/screenshots/production.png" alt="A production cluster with its red banner" width="860" />
 </p>
 
+### Capacity and cost
+
+A *Capacity* page, from what pods **request** (what the scheduler counts):
+
+- **Nodes**: requested against allocatable CPU, memory and pod slots for each node, the free room and how scattered it is, and the **pods that cannot be placed** with a verdict: *fits on node X, so look at taints or affinity*, *fragmented* (enough in total, but no single node has it), *too big for any node*, *cluster is full*, or *no node accepts pods*, next to what the scheduler said.
+- **Cost**: what each namespace, or any label (team, app…), requests, priced per month with the per-vCPU-hour and per-GiB-hour prices you set (saved with the cluster), and how much of the nodes' capacity is idle. Without prices it shows shares.
+- **What if**: applies the right-sizing recommendations to the requests, per namespace, and tells how much it saves (or costs: an under-provisioned workload asks for more) and how many nodes the new total would fit on.
+
+<p align="center">
+  <img src="docs/screenshots/capacity-nodes.png" alt="Node capacity, free room and pods that cannot be placed" width="860" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/capacity-what-if.png" alt="What the right-sizing recommendations would change per namespace" width="860" />
+</p>
+
 ### Right-sizing: requests and limits against real usage
 
 For every container of every workload, Kubism puts requests and limits next to what it really uses over days (default 7, up to 30), flags what is over- or under-provisioned (no request, CPU throttling, OOM kills, memory limit too tight) and computes the corrected `resources` block. History comes from, in order of preference: Prometheus (cAdvisor), Azure Monitor managed Prometheus (AKS), the VPA recommender, or local sampling of metrics-server (no infrastructure needed).

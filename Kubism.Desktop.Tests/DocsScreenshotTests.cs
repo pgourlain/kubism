@@ -240,4 +240,22 @@ public class DocsScreenshotTests
         vm.Selected = vm.Rows.First(r => r.Display == "argocd/payments");
         Shot(h, "gitops");
     }
+
+    [AvaloniaFact]
+    public async Task Capacity_pages()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Navigate(ws.FindNav(NavTarget.Capacity)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is CapacityViewModel v && v.Nodes.Count == 2 && v.Pending.Count > 0, what: "capacity");
+        var vm = (CapacityViewModel)ws.CurrentContent!;
+        Shot(h, "capacity-nodes");
+        vm.PriceCpu = "0.03"; vm.PriceMemory = "0.004";
+        vm.ApplyPricesCommand.Execute(null);
+        vm.Tab = CapacityViewModel.CostTab;
+        Shot(h, "capacity-cost");
+        vm.Tab = CapacityViewModel.WhatIfTab;
+        await UiHarness.WaitFor(() => vm.SimRows.Count > 0, what: "simulation");
+        Shot(h, "capacity-what-if");
+    }
 }

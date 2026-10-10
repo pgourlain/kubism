@@ -44,6 +44,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
         SeedTimeline(server);
         SeedSecurity(server);
         SeedGitOps(server);
+        SeedCapacity(server);
         server.NodeMetrics["node-1"] = ("1200m", "6Gi"); server.NodeMetrics["node-2"] = ("900m", "5Gi");
         var drifted = withDrift ? await StartDriftedAsync() : null;
         var devCluster = drifted is null ? "" : "- {name: demo-dev, cluster: {server: " + drifted.Url + "}}";
@@ -221,6 +222,10 @@ public sealed class DemoEnvironment : IAsyncDisposable
         Flux("""{"apiVersion":"helm.toolkit.fluxcd.io/v2","kind":"HelmRelease","metadata":{"name":"ingress-nginx","namespace":"flux-system"},"spec":{"chart":{"spec":{"chart":"ingress-nginx","version":"4.11.x","sourceRef":{"name":"ingress-nginx"}}}},"status":{"lastAppliedRevision":"4.11.2","conditions":[{"type":"Ready","status":"True","message":"Helm upgrade succeeded for release ingress-nginx/ingress-nginx.v3 with chart ingress-nginx@4.11.2","lastTransitionTime":"AGO2D"}]}}""");
         Flux("""{"apiVersion":"helm.toolkit.fluxcd.io/v2","kind":"HelmRelease","metadata":{"name":"podinfo","namespace":"flux-system"},"spec":{"suspend":true,"chart":{"spec":{"chart":"podinfo","version":"6.x","sourceRef":{"name":"podinfo"}}}},"status":{"conditions":[{"type":"Ready","status":"True","lastTransitionTime":"AGO6D"}]}}""");
     }
+
+    /// <summary>A batch pod that asks for more CPU than any node has free (the free room is spread over both nodes), for the Capacity page.</summary>
+    private static void SeedCapacity(FakeApiServer server) =>
+        server.Upsert((JsonObject)JsonNode.Parse("""{"apiVersion":"v1","kind":"Pod","metadata":{"name":"report-batch-0","namespace":"staging","labels":{"app":"report-batch"}},"spec":{"containers":[{"name":"main","image":"registry.example.com/report:3","resources":{"requests":{"cpu":"3","memory":"8Gi"}}}]},"status":{"phase":"Pending","conditions":[{"type":"PodScheduled","status":"False","reason":"Unschedulable","message":"0/2 nodes are available: 2 Insufficient cpu."}]}}""")!, silent: true);
 
     private static async Task<FakeApiServer> StartDriftedAsync()
     {
