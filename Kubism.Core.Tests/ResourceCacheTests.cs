@@ -146,10 +146,11 @@ public class ResourceCacheTests
         t.WatchFailure = () => fail ? new HttpRequestException("boom") : null;
         t.EndWatches();
         await WaitFor(() => lease.Informer.State == InformerState.Reconnecting);
-        lock (health) Assert.Contains(false, health);
+        // The state is set before its handlers run: the health change follows a moment later, so wait for it.
+        await WaitFor(() => { lock (health) return health.Contains(false); });
         fail = false;
         await WaitFor(() => lease.Informer.State == InformerState.Live && t.ActiveWatches == 1);
-        lock (health) Assert.True(health[^1]);
+        await WaitFor(() => { lock (health) return health.Count > 0 && health[^1]; });
     }
 
     [Fact]
