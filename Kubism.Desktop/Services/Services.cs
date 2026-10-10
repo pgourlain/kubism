@@ -29,7 +29,7 @@ public interface IBrowserLauncher
 
 public sealed record ConfirmRequest(string Title, string Message, string ConfirmText = "OK", bool Destructive = false);
 
-public sealed record AboutInfo(string Name, string Tagline, string Version, string Runtime, string Os, string License, string Url, string Diagnostics);
+public sealed record AboutInfo(string Name, string Tagline, string Version, string Runtime, string Os, string License, string Url, string Diagnostics, string? LicensesPath = null, string LicensesUrl = "");
 
 public sealed record SignInHandle(Action<string> OnLine, CancellationToken Token, Action Close);
 

@@ -18,13 +18,10 @@ We do **not** use the typed models or `Watch<T>`.
 * After removing the `exec` section the library refuses a user without credentials; a placeholder token is set and our handler overrides the header.
 * `KubernetesClient.Aot` was not needed: nothing we call depends on reflection-based model serialization.
 
-## AOT status
-* Our own code: `Kubism.Core` is built with `IsAotCompatible` and warnings as errors (zero trim/AOT warnings). JSON for our own types uses a source-generated context; Kubernetes objects are `JsonNode`s.
-* `Kubism.Kube` suppresses a few IL warnings that originate in `KubernetesClient`; they are the thing the spike must settle.
-* `spikes/aot-client` publishes with `-p:PublishAot=true`; run `spikes/aot-client/run.sh` on each OS and paste the result below. **Releases stay self-contained JIT builds until the spike is green on all three OSes.**
+## AOT status (updated)
+**Releases are Native AOT.** What it took:
 
-| OS | Result |
-|---|---|
-| macOS arm64 | compiles (warnings only from KubernetesClient and YamlDotNet); link failed locally on `-lssl`, runtime not exercised: see `spikes/aot-client/RESULT-osx-arm64.md` |
-| Linux x64 | pending: run on Ubuntu 24.04 |
-| Windows x64 | pending |
+* `KubernetesClient`'s kubeconfig loader deserializes into types by reflection and fails at runtime under AOT. Kubism reads the kubeconfig itself (`KubeConfigReader`, YamlDotNet representation model) and builds the `KubernetesClientConfiguration` from it; exec plugins were already ours. With that, list, watch, patch and the exec/port-forward WebSockets run in the AOT binary (spike `spikes/aot-client`: version, Table list, watch and a v5 exec socket against the fake API server).
+* The remaining trim/AOT warnings come from `KubernetesClient` (model JSON converters we never use), `YamlDotNet` and Avalonia's DataGrid internals; none is in our code paths.
+* Verified on macOS arm64 with the official SDK (the Homebrew SDK cannot link: `-lssl`): the AOT executable was driven by hand (catalog, connect, live lists, details with the TextMate YAML editor, logs, an exec terminal, right-sizing against the fake Prometheus, command palette, Cmd+Q in 0.15 s) and the MCP test-suite passes against it (`KUBISM_MCP_EXE=<path> dotnet test --project Kubism.Mcp.Tests`).
+* Linux and Windows AOT builds come from the release workflow; they have not been run by hand.

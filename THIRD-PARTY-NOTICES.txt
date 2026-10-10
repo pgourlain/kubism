@@ -1,0 +1,398 @@
+Kubism - third-party notices
+============================
+
+Kubism itself is released under the MIT License (see LICENSE).
+It includes or links the software listed below. Each component remains under its own license;
+the license texts shipped by the packages are in the "third-party" folder next to this file.
+
+NuGet packages
+--------------
+
+Avalonia.Angle.Windows.Natives 2.1.27548.20260419
+  License: see LICENSE
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/
+  Text: third-party/Avalonia.Angle.Windows.Natives-LICENSE.txt
+
+Avalonia.AvaloniaEdit 12.0.0
+  License: MIT
+  Copyright 2017-2026 © The AvaloniaUI Project
+
+Avalonia.BuildServices 11.3.2
+  License: MIT
+  Copyright 2023-2025 © The AvaloniaUI Project
+  https://avaloniaui.net/
+
+Avalonia.Controls.DataGrid 12.1.2
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Desktop 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Fonts.Inter 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.FreeDesktop.AtSpi 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.FreeDesktop 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.HarfBuzz 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Native 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Remote.Protocol 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Skia 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Themes.Fluent 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.Win32 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia.X11 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+Avalonia 12.1.4
+  License: MIT
+  Copyright 2013-2026 © The AvaloniaUI Project
+  https://avaloniaui.net/?utm_source=nuget&utm_medium=referral&utm_content=project_homepage_link
+
+AvaloniaEdit.TextMate 12.0.0
+  License: MIT
+  Copyright 2017-2026 © The AvaloniaUI Project
+
+CommunityToolkit.Mvvm 8.4.2
+  License: MIT
+  (c) .NET Foundation and Contributors. All rights reserved.
+  https://github.com/CommunityToolkit/dotnet
+  Text: third-party/CommunityToolkit.Mvvm-LICENSE.md
+
+Fractions 7.3.0
+  License: see license.txt
+  Copyright 2013-2023 Daniel Mueller
+  https://github.com/danm-de/Fractions
+  Text: third-party/Fractions-license.txt
+
+HarfBuzzSharp.NativeAssets.Linux 8.3.1.3
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/HarfBuzzSharp.NativeAssets.Linux-LICENSE.txt
+
+HarfBuzzSharp.NativeAssets.WebAssembly 8.3.1.3
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/HarfBuzzSharp.NativeAssets.WebAssembly-LICENSE.txt
+
+HarfBuzzSharp.NativeAssets.Win32 8.3.1.3
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/HarfBuzzSharp.NativeAssets.Win32-LICENSE.txt
+
+HarfBuzzSharp.NativeAssets.macOS 8.3.1.3
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/HarfBuzzSharp.NativeAssets.macOS-LICENSE.txt
+
+HarfBuzzSharp 8.3.1.3
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/HarfBuzzSharp-LICENSE.txt
+
+KubernetesClient 19.0.2
+  License: Apache-2.0
+  2017 The Kubernetes Project Authors
+  https://github.com/kubernetes-client/csharp
+
+MicroCom.Runtime 0.11.6
+  License: MIT
+  Copyright 2021 © Nikita Tsukanov
+
+Microsoft.Extensions.AI.Abstractions 10.8.3
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+
+Microsoft.Extensions.Caching.Abstractions 10.0.10
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Caching.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.Abstractions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.Binder 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.Binder-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.CommandLine 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.CommandLine-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.EnvironmentVariables 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.EnvironmentVariables-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.FileExtensions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.FileExtensions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.Json 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.Json-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration.UserSecrets 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration.UserSecrets-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Configuration 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Configuration-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.DependencyInjection.Abstractions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.DependencyInjection.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.DependencyInjection 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.DependencyInjection-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Diagnostics.Abstractions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Diagnostics.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Diagnostics 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Diagnostics-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.FileProviders.Abstractions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.FileProviders.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.FileProviders.Physical 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.FileProviders.Physical-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.FileSystemGlobbing 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.FileSystemGlobbing-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Hosting.Abstractions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Hosting.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Hosting 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Hosting-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging.Abstractions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging.Abstractions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging.Configuration 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging.Configuration-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging.Console 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging.Console-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging.Debug 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging.Debug-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging.EventLog 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging.EventLog-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging.EventSource 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging.EventSource-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Logging 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Logging-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Options.ConfigurationExtensions 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Options.ConfigurationExtensions-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Options 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Options-THIRD-PARTY-NOTICES.txt
+
+Microsoft.Extensions.Primitives 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/Microsoft.Extensions.Primitives-THIRD-PARTY-NOTICES.txt
+
+ModelContextProtocol.Core 2.2.0
+  License: Apache-2.0
+  © Model Context Protocol a Series of LF Projects, LLC.
+  https://csharp.sdk.modelcontextprotocol.io/
+
+ModelContextProtocol 2.2.0
+  License: Apache-2.0
+  © Model Context Protocol a Series of LF Projects, LLC.
+  https://csharp.sdk.modelcontextprotocol.io/
+
+Onigwrap 1.0.10
+  License: MIT
+  Copyright (c) 2024 Aikawa Yataro
+  https://github.com/aikawayataro/Onigwrap
+  Text: third-party/Onigwrap-THIRD-PARTY-NOTICES.txt
+
+SkiaSharp.NativeAssets.Linux 3.119.4
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/SkiaSharp.NativeAssets.Linux-LICENSE.txt
+
+SkiaSharp.NativeAssets.WebAssembly 3.119.4
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/SkiaSharp.NativeAssets.WebAssembly-LICENSE.txt
+
+SkiaSharp.NativeAssets.Win32 3.119.4
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/SkiaSharp.NativeAssets.Win32-LICENSE.txt
+
+SkiaSharp.NativeAssets.macOS 3.119.4
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/SkiaSharp.NativeAssets.macOS-LICENSE.txt
+
+SkiaSharp 3.119.4
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://go.microsoft.com/fwlink/?linkid=868515
+  Text: third-party/SkiaSharp-LICENSE.txt
+
+System.Diagnostics.EventLog 10.0.12
+  License: MIT
+  © Microsoft Corporation. All rights reserved.
+  https://dot.net/
+  Text: third-party/System.Diagnostics.EventLog-THIRD-PARTY-NOTICES.txt
+
+TextMateSharp.Grammars 2.0.3
+  License: MIT
+  Authors: Daniel Peñalba
+  https://github.com/danipen/TextMateSharp
+
+TextMateSharp 2.0.3
+  License: MIT
+  Authors: Daniel Peñalba
+  https://github.com/danipen/TextMateSharp
+
+Tmds.DBus.Protocol 0.94.1
+  License: MIT
+  Tom Deseyn
+
+YamlDotNet 18.1.0
+  License: MIT
+  Copyright (c) Antoine Aubry and contributors
+  https://github.com/aaubry/YamlDotNet/wiki
+
+Fonts
+-----
+
+Inter (Avalonia.Fonts.Inter): SIL Open Font License 1.1. https://rsms.me/inter/
+
+Icons
+-----
+
+The Kubism icon and the vector icons in the app are original work released under the MIT License.

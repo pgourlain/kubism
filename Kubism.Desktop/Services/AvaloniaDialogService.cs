@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Automation;
 using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -135,6 +136,12 @@ public sealed class AvaloniaDialogService : IDialogService
         var link = new Button { Content = info.Url, Classes = { "link" }, HorizontalAlignment = HorizontalAlignment.Center };
         link.Click += (_, _) => new SystemBrowserLauncher().Open(info.Url);
         root.Children.Add(link);
+        // Third-party licenses: the file shipped next to the executable, else the copy in the repository.
+        var lic = new Button { Content = "Third-party licenses", Classes = { "link" }, HorizontalAlignment = HorizontalAlignment.Center };
+        lic.Click += (_, _) => new SystemBrowserLauncher().Open(info.LicensesPath ?? info.LicensesUrl);
+        lic.IsVisible = info.LicensesPath is not null || !string.IsNullOrEmpty(info.LicensesUrl);
+        AutomationProperties.SetName(lic, "Third-party licenses");
+        root.Children.Add(lic);
         var copy = new Button { Content = "Copy diagnostics", Classes = { "link" }, HorizontalAlignment = HorizontalAlignment.Center };
         copy.Click += async (_, _) => await new AvaloniaClipboardService().SetTextAsync(info.Diagnostics);
         root.Children.Add(copy);

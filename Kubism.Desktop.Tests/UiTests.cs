@@ -152,6 +152,8 @@ public class UiTests
         Assert.True(h.Main.PaletteOpen);
         h.Main.Palette.Query = "deploy";
         Assert.StartsWith("Deployment", h.Main.Palette.Results[0].Title);
+        h.Main.Palette.Query = "pods";
+        Assert.StartsWith("Pod", h.Main.Palette.Results[0].Title);
         h.Main.Palette.Query = "po";
         Assert.StartsWith("Pod", h.Main.Palette.Results[0].Title);
         await h.Main.Palette.ExecuteAsync();

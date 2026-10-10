@@ -409,3 +409,30 @@ public class UiAboutLayoutTests
         Assert.True(Math.Abs(okCenter!.Value - winCenter!.Value) < 2, $"OK centre {okCenter}, window centre {winCenter}");
     }
 }
+
+public class UiLicensesTests
+{
+    [AvaloniaFact]
+    public async Task About_links_to_third_party_licenses()
+    {
+        await using var h = await UiHarness.StartAsync();
+        await h.Main.ShowAboutAsync();
+        var info = h.Dialogs.About!;
+        Assert.StartsWith("https://github.com/pgourlain/kubism/blob/main/THIRD-PARTY-NOTICES.txt", info.LicensesUrl);
+        // And the real dialog shows the link.
+        string? seen = null;
+        void OnOpened(Window w) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { seen = w.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Content as string == "Third-party licenses")?.Content as string; w.Close(true); }, Avalonia.Threading.DispatcherPriority.Background);
+        AvaloniaDialogService.DialogOpened += OnOpened;
+        try { await new AvaloniaDialogService().ShowAboutAsync(info); } finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
+        Assert.Equal("Third-party licenses", seen);
+        Assert.True(File.Exists(Path.Combine(FindRoot(), "THIRD-PARTY-NOTICES.txt")));
+        Assert.Contains("Avalonia", File.ReadAllText(Path.Combine(FindRoot(), "THIRD-PARTY-NOTICES.txt")));
+    }
+
+    private static string FindRoot()
+    {
+        var d = new DirectoryInfo(AppContext.BaseDirectory);
+        while (d is not null && !File.Exists(Path.Combine(d.FullName, "Kubism.slnx"))) d = d.Parent;
+        return d!.FullName;
+    }
+}

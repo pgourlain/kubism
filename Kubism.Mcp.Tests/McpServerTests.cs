@@ -43,11 +43,15 @@ public sealed class McpFixture : IAsyncDisposable
         var id = KubeconfigCatalog.ParseFile(f.Kubeconfig)[0].Id;
         var meta = settings.GetMetadata(id); meta.PrometheusUrl = f.Prometheus.Url; settings.SetMetadata(id, meta);
         configure?.Invoke(settings, id);
-        var args = new List<string> { FindKubismDll(), "--mcp", "--data", data };
+        // KUBISM_MCP_EXE: drive a published (Native AOT) executable instead of `dotnet Kubism.dll`.
+        var exe = Environment.GetEnvironmentVariable("KUBISM_MCP_EXE");
+        var args = new List<string>();
+        if (exe is null) args.Add(FindKubismDll());
+        args.AddRange(["--mcp", "--data", data]);
         args.AddRange(extraArgs);
         var transport = new StdioClientTransport(new StdioClientTransportOptions
         {
-            Name = "kubism", Command = "dotnet", Arguments = args,
+            Name = "kubism", Command = exe ?? "dotnet", Arguments = args,
             EnvironmentVariables = new Dictionary<string, string?> { ["KUBECONFIG"] = f.Kubeconfig, ["HOME"] = f.Dir, ["USERPROFILE"] = f.Dir, ["KUBISM_DATA"] = data },
         });
         f.Client = await McpClient.CreateAsync(transport);

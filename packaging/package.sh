@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Self-contained package for one runtime into artifacts/.
 #   packaging/package.sh <rid: win-x64|linux-x64|osx-arm64|osx-x64> <version>
-# Native AOT is not used yet (see docs/adr/0001-kubernetes-client.md); set AOT=1 to try it.
+# Native AOT by default (docs/adr/0001-kubernetes-client.md); AOT=0 gives a self-contained JIT build.
 set -euo pipefail
 RID="${1:?rid}"; VERSION="${2:-0.1.0}"
 cd "$(dirname "$0")/.."
 OUT="artifacts"; PUB="$OUT/publish-$RID"
 rm -rf "$PUB"; mkdir -p "$OUT"
-AOT_ARGS=(); [[ "${AOT:-0}" == "1" ]] && AOT_ARGS=(-p:PublishAot=true) || AOT_ARGS=(-p:PublishSingleFile=false)
-dotnet publish Kubism.Desktop -c Release -r "$RID" --self-contained -p:Version="$VERSION" -p:DebugType=none "${AOT_ARGS[@]}" -o "$PUB"
+NOTICES() { cp LICENSE THIRD-PARTY-NOTICES.txt "$1/"; rm -rf "$1/third-party"; cp -R third-party "$1/third-party"; }
+# Native AOT is the default (csproj); AOT=0 builds a self-contained JIT package instead.
+AOT_ARGS=(); [[ "${AOT:-1}" == "0" ]] && AOT_ARGS=(-p:PublishAot=false)
+dotnet publish Kubism.Desktop -c Release -r "$RID" -p:Version="$VERSION" ${AOT_ARGS[@]+"${AOT_ARGS[@]}"} -o "$PUB"
 
+find "$PUB" \( -name "*.pdb" -o -name "*.dSYM" -o -name "*.dbg" \) -prune -exec rm -rf {} + 2>/dev/null || true
+NOTICES "$PUB"
 case "$RID" in
   win-*)
     (cd "$PUB" && (command -v zip >/dev/null && zip -qr "../Kubism-$VERSION-$RID.zip" . || powershell -NoProfile -Command "Compress-Archive -Path '*' -DestinationPath '../Kubism-$VERSION-$RID.zip' -Force"))
@@ -47,8 +51,9 @@ PLIST
     rm -rf "$STAGE"; mkdir -p "$STAGE/opt/kubism" "$STAGE/usr/share/applications"
     cp -R "$PUB"/. "$STAGE/opt/kubism/"
     cp Kubism.Desktop/Assets/kubism.png "$STAGE/opt/kubism/kubism.png"
+    cp Kubism.Desktop/Assets/kubism.png "$STAGE/usr/share/kubism.png" 2>/dev/null || true
     cp packaging/kubism.desktop "$STAGE/usr/share/applications/kubism.desktop"
-    cp packaging/PKGBUILD "$OUT/PKGBUILD" 2>/dev/null || true
+    cp packaging/arch/PKGBUILD "$OUT/PKGBUILD"
     tar -C "$OUT" -czf "$OUT/Kubism-$VERSION-$RID.tar.gz" "kubism-$VERSION"
     ;;
 esac

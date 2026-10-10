@@ -46,34 +46,14 @@ public sealed class KubeTransport : IKubeTransport
 
     private static (KubernetesClientConfiguration, DelegatingHandler[]) BuildConfig(ClusterEntry entry, IExecPluginObserver? observer)
     {
-        var file = new FileInfo(entry.FilePath);
-        K8SConfiguration cfg;
-        try { cfg = KubernetesClientConfiguration.LoadKubeConfig(file); }
-        catch (Exception ex) { throw new KubeConnectionException($"Cannot read kubeconfig {entry.FilePath}: {ex.Message}", ex); }
-
-        // Run exec plugins ourselves: stderr capture for device-code login and refresh-before-expiry.
+        var read = KubeConfigReader.Read(entry);
         var handlers = new List<DelegatingHandler>();
-        var ctx = cfg.Contexts?.FirstOrDefault(c => c.Name == entry.ContextName)
-                  ?? throw new KubeConnectionException($"Context '{entry.ContextName}' not found in {entry.FilePath}");
-        var user = cfg.Users?.FirstOrDefault(u => u.Name == ctx.ContextDetails.User);
-        var exec = user?.UserCredentials?.ExternalExecution;
-        if (exec is not null)
-        {
-            var env = exec.EnvironmentVariables?.ToDictionary(e => e["name"], e => e["value"]) ?? [];
-            var spec = new ExecSpec(exec.Command, exec.Arguments?.ToList() ?? [], env, null, true);
-            handlers.Add(new ExecAuthHandler(new ExecCredentialProvider(spec, observer)));
-            user!.UserCredentials.ExternalExecution = null;
-            user.UserCredentials.Token = "exec-plugin"; // placeholder so the library accepts the context; our handler sets the real token
-        }
-        try
-        {
-            var config = KubernetesClientConfiguration.BuildConfigFromConfigObject(cfg, entry.ContextName);
-            // The client library never sends credentials over plain HTTP; the fake API server (tests, --demo) needs them.
-            if (exec is null && config.Host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(config.AccessToken))
-                handlers.Add(new StaticBearerHandler(config.AccessToken));
-            return (config, [.. handlers]);
-        }
-        catch (Exception ex) { throw new KubeConnectionException($"Invalid kubeconfig context '{entry.ContextName}': {ex.Message}", ex); }
+        // Exec plugins are run by us: stderr capture for device-code login, refresh before expiry and on 401.
+        if (read.Exec is { } spec) handlers.Add(new ExecAuthHandler(new ExecCredentialProvider(spec, observer)));
+        // The client library never sends credentials over plain HTTP; the fake API server (tests, --demo) needs them.
+        else if (read.Config.Host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(read.Config.AccessToken))
+            handlers.Add(new StaticBearerHandler(read.Config.AccessToken));
+        return (read.Config, [.. handlers]);
     }
 
     private Uri Url(string path) => new(_baseUri, path.TrimStart('/'));

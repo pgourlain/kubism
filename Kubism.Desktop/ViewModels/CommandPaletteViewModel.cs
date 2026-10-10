@@ -69,6 +69,8 @@ public sealed partial class CommandPaletteViewModel : ViewModelBase
     {
         var t = i.Title; var s = i.Subtitle;
         // Short names: "po" must find Pod before anything that merely contains it.
+        // The plural resource name typed in full ("pods", "deployments") must find that kind first.
+        if (s.Equals(q, StringComparison.OrdinalIgnoreCase) || s.StartsWith(q + ".", StringComparison.OrdinalIgnoreCase)) return 110;
         if (t.StartsWith(q, StringComparison.OrdinalIgnoreCase)) return 100 - Math.Min(t.Length, 50) / 2;
         var inParens = t.IndexOf('(');
         if (inParens > 0 && t[(inParens + 1)..].Split([',', ' ', ')'], StringSplitOptions.RemoveEmptyEntries).Any(x => x.Equals(q, StringComparison.OrdinalIgnoreCase))) return 95;

@@ -3,15 +3,21 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to package (without the v)
+        required: true
 
 jobs:
   package:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - { os: windows-latest, rid: win-x64 }
           - { os: macos-latest, rid: osx-arm64 }
-          - { os: macos-13, rid: osx-x64 }
+          - { os: macos-15-intel, rid: osx-x64 }
           - { os: ubuntu-latest, rid: linux-x64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -20,15 +26,54 @@ jobs:
         with:
           global-json-file: global.json
           dotnet-version: 10.0.x
-      - name: Package
+      - name: Native AOT prerequisites (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      - name: Version
+        id: v
         shell: bash
-        run: packaging/package.sh ${{ matrix.rid }} "${GITHUB_REF_NAME#v}"
+        run: echo "version=${{ github.event.inputs.version || github.ref_name }}" | sed 's/version=v/version=/' >> "$GITHUB_OUTPUT"
+      - name: Package (Native AOT)
+        shell: bash
+        run: packaging/package.sh ${{ matrix.rid }} "${{ steps.v.outputs.version }}"
       - uses: actions/upload-artifact@v4
         with:
           name: kubism-${{ matrix.rid }}
-          path: artifacts/*.*
-  release:
+          path: |
+            artifacts/Kubism-*.zip
+            artifacts/Kubism-*.dmg
+            artifacts/Kubism-*.tar.gz
+
+  # Arch Linux / Omarchy: a real .pkg.tar.zst built from the Linux tarball in an Arch container.
+  arch:
     needs: package
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: kubism-linux-x64
+          path: dist
+      - name: Version
+        id: v
+        run: echo "version=$(echo '${{ github.event.inputs.version || github.ref_name }}' | sed 's/^v//')" >> "$GITHUB_OUTPUT"
+      - name: Build package
+        env:
+          KUBISM_VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          pacman -Syu --noconfirm base-devel sudo
+          useradd -m builder
+          mkdir /build && cp packaging/arch/PKGBUILD dist/Kubism-*-linux-x64.tar.gz /build/ && chown -R builder /build
+          cd /build && sudo -u builder env KUBISM_VERSION="$KUBISM_VERSION" makepkg -f --nodeps --skipchecksums
+          mkdir -p "$GITHUB_WORKSPACE/arch" && cp /build/*.pkg.tar.zst "$GITHUB_WORKSPACE/arch/"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kubism-arch
+          path: arch/*.pkg.tar.zst
+
+  release:
+    needs: [package, arch]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -41,3 +86,4 @@ jobs:
         with:
           files: dist/*
           generate_release_notes: true
+          tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref_name }}

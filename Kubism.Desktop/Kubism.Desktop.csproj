@@ -4,8 +4,14 @@
     <AssemblyName>Kubism</AssemblyName>
     <RootNamespace>Kubism.Desktop</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Kubism.ico</ApplicationIcon>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Native AOT for releases (like CinnabarSharp). Opt out with -p:PublishAot=false. -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <!-- Native AOT only strips debug symbols from the shipped folder -->
   </PropertyGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\kubism.png" />

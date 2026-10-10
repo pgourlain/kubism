@@ -304,7 +304,9 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     {
         var v = typeof(MainViewModel).Assembly.GetName().Version;
         return Dialogs.ShowAboutAsync(new AboutInfo("Kubism", "Inspect. Steer. Monitor.", v is null ? "0.1.0" : $"{v.Major}.{v.Minor}.{v.Build}",
-            $".NET {Environment.Version}", System.Runtime.InteropServices.RuntimeInformation.OSDescription, "MIT licensed", "https://github.com/pgourlain/kubism", DiagnosticsText()));
+            $".NET {Environment.Version}", System.Runtime.InteropServices.RuntimeInformation.OSDescription, "MIT licensed", "https://github.com/pgourlain/kubism", DiagnosticsText(),
+            System.IO.File.Exists(System.IO.Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt")) ? System.IO.Path.Combine(AppContext.BaseDirectory, "THIRD-PARTY-NOTICES.txt") : null,
+            "https://github.com/pgourlain/kubism/blob/main/THIRD-PARTY-NOTICES.txt"));
     }
 
     public string DiagnosticsText()
