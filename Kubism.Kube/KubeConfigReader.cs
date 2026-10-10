@@ -1,6 +1,7 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using k8s;
+using Kubism.Core;
 using Kubism.Core.Api;
 using Kubism.Core.Catalog;
 using YamlDotNet.RepresentationModel;
@@ -77,7 +78,30 @@ public static class KubeConfigReader
                 config.AccessToken = "exec-plugin";
             }
         }
+        AppLog.Info($"Kubeconfig {entry.FilePath}, context {entry.ContextName}, user '{S(ctx, "user")}': keys {Keys(user)}; {DescribeToken(config.AccessToken, exec is not null)}");
         return new Result(config, exec);
+    }
+
+    private static string Keys(YamlMappingNode? user) =>
+        user is null ? "(no user)" : string.Join(",", user.Children.Keys.OfType<YamlScalarNode>().Select(k => k.Value));
+
+    /// <summary>Length and, for a JWT, the non-secret claims that explain a 401 (expiry, audience, issuer). Never the token itself.</summary>
+    internal static string DescribeToken(string? token, bool viaExec)
+    {
+        if (viaExec) return "token from exec plugin";
+        if (string.IsNullOrEmpty(token)) return "no token";
+        var parts = token.Split('.');
+        if (parts.Length != 3) return $"static token, {token.Length} chars, not a JWT";
+        try
+        {
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            payload = payload.PadRight(payload.Length + (4 - payload.Length % 4) % 4, '=');
+            var json = System.Text.Json.Nodes.JsonNode.Parse(Convert.FromBase64String(payload)) as System.Text.Json.Nodes.JsonObject;
+            var exp = json?["exp"]?.GetValue<long>() is { } e ? DateTimeOffset.FromUnixTimeSeconds(e) : (DateTimeOffset?)null;
+            var state = exp is null ? "no exp" : exp < DateTimeOffset.UtcNow ? $"EXPIRED at {exp:O}" : $"expires {exp:O}";
+            return $"static JWT, {token.Length} chars, {state}, aud={json?["aud"]}, iss={json?["iss"]}";
+        }
+        catch (Exception ex) { return $"static token, {token.Length} chars, JWT payload unreadable ({ex.GetType().Name})"; }
     }
 
     private static YamlMappingNode? Named(YamlMappingNode root, string key, string name) =>

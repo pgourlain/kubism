@@ -68,7 +68,19 @@ public sealed class KubeTransport : IKubeTransport
         {
             var res = await _http.SendAsync(req, option, ct).ConfigureAwait(false);
             // Path only (no query, headers or body): enough to tell which call the server refused.
-            if (!res.IsSuccessStatusCode) AppLog.Warn($"{req.Method} {_baseUri.Host}{req.RequestUri?.AbsolutePath} -> {(int)res.StatusCode} {res.ReasonPhrase}");
+            if (!res.IsSuccessStatusCode)
+            {
+                var detail = "";
+                if (res.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    // The API server's Status message (e.g. "Unauthorized", token expired, audience) explains the refusal; it holds no secret.
+                    try { await res.Content.LoadIntoBufferAsync().ConfigureAwait(false); detail = " body: " + (await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false) is { Length: > 300 } b ? b[..300] : await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false)); }
+                    catch (Exception) { }
+                    if (res.Headers.WwwAuthenticate.Count > 0) detail += $" www-authenticate: {res.Headers.WwwAuthenticate}";
+                    detail += $" sent-auth: {(req.Headers.Authorization is { } a ? a.Scheme : "none")}";
+                }
+                AppLog.Warn($"{req.Method} {_baseUri.Host}{req.RequestUri?.AbsolutePath} -> {(int)res.StatusCode} {res.ReasonPhrase}{detail}");
+            }
             return res;
         }
         catch (OperationCanceledException) { throw; }
