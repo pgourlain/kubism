@@ -153,6 +153,7 @@ All three are pure Core logic over objects already loaded, unit-tested without a
 - `RelationGraph` (`Core/Views`): the neighbourhood of one object (owners/owned, Service → Pod by selector, Ingress → Service, workload → ConfigMap/Secret/PVC/ServiceAccount, PVC → PV, Pod → Node, HPA → target) with a layered layout and per-node health. Config kinds are leaves (not expanded) unless they are the root; Secret `data` is stripped before the graph is built. Drawn by `RelationGraphControl` in the details panel's Graph tab.
 - `ClusterCompare` + `LineDiff`: compares the same kind between two clusters or namespaces after dropping server-generated fields; **Secret values never reach a diff** (a key is masked, and marked `A`/`B` when it differs).
 - `EventTimeline`: one time axis for a workload or pod (events, rollouts per replica set revision, pod creations, last container termination with OOM kills, failing conditions).
+- `WorkloadAudit`, `RbacAnalysis`, `CertificateScan` (`Core/Security`): the read-only Security page. Pod-spec hardening rules; risky RBAC grants and the rules a subject holds; certificate expiry from TLS secrets (only `tls.crt` is read, never the key) and cert-manager `Certificate` status.
 - `SearchQuery`: global search syntax (`text`, `key=value`, `image:`, `ns:`, `kind:`, AND).
 
 ### Logs, exec, port-forward

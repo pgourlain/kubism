@@ -164,7 +164,7 @@ public sealed partial class CompareViewModel : ViewModelBase, IClosable
         finally { IsRunning = false; }
     }
 
-    private static async Task<List<KubeObject>> ListAllAsync(WorkspaceViewModel ws, ResourceKind kind, string? ns, CancellationToken ct)
+    internal static async Task<List<KubeObject>> ListAllAsync(WorkspaceViewModel ws, ResourceKind kind, string? ns, CancellationToken ct)
     {
         var items = new List<KubeObject>();
         string? cont = null;

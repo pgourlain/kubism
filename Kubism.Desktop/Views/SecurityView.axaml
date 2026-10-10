@@ -1,0 +1,107 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:sec="using:Kubism.Core.Security"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.SecurityView"
+             x:DataType="vm:SecurityViewModel">
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <StackPanel>
+        <TextBlock Text="Security" Classes="h1" />
+        <TextBlock Text="Read-only checks on the selected namespaces. Nothing is changed, and Secret values are never shown (only the expiry of public TLS certificates is read)." Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
+        <CheckBox Content="High only" IsChecked="{Binding HighOnly}" />
+        <Button Content="Open object" Command="{Binding OpenSelectedCommand}" IsEnabled="{Binding Selected, Converter={x:Static app:Converters.NotNull}}" ToolTip.Tip="Open the selected finding's object" />
+        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </Grid>
+    <TabControl Grid.Row="1" SelectedIndex="{Binding Tab, Mode=TwoWay}">
+      <TabItem Header="Workloads">
+        <Grid RowDefinitions="Auto,Auto,*" Margin="0,8,0,0">
+          <TextBlock Text="{Binding AuditSummary}" />
+          <TextBlock Grid.Row="1" Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
+          <DataGrid Grid.Row="2" Margin="0,6,0,0" ItemsSource="{Binding AuditRows}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Workload findings">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="Level" Width="80">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FindingRow">
+                    <Border Classes="pill" BorderBrush="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" Margin="4,2" HorizontalAlignment="Left">
+                      <TextBlock Text="{Binding Level}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Workload" Binding="{Binding Display}" x:DataType="vm:FindingRow" Width="1.2*" />
+              <DataGridTextColumn Header="Finding" Binding="{Binding Title}" x:DataType="vm:FindingRow" Width="1.6*" />
+              <DataGridTextColumn Header="Why it matters" Binding="{Binding Detail}" x:DataType="vm:FindingRow" Width="2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Access (RBAC)">
+        <Grid RowDefinitions="Auto,*,Auto,Auto,*" Margin="0,8,0,0" RowSpacing="6">
+          <TextBlock Text="{Binding AccessSummary}" />
+          <DataGrid Grid.Row="1" ItemsSource="{Binding AccessRows}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Access findings">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="Level" Width="80">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:FindingRow">
+                    <Border Classes="pill" BorderBrush="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" Margin="4,2" HorizontalAlignment="Left">
+                      <TextBlock Text="{Binding Level}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                    </Border>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Object" Binding="{Binding Display}" x:DataType="vm:FindingRow" Width="1.2*" />
+              <DataGridTextColumn Header="Finding" Binding="{Binding Title}" x:DataType="vm:FindingRow" Width="2*" />
+              <DataGridTextColumn Header="Why it matters" Binding="{Binding Detail}" x:DataType="vm:FindingRow" Width="2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+          <StackPanel Grid.Row="2" Spacing="4" Margin="0,8,0,0">
+            <TextBlock Text="WHO CAN DO WHAT" Classes="sectionTitle" />
+            <Grid ColumnDefinitions="*,Auto">
+              <AutoCompleteBox Text="{Binding SubjectQuery, Mode=TwoWay}" ItemsSource="{Binding KnownSubjects}" FilterMode="Contains" Watermark="ServiceAccount ns/name · User name · Group name" AutomationProperties.Name="Subject" />
+              <Button Grid.Column="1" Content="Show rules" Command="{Binding LookupCommand}" Margin="6,0,0,0" />
+            </Grid>
+          </StackPanel>
+          <TextBlock Grid.Row="3" Text="{Binding SubjectSummary}" Classes="muted" />
+          <DataGrid Grid.Row="4" ItemsSource="{Binding SubjectRules}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Granted rules">
+            <DataGrid.Columns>
+              <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" x:DataType="sec:GrantedRule" />
+              <DataGridTextColumn Header="Role" Binding="{Binding Role}" x:DataType="sec:GrantedRule" Width="*" />
+              <DataGridTextColumn Header="API groups" Binding="{Binding ApiGroups}" x:DataType="sec:GrantedRule" />
+              <DataGridTextColumn Header="Resources" Binding="{Binding Resources}" x:DataType="sec:GrantedRule" Width="1.5*" />
+              <DataGridTextColumn Header="Verbs" Binding="{Binding Verbs}" x:DataType="sec:GrantedRule" Width="1.5*" />
+              <DataGridTextColumn Header="Via binding" Binding="{Binding Binding}" x:DataType="sec:GrantedRule" Width="*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+      <TabItem Header="Certificates">
+        <Grid RowDefinitions="Auto,*" Margin="0,8,0,0" RowSpacing="6">
+          <TextBlock Text="{Binding CertificateSummary}" />
+          <DataGrid Grid.Row="1" ItemsSource="{Binding Certificates}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Certificates">
+            <DataGrid.Columns>
+              <DataGridTemplateColumn Header="Expires" Width="130">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate x:DataType="vm:CertificateRow">
+                    <TextBlock Text="{Binding Expires}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
+              <DataGridTextColumn Header="Date" Binding="{Binding NotAfter}" x:DataType="vm:CertificateRow" />
+              <DataGridTextColumn Header="Name" Binding="{Binding Display}" x:DataType="vm:CertificateRow" Width="*" />
+              <DataGridTextColumn Header="Source" Binding="{Binding Info.Source}" x:DataType="vm:CertificateRow" Width="1.2*" />
+              <DataGridTextColumn Header="Subject" Binding="{Binding Info.Subject}" x:DataType="vm:CertificateRow" Width="1.2*" />
+              <DataGridTextColumn Header="Issuer" Binding="{Binding Info.Issuer}" x:DataType="vm:CertificateRow" Width="*" />
+              <DataGridTextColumn Header="Names" Binding="{Binding Info.Detail}" x:DataType="vm:CertificateRow" Width="2*" />
+            </DataGrid.Columns>
+          </DataGrid>
+        </Grid>
+      </TabItem>
+    </TabControl>
+  </Grid>
+</UserControl>

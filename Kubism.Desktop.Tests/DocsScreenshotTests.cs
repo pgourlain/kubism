@@ -206,4 +206,26 @@ public class DocsScreenshotTests
         await UiHarness.WaitFor(() => ws.Details.TimelineRows.Count > 4, what: "timeline");
         Shot(h, "timeline");
     }
+
+    [AvaloniaFact]
+    public async Task Security_pages()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Security)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is SecurityViewModel v && v.AuditRows.Count > 0, what: "audit");
+        var vm = (SecurityViewModel)ws.CurrentContent!;
+        vm.HighOnly = true;
+        Shot(h, "security-workloads");
+        vm.HighOnly = false;
+        vm.Tab = SecurityViewModel.AccessTab;
+        await UiHarness.WaitFor(() => vm.AccessRows.Count > 0, what: "rbac");
+        vm.SubjectQuery = "ServiceAccount default/ci-bot";
+        await vm.LookupCommand.ExecuteAsync(null);
+        Shot(h, "security-access");
+        vm.Tab = SecurityViewModel.CertificatesTab;
+        await UiHarness.WaitFor(() => vm.Certificates.Count > 2, what: "certificates");
+        Shot(h, "security-certificates");
+    }
 }

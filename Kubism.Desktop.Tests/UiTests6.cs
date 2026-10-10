@@ -202,4 +202,45 @@ public class UiExplorationTests
         Assert.Contains(d.TimelineRows, r => r.Title == "BackOff");
         h.Screenshot("36-timeline-problems");
     }
+
+    [AvaloniaFact]
+    public async Task Security_page_audits_workloads_rbac_and_certificates()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Security)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is SecurityViewModel v && v.AuditRows.Count > 0, what: "audit");
+        var vm = (SecurityViewModel)ws.CurrentContent!;
+        Assert.Contains(vm.AuditRows, r => r.Finding is { Rule: "privileged", Name: "worker", Severity: Core.Security.FindingSeverity.High });
+        Assert.Contains(vm.AuditRows, r => r.Finding.Rule == "hostpath" && r.Title.Contains("docker.sock"));
+        Assert.Contains(vm.AuditRows, r => r.Finding.Rule == "capability" && r.Title.Contains("SYS_ADMIN"));
+        Assert.DoesNotContain(vm.AuditRows, r => r.Finding.Name == "checkout");   // hardened: no finding
+        Assert.Equal(vm.AuditRows.Select(r => r.Finding.Severity).OrderByDescending(x => x), vm.AuditRows.Select(r => r.Finding.Severity));
+        h.Screenshot("37-security-workloads");
+        vm.HighOnly = true;
+        Assert.All(vm.AuditRows, r => Assert.Equal(Core.Security.FindingSeverity.High, r.Finding.Severity));
+        vm.HighOnly = false;
+
+        vm.Tab = SecurityViewModel.AccessTab;
+        await UiHarness.WaitFor(() => vm.AccessRows.Count > 0, what: "rbac findings");
+        Assert.Contains(vm.AccessRows, r => r.Finding is { Rule: "cluster-admin-binding", Name: "ops-admin" });
+        Assert.Contains(vm.AccessRows, r => r.Finding is { Rule: "read-secrets", Name: "secret-reader" });
+        Assert.Contains(vm.AccessRows, r => r.Finding is { Rule: "authenticated-binding", Name: "everyone-views", Severity: Core.Security.FindingSeverity.Medium });
+        vm.SubjectQuery = "ServiceAccount default/ci-bot";
+        await vm.LookupCommand.ExecuteAsync(null);
+        Assert.Contains(vm.SubjectRules, g => g is { Role: "deployer", Verbs: "get, list, patch", Scope: "default" });
+        Assert.Contains(vm.SubjectRules, g => g.Binding == "everyone-views");   // through system:authenticated
+        h.Screenshot("38-security-access");
+
+        vm.Tab = SecurityViewModel.CertificatesTab;
+        await UiHarness.WaitFor(() => vm.Certificates.Count > 2, what: "certificates");
+        var expired = vm.Certificates.First();
+        Assert.Equal("default/api-tls", expired.Display); Assert.Equal(Core.Security.CertificateHealth.Expired, expired.Info.Health);
+        Assert.Contains(vm.Certificates, c => c.Display == "default/legacy-tls" && c.Info.Health == Core.Security.CertificateHealth.ExpiresSoon);
+        Assert.DoesNotContain(vm.Certificates, c => c.Info.Source == "TLS secret" && c.Display == "default/web-tls-secret");   // shown through its Certificate
+        Assert.Contains(vm.Certificates, c => c.Display == "production/shop-tls" && c.Info.Health == Core.Security.CertificateHealth.Ok);
+        Assert.DoesNotContain("demo-not-a-real-key", string.Join("|", vm.Certificates.Select(c => c.Info.ToString())));
+        h.Screenshot("39-security-certificates");
+    }
 }

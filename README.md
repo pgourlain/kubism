@@ -73,6 +73,26 @@ A cross-platform desktop app to explore and operate **one or several Kubernetes 
   <img src="docs/screenshots/global-search.png" alt="Global search by image across two clusters" width="860" />
 </p>
 
+### Security
+
+A read-only *Security* page for the selected namespaces, with three tabs:
+
+- **Workloads**: an audit of every workload's pod spec: privileged containers, host network/PID/IPC, host paths (the container runtime socket is flagged high), root, privilege escalation, dangerous capabilities (`SYS_ADMIN`, `NET_ADMIN`, `ALL`…), images without a version, the default service account. Controllers are audited through their template, so one problem is reported once. *High only* cuts the noise; *Open object* jumps to the workload.
+- **Access (RBAC)**: risky grants (cluster-admin to non-system subjects, wildcard roles, `bind`/`escalate`/`impersonate`, cluster-wide Secret reads, `pods/exec`, anonymous or *every authenticated user* bindings), and **who can do what**: type a ServiceAccount, user or group and see every rule it ends up with, with the binding it comes from, including through its groups.
+- **Certificates**: expiry of TLS secrets and cert-manager `Certificate` objects, soonest first (expired, within 7 days, within 30 days). Only the public certificate is read, never the key, and nothing of the secret is kept.
+
+<p align="center">
+  <img src="docs/screenshots/security-workloads.png" alt="The workload audit" width="860" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/security-access.png" alt="RBAC findings and the rules of a service account" width="860" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/security-certificates.png" alt="Certificates sorted by expiry" width="860" />
+</p>
+
 ### Operate
 
 - **Safe actions**: edit YAML with conflict handling (a `409` shows a diff, never overwrites), create from YAML (multi-document, server-side apply), delete (single and bulk), scale, rollout restart and pause, cordon, drain (respects PodDisruptionBudgets, with progress and cancel), trigger or suspend a CronJob.

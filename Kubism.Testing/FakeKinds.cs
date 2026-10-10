@@ -94,6 +94,8 @@ public static class FakeKinds
         new("storage.k8s.io", "v1", "storageclasses", "StorageClass", false, ["sc"], StdColl, [], [Name, AgeCol]),
         new("rbac.authorization.k8s.io", "v1", "roles", "Role", true, [], StdColl, [], [Name, AgeCol]),
         new("rbac.authorization.k8s.io", "v1", "clusterroles", "ClusterRole", false, [], StdColl, [], [Name, AgeCol]),
+        new("rbac.authorization.k8s.io", "v1", "rolebindings", "RoleBinding", true, [], StdColl, [], [Name, AgeCol]),
+        new("rbac.authorization.k8s.io", "v1", "clusterrolebindings", "ClusterRoleBinding", false, [], StdColl, [], [Name, AgeCol]),
         new("apiextensions.k8s.io", "v1", "customresourcedefinitions", "CustomResourceDefinition", false, ["crd", "crds"], StdColl, ["status"],
             [Name, new("Created At", "date", 0, o => S(o, "metadata", "creationTimestamp"))]),
         new("cert-manager.io", "v1", "certificates", "Certificate", true, ["cert", "certs"], StdColl, ["status"],

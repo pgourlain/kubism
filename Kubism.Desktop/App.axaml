@@ -20,6 +20,7 @@
     <DataTemplate DataType="vm:RightSizingViewModel"><v:RightSizingView /></DataTemplate>
     <DataTemplate DataType="vm:HelmViewModel"><v:HelmView /></DataTemplate>
     <DataTemplate DataType="vm:ActivityViewModel"><v:ActivityView /></DataTemplate>
+    <DataTemplate DataType="vm:SecurityViewModel"><v:SecurityView /></DataTemplate>
     <DataTemplate DataType="vm:CompareViewModel"><v:CompareView /></DataTemplate>
     <DataTemplate DataType="vm:CreateYamlViewModel"><v:CreateYamlView /></DataTemplate>
     <DataTemplate DataType="vm:LogViewModel"><v:LogView /></DataTemplate>

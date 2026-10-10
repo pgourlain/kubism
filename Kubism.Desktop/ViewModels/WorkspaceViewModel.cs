@@ -115,6 +115,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (Find("events") is { } ev) NavRoots.Add(new NavNode("Events".T(), NavTarget.Kind, ev, "events"));
         NavRoots.Add(new NavNode("Helm".T(), NavTarget.Helm, null, "helm"));
         NavRoots.Add(new NavNode("Compare".T(), NavTarget.Compare, null, "compare"));
+        NavRoots.Add(new NavNode("Security".T(), NavTarget.Security, null, "security"));
         var custom = kinds.Where(k => !BuiltinGroups.Contains(k.Group)).GroupBy(k => k.Group).OrderBy(g => g.Key).ToList();
         var cr = new NavNode("Custom Resources".T()) { IsExpanded = false };
         cr.Children.Add(new NavNode("Definitions (CRDs)", NavTarget.Kind, Find("customresourcedefinitions")));
@@ -202,6 +203,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Activity => new ActivityViewModel(this),
             NavTarget.CreateYaml => new CreateYamlViewModel(this),
             NavTarget.Compare => new CompareViewModel(this),
+            NavTarget.Security => new SecurityViewModel(this),
             _ => null,
         };
         // Dock items own their lifetime (the dock closes them); never dispose one from here.

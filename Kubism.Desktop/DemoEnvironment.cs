@@ -42,6 +42,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
         }
         SeedHelm(server);
         SeedTimeline(server);
+        SeedSecurity(server);
         server.NodeMetrics["node-1"] = ("1200m", "6Gi"); server.NodeMetrics["node-2"] = ("900m", "5Gi");
         var drifted = withDrift ? await StartDriftedAsync() : null;
         var devCluster = drifted is null ? "" : "- {name: demo-dev, cluster: {server: " + drifted.Url + "}}";
@@ -116,6 +117,76 @@ public sealed class DemoEnvironment : IAsyncDisposable
             crashy["status"]!["containerStatuses"]![0]!["lastState"]!["terminated"]!["finishedAt"] = At(TimeSpan.FromMinutes(9));
             server.Upsert(crashy, silent: true);
         }
+    }
+
+    /// <summary>Something for the Security page: a sloppy worker, a hardened checkout, risky RBAC, and certificates that expire soon, expired and fine.</summary>
+    private static void SeedSecurity(FakeApiServer server)
+    {
+        JsonObject J(string json) => (JsonObject)JsonNode.Parse(json)!;
+        void EditSpec(string ns, string name, Action<JsonObject> edit)
+        {
+            if (server.Get(Gvr.Deployments, ns, name) is not { } d) return;
+            edit((JsonObject)d["spec"]!["template"]!["spec"]!);
+            server.Upsert(d, silent: true);
+        }
+        EditSpec("staging", "worker", spec =>
+        {
+            spec["hostNetwork"] = true;
+            spec["volumes"] = new JsonArray(J("{\"name\":\"docker\",\"hostPath\":{\"path\":\"/var/run/docker.sock\"}}"));
+            var c = (JsonObject)spec["containers"]![0]!;
+            c["image"] = "registry.example.com/worker";
+            c["securityContext"] = J("{\"privileged\":true,\"runAsUser\":0,\"capabilities\":{\"add\":[\"SYS_ADMIN\"]}}");
+        });
+        EditSpec("production", "checkout", spec =>
+        {
+            spec["serviceAccountName"] = "checkout";
+            var c = (JsonObject)spec["containers"]![0]!;
+            c["image"] = "registry.example.com/checkout:2.8.1";
+            c["securityContext"] = J("{\"runAsNonRoot\":true,\"allowPrivilegeEscalation\":false,\"capabilities\":{\"drop\":[\"ALL\"]}}");
+        });
+
+        void Upsert(string json) => server.Upsert(J(json), silent: true);
+        Upsert("{\"apiVersion\":\"v1\",\"kind\":\"ServiceAccount\",\"metadata\":{\"name\":\"ci-bot\",\"namespace\":\"default\"}}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRole\",\"metadata\":{\"name\":\"cluster-admin\"},\"rules\":[{\"apiGroups\":[\"*\"],\"resources\":[\"*\"],\"verbs\":[\"*\"]}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRole\",\"metadata\":{\"name\":\"view\"},\"rules\":[{\"apiGroups\":[\"\"],\"resources\":[\"pods\",\"services\",\"configmaps\"],\"verbs\":[\"get\",\"list\",\"watch\"]}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRole\",\"metadata\":{\"name\":\"secret-reader\"},\"rules\":[{\"apiGroups\":[\"\"],\"resources\":[\"secrets\"],\"verbs\":[\"get\",\"list\"]}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRole\",\"metadata\":{\"name\":\"ops-all\"},\"rules\":[{\"apiGroups\":[\"apps\"],\"resources\":[\"deployments\",\"statefulsets\"],\"verbs\":[\"*\"]},{\"apiGroups\":[\"\"],\"resources\":[\"pods/exec\"],\"verbs\":[\"create\"]}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"Role\",\"metadata\":{\"name\":\"deployer\",\"namespace\":\"default\"},\"rules\":[{\"apiGroups\":[\"apps\"],\"resources\":[\"deployments\"],\"verbs\":[\"get\",\"list\",\"patch\"]},{\"apiGroups\":[\"\"],\"resources\":[\"pods\",\"pods/log\"],\"verbs\":[\"get\",\"list\"]}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"RoleBinding\",\"metadata\":{\"name\":\"ci-deploys\",\"namespace\":\"default\"},\"roleRef\":{\"kind\":\"Role\",\"name\":\"deployer\"},\"subjects\":[{\"kind\":\"ServiceAccount\",\"name\":\"ci-bot\",\"namespace\":\"default\"}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRoleBinding\",\"metadata\":{\"name\":\"ops-admin\"},\"roleRef\":{\"kind\":\"ClusterRole\",\"name\":\"cluster-admin\"},\"subjects\":[{\"kind\":\"User\",\"name\":\"bob@example.com\"}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRoleBinding\",\"metadata\":{\"name\":\"devs-read-secrets\"},\"roleRef\":{\"kind\":\"ClusterRole\",\"name\":\"secret-reader\"},\"subjects\":[{\"kind\":\"Group\",\"name\":\"developers\"}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRoleBinding\",\"metadata\":{\"name\":\"ops-everything\"},\"roleRef\":{\"kind\":\"ClusterRole\",\"name\":\"ops-all\"},\"subjects\":[{\"kind\":\"Group\",\"name\":\"sre\"}]}");
+        Upsert("{\"apiVersion\":\"rbac.authorization.k8s.io/v1\",\"kind\":\"ClusterRoleBinding\",\"metadata\":{\"name\":\"everyone-views\"},\"roleRef\":{\"kind\":\"ClusterRole\",\"name\":\"view\"},\"subjects\":[{\"kind\":\"Group\",\"name\":\"system:authenticated\"}]}");
+
+        // Certificates (real, self-signed) in TLS secrets; cert-manager reports its own ones from their status.
+        string Tls(string cn, int daysLeft)
+        {
+            using var key = System.Security.Cryptography.RSA.Create(2048);
+            var req = new System.Security.Cryptography.X509Certificates.CertificateRequest($"CN={cn}", key, System.Security.Cryptography.HashAlgorithmName.SHA256, System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+            var san = new System.Security.Cryptography.X509Certificates.SubjectAlternativeNameBuilder(); san.AddDnsName(cn);
+            req.CertificateExtensions.Add(san.Build());
+            using var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(daysLeft - 90), DateTimeOffset.UtcNow.AddDays(daysLeft));
+            return Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes(cert.ExportCertificatePem()));
+        }
+        void TlsSecret(string ns, string name, string cn, int days) => server.Upsert(new JsonObject
+        {
+            ["apiVersion"] = "v1", ["kind"] = "Secret", ["type"] = "kubernetes.io/tls", ["metadata"] = new JsonObject { ["name"] = name, ["namespace"] = ns },
+            ["data"] = new JsonObject { ["tls.crt"] = Tls(cn, days), ["tls.key"] = Convert.ToBase64String("demo-not-a-real-key"u8.ToArray()) },
+        }, silent: true);
+        TlsSecret("production", "shop-tls", "shop.example.com", 210);
+        TlsSecret("default", "legacy-tls", "legacy.example.com", 12);
+        TlsSecret("default", "web-tls-secret", "web.example.com", 62);
+        void CertStatus(string name, int days, string? notReady = null)
+        {
+            if (server.Get(new Gvr("cert-manager.io", "v1", "certificates"), "default", name) is not { } c) return;
+            var status = (JsonObject)c["status"]!;
+            status["notAfter"] = DateTimeOffset.UtcNow.AddDays(days).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            if (notReady is not null) status["conditions"] = new JsonArray(new JsonObject { ["type"] = "Ready", ["status"] = "False", ["message"] = notReady });
+            ((JsonObject)c["spec"]!)["dnsNames"] = new JsonArray($"{name.Replace("-tls", "")}.example.com");
+            server.Upsert(c, silent: true);
+        }
+        CertStatus("web-tls", 62);
+        CertStatus("api-tls", -2, "Issuing certificate as Secret does not exist: ACME challenge failed");
     }
 
     private static async Task<FakeApiServer> StartDriftedAsync()
