@@ -230,6 +230,33 @@ public class DocsScreenshotTests
     }
 
     [AvaloniaFact]
+    public async Task Network_pages()
+    {
+        await using var h = await UiHarness.StartAsync();
+        // The graph has five columns: a wider window shows them all.
+        h.Window.Width = 2080; h.Window.Height = 880;
+        UiHarness.Pump();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.Select("shop");
+        ws.Navigate(ws.FindNav(NavTarget.NetworkGraph)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is NetworkViewModel v && !v.IsLoading && v.View is { Nodes.Count: > 0 }, what: "network graph");
+        var vm = (NetworkViewModel)ws.CurrentContent!;
+        vm.ShowNodes = true;
+        UiHarness.Pump();
+        Shot(h, "network-graph");
+
+        vm.ShowNodes = false;
+        ws.Namespaces.Select("tools");
+        await UiHarness.WaitFor(() => vm.View!.Nodes.Any(p => p.Node.Namespace == "tools") && vm.View.Nodes.All(p => p.Node.Namespace != "shop"), what: "tools namespace");
+        Shot(h, "network-namespace");
+
+        ws.Namespaces.SelectAll();
+        vm.Tab = NetworkViewModel.RoutesTab;
+        await UiHarness.WaitFor(() => vm.Routes.Count > 8, what: "routes");
+        Shot(h, "network-routes");
+    }
+
+    [AvaloniaFact]
     public async Task Gitops()
     {
         await using var h = await UiHarness.StartAsync();

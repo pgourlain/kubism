@@ -131,7 +131,9 @@ public sealed class NetworkGraphControl : Control
                 var pen = new Pen(node.Missing ? error : isSel ? text : level, isSel ? 2.4 : 1.4) { DashStyle = node.Missing ? DashStyle.Dash : null };
                 ctx.DrawRectangle(Soft(level), pen, r, 6);
                 if (node.HasProblem) ctx.DrawRectangle(node.Worst == FindingSeverity.High ? error : outside, null, new Rect(r.X, r.Y + 5, 4, r.Height - 10), 2);
-                var ns = node.Namespace is null ? (node.Exposure == ExposureLevel.Outside ? "outside the cluster" : "no controller found") : node.Namespace + (n.IsContext ? " (context)" : "");
+                var ns = node.Namespace is null
+                    ? (node.Kind == NetworkNodeKind.Node ? "cluster node" : node.Exposure == ExposureLevel.Outside ? "outside the cluster" : "no controller found")
+                    : node.Namespace + (n.IsContext ? " (context)" : "");
                 ctx.DrawText(new FormattedText($"{node.KindText} · {ns}".ToUpperInvariant(), culture, FlowDirection.LeftToRight, Face, 8.5, muted) { MaxTextWidth = BoxW - 16, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis }, new Point(r.X + 10, r.Y + 5));
                 ctx.DrawText(new FormattedText(node.Missing ? $"{node.Label} (missing)" : node.Label, culture, FlowDirection.LeftToRight, new Typeface(Face.FontFamily, FontStyle.Normal, FontWeight.SemiBold), 12, text)
                 { MaxTextWidth = BoxW - 16, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis }, new Point(r.X + 10, r.Y + 19));

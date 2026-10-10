@@ -30,6 +30,7 @@ A cross-platform desktop app to explore and operate **one or several Kubernetes 
 - **Several clusters side by side**: each connected cluster is its own tab, with a colour and a safety mode; split view, global search, hotbar with `⌘/Ctrl+1…9`.
 - **Everything live**: lists follow the cluster through watches (no refresh button), including CRDs with their own printer columns.
 - **See how things connect**: a relation graph, a cross-cluster diff and a search by image, all built from the objects already on screen.
+- **See how traffic reaches your pods**: a network graph from what is exposed outside the cluster, through Ingresses and Services, to workloads and nodes, with the ports of every hop and what does not line up.
 - **Safe by design**: *production* clusters ask for the resource name before any destructive action, *read-only* clusters refuse every change, Secret values are never shown unless you reveal one key.
 - **Right-sizing**: requests and limits next to what containers really use over days, with ready-to-paste corrections.
 - **AI-ready**: `Kubism --mcp` is an MCP server (read-only by default) for Claude and other assistants.
@@ -73,6 +74,29 @@ A cross-platform desktop app to explore and operate **one or several Kubernetes 
   <img src="docs/screenshots/global-search.png" alt="Global search by image across two clusters" width="860" />
 </p>
 
+### Network: how traffic reaches your pods
+
+*Network › Network graph* draws, left to right, **exposure → Ingresses → Services → workloads** (and, with *Show nodes*, the nodes the pods run on), read-only and live:
+
+- **What is exposed outside the cluster**, judged from the cluster's own objects: a `LoadBalancer` or `NodePort` Service (or `externalIPs`), an Ingress whose controller's Service is such a Service, a controller that runs outside the cluster (Application Gateway, ALB, GCE), a `hostPort`. An Ingress whose controller is only `ClusterIP` is shown as in-cluster. DNS, firewalls and WAFs are not visible, and the page says so.
+- **The filters are in the Ingress box** (host and paths), and the arrows carry only **ports**, in a small rectangle at the entry of each box: the controller's ports into an Ingress, the Service port into a Service, the container port into a workload (a named `targetPort` is resolved). A wrong port gets its own red rectangle.
+- **A *Routes* tab** answers "which URL goes through which Ingress": one row per host and path, with `https` or `http`, the controller and address it comes in through, the Service port, the pods behind it and what is wrong. *Copy* gives the table, tab-separated.
+- **Problems where they are**: a backend Service or port that does not exist, a `targetPort` that matches no container port, no ready endpoint, pods not ready, a missing or expiring TLS secret (only existence and the public certificate's expiry are read), no ingress class or no controller found, a Service exposed without an Ingress.
+- **Filter by namespace** with the usual picker: the ingress controller of another namespace stays as a dimmed context box, so the path to the outside is never cut. Also *Outside the cluster only*, *Problems only* and a search by host, path, service or workload.
+- **Show nodes** (off by default) adds one box per node, shared by the workloads that have a pod there, with `2 pods` or a red `1/2 ready` on the arrow, and the node's Ready state.
+
+<p align="center">
+  <img src="docs/screenshots/network-graph.png" alt="The network graph of a namespace: exposure, ingresses with their hosts and paths, services, workloads and nodes, with the ports on the arrows" width="900" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/network-namespace.png" alt="The network graph filtered on one namespace: the ingress controller of another namespace stays as context" width="860" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/network-routes.png" alt="The routes tab: every URL with its Ingress, controller, service port and pods" width="860" />
+</p>
+
 ### Security
 
 A read-only *Security* page for the selected namespaces, with three tabs:
@@ -80,6 +104,8 @@ A read-only *Security* page for the selected namespaces, with three tabs:
 - **Workloads**: an audit of every workload's pod spec: privileged containers, host network/PID/IPC, host paths (the container runtime socket is flagged high), root, privilege escalation, dangerous capabilities (`SYS_ADMIN`, `NET_ADMIN`, `ALL`…), images without a version, the default service account. Controllers are audited through their template, so one problem is reported once. *High only* cuts the noise; *Open object* jumps to the workload.
 - **Access (RBAC)**: risky grants (cluster-admin to non-system subjects, wildcard roles, `bind`/`escalate`/`impersonate`, cluster-wide Secret reads, `pods/exec`, anonymous or *every authenticated user* bindings), and **who can do what**: type a ServiceAccount, user or group and see every rule it ends up with, with the binding it comes from, including through its groups.
 - **Certificates**: expiry of TLS secrets and cert-manager `Certificate` objects, soonest first (expired, within 7 days, within 30 days). Only the public certificate is read, never the key, and nothing of the secret is kept.
+
+Separately, the **RBAC graph** (*Access Control › RBAC graph*) explains rights as graphs: the chain subject → binding → role → rules with its scope (a RoleBinding to a ClusterRole is marked as applying to one namespace), **what can X do** as a verbs × resources matrix per namespace, and **who can `<verb>` `<resource>`** with the binding, role and rule behind each answer. It follows the authorizer's rules (wildcards, subresources, `resourceNames`, aggregated roles, implicit groups), flags risky grants, and can ask the API server to compare. It says when some RBAC objects could not be read; other authorizers (webhook, Azure RBAC) are not visible.
 
 <p align="center">
   <img src="docs/screenshots/security-workloads.png" alt="The workload audit" width="860" />
