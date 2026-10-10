@@ -45,7 +45,7 @@ public class ClusterActionsTests : IAsyncLifetime
             .Where(m => m.Name.EndsWith("Async") && m.Name != nameof(ClusterActions.RunAsync)).ToList();
         foreach (var m in methods)
             Assert.True(m.GetCustomAttribute<ClusterActionAttribute>() is not null, $"{m.Name} is a public action without [ClusterAction]");
-        foreach (var expected in new[] { "Apply", "Replace", "Delete", "DeleteMany", "Scale", "RolloutRestart", "Cordon", "Drain", "TriggerCronJob", "SetResources", "SuspendCronJob", "CreateVpa" })
+        foreach (var expected in new[] { "Apply", "Replace", "Delete", "DeleteMany", "Scale", "RolloutRestart", "Cordon", "Drain", "TriggerCronJob", "SetResources", "SuspendCronJob", "CreateVpa", "ArgoSync", "ArgoRefresh", "FluxReconcile", "FluxSuspend" })
             Assert.Contains(expected, ClusterActions.Actions);
     }
 
@@ -58,6 +58,10 @@ public class ClusterActionsTests : IAsyncLifetime
         await Assert.ThrowsAsync<SafetyException>(() => A.ScaleAsync(Gvr.Deployments, "default", "web", 5, Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.RolloutRestartAsync(Gvr.Deployments, "default", "web", Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.SetCordonAsync("node-1", true, Ct));
+        await Assert.ThrowsAsync<SafetyException>(() => A.ArgoSyncAsync("argocd", "shop", false, Ct));
+        await Assert.ThrowsAsync<SafetyException>(() => A.ArgoRefreshAsync("argocd", "shop", true, Ct));
+        await Assert.ThrowsAsync<SafetyException>(() => A.FluxReconcileAsync(new Gvr("kustomize.toolkit.fluxcd.io", "v1", "kustomizations"), "flux-system", "apps", Ct));
+        await Assert.ThrowsAsync<SafetyException>(() => A.SetFluxSuspendedAsync(new Gvr("kustomize.toolkit.fluxcd.io", "v1", "kustomizations"), "flux-system", "apps", true, Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.ApplyYamlAsync("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n", "default", Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.ReplaceAsync("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n", "default", Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.DrainAsync("node-1", new DrainOptions(), null, Ct));
@@ -65,7 +69,7 @@ public class ClusterActionsTests : IAsyncLifetime
         await Assert.ThrowsAsync<SafetyException>(() => A.SetResourcesAsync(Gvr.Deployments, "default", "web", [], Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.DeleteManyAsync(Gvr.Pods, [("default", "x")], Ct));
         Assert.Equal(before, Mutations());
-        Assert.Equal(10, _session.Activity.Entries.Count(e => !e.Success));
+        Assert.Equal(14, _session.Activity.Entries.Count(e => !e.Success));
     }
 
     [Fact]
@@ -213,5 +217,39 @@ public class ClusterActionsTests : IAsyncLifetime
         await _session.Access.CanAsync("delete", Gvr.Pods, "default", null, Ct);
         Assert.Equal(count, _server.Requests.Count(x => x.Path.Contains("selfsubjectaccessreviews")));
         Assert.True((await _session.Access.CanAsync("get", Gvr.Pods, "default", null, Ct)).Allowed);
+    }
+
+    [Fact]
+    public async Task Gitops_actions_set_the_operation_annotations_and_suspend_flags_Argo_and_Flux_expect()
+    {
+        var apps = new Gvr("argoproj.io", "v1alpha1", "applications");
+        var ks = new Gvr("kustomize.toolkit.fluxcd.io", "v1", "kustomizations");
+        _server.Upsert(JsonNode.Parse("""{"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"name":"shop","namespace":"argocd"},"spec":{},"status":{}}""")!.AsObject());
+        _server.Upsert(JsonNode.Parse("""{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"apps","namespace":"flux-system"},"spec":{},"status":{}}""")!.AsObject());
+
+        await A.ArgoSyncAsync("argocd", "shop", false, Ct);
+        var app = _server.Get(apps, "argocd", "shop")!;
+        Assert.Equal("kubism", app["operation"]!["initiatedBy"]!["username"]!.ToString());
+        Assert.False(app["operation"]!["sync"]!["prune"]!.GetValue<bool>());
+        await A.ArgoRefreshAsync("argocd", "shop", true, Ct);
+        Assert.Equal("hard", _server.Get(apps, "argocd", "shop")!["metadata"]!["annotations"]!["argocd.argoproj.io/refresh"]!.ToString());
+
+        await A.FluxReconcileAsync(ks, "flux-system", "apps", Ct);
+        Assert.Contains("T", _server.Get(ks, "flux-system", "apps")!["metadata"]!["annotations"]!["reconcile.fluxcd.io/requestedAt"]!.ToString());
+        await A.SetFluxSuspendedAsync(ks, "flux-system", "apps", true, Ct);
+        Assert.True(_server.Get(ks, "flux-system", "apps")!["spec"]!["suspend"]!.GetValue<bool>());
+        await A.SetFluxSuspendedAsync(ks, "flux-system", "apps", false, Ct);
+        Assert.Null(_server.Get(ks, "flux-system", "apps")!["spec"]!["suspend"]);
+        Assert.All(new[] { "ArgoSync", "ArgoRefresh", "FluxReconcile", "FluxSuspend", "FluxResume" }, a => Assert.Contains(_session.Activity.Entries, e => e.Action == a && e.Success));
+    }
+
+    [Fact]
+    public async Task Argo_sync_with_prune_needs_the_typed_name_on_production()
+    {
+        _server.Upsert(JsonNode.Parse("""{"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"name":"shop","namespace":"argocd"},"spec":{},"status":{}}""")!.AsObject());
+        SetMode(SafetyMode.Production);
+        await A.ArgoSyncAsync("argocd", "shop", false, Ct);                                   // a plain sync is not destructive
+        await Assert.ThrowsAsync<SafetyException>(() => A.ArgoSyncAsync("argocd", "shop", true, Ct));
+        await A.ArgoSyncAsync("argocd", "shop", true, Ct, confirmation: "shop");
     }
 }

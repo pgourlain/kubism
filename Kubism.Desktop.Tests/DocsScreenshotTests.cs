@@ -228,4 +228,16 @@ public class DocsScreenshotTests
         await UiHarness.WaitFor(() => vm.Certificates.Count > 2, what: "certificates");
         Shot(h, "security-certificates");
     }
+
+    [AvaloniaFact]
+    public async Task Gitops()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Navigate(ws.FindNav(NavTarget.GitOps)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is GitOpsViewModel v && v.Rows.Count == 10, what: "gitops rows");
+        var vm = (GitOpsViewModel)ws.CurrentContent!;
+        vm.Selected = vm.Rows.First(r => r.Display == "argocd/payments");
+        Shot(h, "gitops");
+    }
 }

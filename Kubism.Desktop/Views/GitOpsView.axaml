@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:d="using:Kubism.Core.Delivery"
+             xmlns:app="using:Kubism.Desktop"
+             x:Class="Kubism.Desktop.Views.GitOpsView"
+             x:DataType="vm:GitOpsViewModel">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="16">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <StackPanel>
+        <TextBlock Text="GitOps" Classes="h1" />
+        <TextBlock Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="Updating…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
+        <TextBox Text="{Binding Filter}" PlaceholderText="Filter by name or source" Width="200" />
+        <CheckBox Content="Needs attention" IsChecked="{Binding ProblemsOnly}" />
+        <Button Content="Refresh" Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </Grid>
+    <TextBlock Grid.Row="1" Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
+    <Grid Grid.Row="2" ColumnDefinitions="1.6*,6,*">
+      <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="GitOps resources">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" x:DataType="vm:GitOpsRow" />
+          <DataGridTextColumn Header="Name" Binding="{Binding Display}" x:DataType="vm:GitOpsRow" Width="*" MinWidth="190" />
+          <DataGridTemplateColumn Header="Sync" Width="110">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:GitOpsRow">
+                <TextBlock Text="{Binding Sync}" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="Health" Binding="{Binding Health}" x:DataType="vm:GitOpsRow" />
+          <DataGridTextColumn Header="Revision" Binding="{Binding Revision}" x:DataType="vm:GitOpsRow" />
+          <DataGridTextColumn Header="Changed" Binding="{Binding Age}" x:DataType="vm:GitOpsRow" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <GridSplitter Grid.Column="1" Background="{DynamicResource KubismBorderBrush}" Width="1" HorizontalAlignment="Center" />
+      <ScrollViewer Grid.Column="2" Margin="10,0,0,0" IsVisible="{Binding Selected, Converter={x:Static app:Converters.NotNull}}">
+        <StackPanel Spacing="10">
+          <StackPanel Spacing="2">
+            <TextBlock Text="{Binding Selected.Display}" FontSize="16" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <TextBlock Classes="muted"><Run Text="{Binding Selected.Tool}" /><Run Text=" · " /><Run Text="{Binding Selected.Kind}" /></TextBlock>
+          </StackPanel>
+          <ItemsControl ItemsSource="{Binding Actions}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:ActionItem">
+                <Button Content="{Binding Header}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}" ToolTip.Tip="{Binding Tooltip}" Margin="0,0,6,6" Padding="10,4" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Border Classes="card" IsVisible="{Binding HasMessage}">
+            <TextBlock Text="{Binding Selected.App.Message}" TextWrapping="Wrap" />
+          </Border>
+          <Grid ColumnDefinitions="80,*" RowDefinitions="Auto,Auto,Auto">
+            <TextBlock Text="Source" Classes="muted" /><SelectableTextBlock Grid.Column="1" Text="{Binding Selected.Source}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Text="Destination" Classes="muted" /><SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Selected.App.Destination}" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="2" Text="Revision" Classes="muted" /><SelectableTextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Selected.Revision}" />
+          </Grid>
+          <TextBlock Text="MANAGED OBJECTS" Classes="sectionTitle" IsVisible="{Binding HasResources}" />
+          <ItemsControl ItemsSource="{Binding Resources}" IsVisible="{Binding HasResources}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="d:GitOpsResource">
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                  <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Message}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Sync}" Margin="8,0,0,0" FontSize="12" Classes="muted" />
+                  <TextBlock Grid.Column="2" Text="{Binding Health}" Margin="8,0,0,0" FontSize="12" Classes="muted" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -114,6 +114,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (Find("namespaces") is { } ns) NavRoots.Add(new NavNode("Namespaces".T(), NavTarget.Kind, ns, "namespaces"));
         if (Find("events") is { } ev) NavRoots.Add(new NavNode("Events".T(), NavTarget.Kind, ev, "events"));
         NavRoots.Add(new NavNode("Helm".T(), NavTarget.Helm, null, "helm"));
+        // Only where Argo CD or Flux is installed.
+        if (kinds.Any(k => Core.Delivery.GitOpsApp.IsGitOpsKind(k.Group, k.Resource))) NavRoots.Add(new NavNode("GitOps".T(), NavTarget.GitOps, null, "gitops"));
         NavRoots.Add(new NavNode("Compare".T(), NavTarget.Compare, null, "compare"));
         NavRoots.Add(new NavNode("Security".T(), NavTarget.Security, null, "security"));
         var custom = kinds.Where(k => !BuiltinGroups.Contains(k.Group)).GroupBy(k => k.Group).OrderBy(g => g.Key).ToList();
@@ -204,6 +206,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.CreateYaml => new CreateYamlViewModel(this),
             NavTarget.Compare => new CompareViewModel(this),
             NavTarget.Security => new SecurityViewModel(this),
+            NavTarget.GitOps => new GitOpsViewModel(this),
             _ => null,
         };
         // Dock items own their lifetime (the dock closes them); never dispose one from here.

@@ -43,6 +43,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
         SeedHelm(server);
         SeedTimeline(server);
         SeedSecurity(server);
+        SeedGitOps(server);
         server.NodeMetrics["node-1"] = ("1200m", "6Gi"); server.NodeMetrics["node-2"] = ("900m", "5Gi");
         var drifted = withDrift ? await StartDriftedAsync() : null;
         var devCluster = drifted is null ? "" : "- {name: demo-dev, cluster: {server: " + drifted.Url + "}}";
@@ -187,6 +188,38 @@ public sealed class DemoEnvironment : IAsyncDisposable
         }
         CertStatus("web-tls", 62);
         CertStatus("api-tls", -2, "Issuing certificate as Secret does not exist: ACME challenge failed");
+    }
+
+    /// <summary>Argo CD applications (healthy, out of sync and degraded, progressing) and Flux resources (ready, not ready, suspended) for the GitOps page.</summary>
+    private static void SeedGitOps(FakeApiServer server)
+    {
+        JsonObject J(string json) => (JsonObject)JsonNode.Parse(json)!;
+        var now = DateTimeOffset.UtcNow;
+        string At(TimeSpan ago) => now.Subtract(ago).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        foreach (var ns in new[] { "argocd", "flux-system" }) server.Upsert(J("""{"apiVersion":"v1","kind":"Namespace","metadata":{"name":"NS"},"status":{"phase":"Active"}}""".Replace("NS", ns)), silent: true);
+        const string Rev = "9f3c2a1b7d4e5f60718293a4b5c6d7e8f9012345";
+        void Argo(string name, string sync, string health, string repo, string path, string resources, string? finished = null, string? error = null) =>
+            server.Upsert(J("""{"apiVersion":"argoproj.io/v1alpha1","kind":"Application","metadata":{"name":"NAME","namespace":"argocd"},"spec":{"project":"default","source":{"repoURL":"REPO","path":"PATH","targetRevision":"main"},"destination":{"server":"https://kubernetes.default.svc","namespace":"NAME"}},"status":{"sync":{"status":"SYNC","revision":"REV"},"health":{"status":"HEALTH"},"operationState":{"finishedAt":"FINISHED","phase":"Succeeded"},"conditions":CONDITIONS,"resources":RESOURCES}}"""
+                .Replace("NAME", name).Replace("REPO", repo).Replace("PATH", path).Replace("SYNC", sync).Replace("REV", Rev).Replace("HEALTH", health)
+                .Replace("FINISHED", finished ?? At(TimeSpan.FromHours(3))).Replace("RESOURCES", resources)
+                .Replace("CONDITIONS", error is null ? "[]" : "[{\"type\":\"ComparisonError\",\"message\":\"" + error + "\"}]")), silent: true);
+        Argo("shop", "Synced", "Healthy", "https://github.com/example/shop.git", "deploy/prod",
+            """[{"kind":"Deployment","namespace":"shop","name":"web","status":"Synced","health":{"status":"Healthy"}},{"kind":"Service","namespace":"shop","name":"web","status":"Synced","health":{"status":"Healthy"}},{"kind":"Ingress","namespace":"shop","name":"web","status":"Synced","health":{"status":"Healthy"}}]""");
+        Argo("payments", "OutOfSync", "Degraded", "https://github.com/example/payments.git", "deploy/prod",
+            """[{"kind":"Deployment","namespace":"payments","name":"api","status":"OutOfSync","health":{"status":"Degraded","message":"Deployment has 0/2 ready replicas"}},{"kind":"ConfigMap","namespace":"payments","name":"api-config","status":"OutOfSync","health":{"status":"Healthy"}},{"kind":"Service","namespace":"payments","name":"api","status":"Synced","health":{"status":"Healthy"}}]""", At(TimeSpan.FromMinutes(26)));
+        Argo("reporting", "Synced", "Progressing", "https://github.com/example/reporting.git", "chart",
+            """[{"kind":"StatefulSet","namespace":"reporting","name":"worker","status":"Synced","health":{"status":"Progressing","message":"1/3 replicas ready"}}]""", At(TimeSpan.FromMinutes(4)));
+        Argo("legacy", "OutOfSync", "Healthy", "https://github.com/example/legacy.git", "k8s",
+            """[{"kind":"Deployment","namespace":"legacy","name":"importer","status":"OutOfSync","health":{"status":"Healthy"}}]""", At(TimeSpan.FromDays(9)));
+        Argo("broken-repo", "Unknown", "Unknown", "https://github.com/example/missing.git", "deploy", "[]", At(TimeSpan.FromDays(1)), "rpc error: code = Unknown desc = repository not found");
+
+        void Flux(string json) => server.Upsert(J(json.Replace("REV8", Rev[..8]).Replace("REV", Rev)
+            .Replace("AGO5H", At(TimeSpan.FromHours(5))).Replace("AGO40M", At(TimeSpan.FromMinutes(40))).Replace("AGO2D", At(TimeSpan.FromDays(2))).Replace("AGO6D", At(TimeSpan.FromDays(6)))), silent: true);
+        Flux("""{"apiVersion":"source.toolkit.fluxcd.io/v1","kind":"GitRepository","metadata":{"name":"flux-system","namespace":"flux-system"},"spec":{"url":"ssh://git@github.com/example/fleet"},"status":{"artifact":{"revision":"main@sha1:REV"},"conditions":[{"type":"Ready","status":"True","message":"stored artifact for revision 'main@sha1:REV8'","lastTransitionTime":"AGO5H"}]}}""");
+        Flux("""{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"infra","namespace":"flux-system"},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"},"path":"./infrastructure"},"status":{"lastAppliedRevision":"main@sha1:REV","conditions":[{"type":"Ready","status":"True","message":"Applied revision: main@sha1:REV8","lastTransitionTime":"AGO5H"}],"inventory":{"entries":[{"id":"_ingress-nginx__Namespace"},{"id":"ingress-nginx_ingress-nginx-controller_apps_Deployment"}]}}}""");
+        Flux("""{"apiVersion":"kustomize.toolkit.fluxcd.io/v1","kind":"Kustomization","metadata":{"name":"apps","namespace":"flux-system"},"spec":{"sourceRef":{"kind":"GitRepository","name":"flux-system"},"path":"./apps/production"},"status":{"lastAppliedRevision":"main@sha1:REV","conditions":[{"type":"Ready","status":"False","message":"health check failed after 5m0s: timeout waiting for: [Deployment/production/checkout status: 'InProgress']","lastTransitionTime":"AGO40M"}],"inventory":{"entries":[{"id":"production_checkout_apps_Deployment"},{"id":"production_checkout__Service"},{"id":"production_checkout-config__ConfigMap"}]}}}""");
+        Flux("""{"apiVersion":"helm.toolkit.fluxcd.io/v2","kind":"HelmRelease","metadata":{"name":"ingress-nginx","namespace":"flux-system"},"spec":{"chart":{"spec":{"chart":"ingress-nginx","version":"4.11.x","sourceRef":{"name":"ingress-nginx"}}}},"status":{"lastAppliedRevision":"4.11.2","conditions":[{"type":"Ready","status":"True","message":"Helm upgrade succeeded for release ingress-nginx/ingress-nginx.v3 with chart ingress-nginx@4.11.2","lastTransitionTime":"AGO2D"}]}}""");
+        Flux("""{"apiVersion":"helm.toolkit.fluxcd.io/v2","kind":"HelmRelease","metadata":{"name":"podinfo","namespace":"flux-system"},"spec":{"suspend":true,"chart":{"spec":{"chart":"podinfo","version":"6.x","sourceRef":{"name":"podinfo"}}}},"status":{"conditions":[{"type":"Ready","status":"True","lastTransitionTime":"AGO6D"}]}}""");
     }
 
     private static async Task<FakeApiServer> StartDriftedAsync()

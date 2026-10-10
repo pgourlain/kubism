@@ -243,4 +243,58 @@ public class UiExplorationTests
         Assert.DoesNotContain("demo-not-a-real-key", string.Join("|", vm.Certificates.Select(c => c.Info.ToString())));
         h.Screenshot("39-security-certificates");
     }
+
+    [AvaloniaFact]
+    public async Task GitOps_page_lists_argo_and_flux_and_acts_through_cluster_actions()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Navigate(ws.FindNav(NavTarget.GitOps)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is GitOpsViewModel v && v.Rows.Count == 10, what: "gitops rows");
+        var vm = (GitOpsViewModel)ws.CurrentContent!;
+        Assert.Equal(5, vm.Rows.Count(r => r.App.Tool == Core.Delivery.GitOpsTool.ArgoCd));
+        Assert.True(vm.Rows.Take(4).All(r => r.App.IsProblem));   // what needs attention first
+        h.Screenshot("40-gitops");
+
+        vm.Selected = vm.Rows.First(r => r.Display == "argocd/payments");
+        Assert.Equal("Degraded", vm.Selected.Health);
+        Assert.Equal(["ConfigMap/payments/api-config", "Deployment/payments/api", "Service/payments/api"], vm.Resources.Select(r => r.Display));   // out-of-sync ones first
+        Assert.True(vm.Resources[0].IsProblem && vm.Resources[1].IsProblem && !vm.Resources[2].IsProblem);
+        await vm.Actions.First(a => a.Header == "Hard refresh").ExecuteAsync();
+        var apps = new Core.Api.Gvr("argoproj.io", "v1alpha1", "applications");
+        Assert.Equal("hard", h.Demo.Server.Get(apps, "argocd", "payments")!["metadata"]!["annotations"]!["argocd.argoproj.io/refresh"]!.ToString());
+        await vm.Actions.First(a => a.Header == "Sync").ExecuteAsync();
+        Assert.Equal("kubism", h.Demo.Server.Get(apps, "argocd", "payments")!["operation"]!["initiatedBy"]!["username"]!.ToString());
+
+        vm.ProblemsOnly = true;
+        Assert.All(vm.Rows, r => Assert.True(r.App.IsProblem));
+        vm.ProblemsOnly = false;
+        vm.Filter = "podinfo";
+        var podinfo = Assert.Single(vm.Rows);
+        Assert.True(podinfo.App.Suspended);
+        vm.Selected = podinfo;
+        var hr = new Core.Api.Gvr("helm.toolkit.fluxcd.io", "v2", "helmreleases");
+        await vm.Actions.First(a => a.Header == "Resume").ExecuteAsync();
+        Assert.Null(h.Demo.Server.Get(hr, "flux-system", "podinfo")!["spec"]!["suspend"]);
+        Assert.Contains(ws.Session.Activity.Entries, e => e.Action == "FluxResume" && e.Success);
+    }
+
+    [AvaloniaFact]
+    public async Task GitOps_actions_follow_the_safety_mode()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-production");
+        ws.Navigate(ws.FindNav(NavTarget.GitOps)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is GitOpsViewModel v && v.Rows.Count == 10, what: "gitops rows");
+        var vm = (GitOpsViewModel)ws.CurrentContent!;
+        var apps = new Core.Api.Gvr("argoproj.io", "v1alpha1", "applications");
+        vm.Selected = vm.Rows.First(r => r.Display == "argocd/legacy");
+        // Pruning on production asks for the name; a wrong one is refused and nothing is changed.
+        h.Dialogs.TypedResponse = _ => "wrong";
+        await vm.Actions.First(a => a.Header == "Sync and prune…").ExecuteAsync();
+        Assert.Null(h.Demo.Server.Get(apps, "argocd", "legacy")!["operation"]);
+        h.Dialogs.TypedResponse = e => e;
+        await vm.Actions.First(a => a.Header == "Sync and prune…").ExecuteAsync();
+        Assert.True(h.Demo.Server.Get(apps, "argocd", "legacy")!["operation"]!["sync"]!["prune"]!.GetValue<bool>());
+    }
 }

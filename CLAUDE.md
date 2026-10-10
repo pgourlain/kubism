@@ -154,6 +154,7 @@ All three are pure Core logic over objects already loaded, unit-tested without a
 - `ClusterCompare` + `LineDiff`: compares the same kind between two clusters or namespaces after dropping server-generated fields; **Secret values never reach a diff** (a key is masked, and marked `A`/`B` when it differs).
 - `EventTimeline`: one time axis for a workload or pod (events, rollouts per replica set revision, pod creations, last container termination with OOM kills, failing conditions).
 - `WorkloadAudit`, `RbacAnalysis`, `CertificateScan` (`Core/Security`): the read-only Security page. Pod-spec hardening rules; risky RBAC grants and the rules a subject holds; certificate expiry from TLS secrets (only `tls.crt` is read, never the key) and cert-manager `Certificate` status.
+- `GitOpsApp` (`Core/Delivery`): Argo CD Applications and Flux resources reduced to sync/health/level/source/revision/resources; actions `ArgoSync`, `ArgoRefresh`, `FluxReconcile`, `FluxSuspend` live in `ClusterActions`. The GitOps page appears only where those CRDs are installed.
 - `SearchQuery`: global search syntax (`text`, `key=value`, `image:`, `ns:`, `kind:`, AND).
 
 ### Logs, exec, port-forward

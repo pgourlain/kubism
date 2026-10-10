@@ -101,6 +101,11 @@ public static class FakeKinds
         new("cert-manager.io", "v1", "certificates", "Certificate", true, ["cert", "certs"], StdColl, ["status"],
             [Name, new("Ready", "string", 0, o => S(o, "status", "ready") ?? "False"), new("Secret", "string", 0, o => S(o, "spec", "secretName")),
              new("Issuer", "string", 1, o => S(o, "spec", "issuerRef", "name")), AgeCol]),
+        new("argoproj.io", "v1alpha1", "applications", "Application", true, ["app", "apps"], StdColl, ["status"],
+            [Name, new("Sync Status", "string", 0, o => S(o, "status", "sync", "status")), new("Health Status", "string", 0, o => S(o, "status", "health", "status")), AgeCol]),
+        new("kustomize.toolkit.fluxcd.io", "v1", "kustomizations", "Kustomization", true, ["ks"], StdColl, ["status"], [Name, AgeCol]),
+        new("helm.toolkit.fluxcd.io", "v2", "helmreleases", "HelmRelease", true, ["hr"], StdColl, ["status"], [Name, AgeCol]),
+        new("source.toolkit.fluxcd.io", "v1", "gitrepositories", "GitRepository", true, ["gitrepo"], StdColl, ["status"], [Name, AgeCol]),
     ];
 
     public static FakeKind? Find(string group, string version, string resource) =>

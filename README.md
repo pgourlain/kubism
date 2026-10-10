@@ -93,6 +93,16 @@ A read-only *Security* page for the selected namespaces, with three tabs:
   <img src="docs/screenshots/security-certificates.png" alt="Certificates sorted by expiry" width="860" />
 </p>
 
+### GitOps: Argo CD and Flux
+
+Where Argo CD or Flux is installed, a *GitOps* page lists Argo CD Applications and Flux Kustomizations, HelmReleases and sources together: sync, health, revision, source, destination and when it last changed, with what **needs attention** (degraded, out of sync, failed to reconcile) first. Select one to see its message and what it manages, with out-of-sync objects on top (Flux shows the inventory of a Kustomization). The page refreshes itself every few seconds.
+
+Actions go through the same safety checks as everything else: **Sync**, **Sync and prune** (production asks for the name), **Refresh** and **Hard refresh** for Argo CD; **Reconcile** and **Suspend/Resume** for Flux. This is also why Kubism refuses to apply right-sizing changes to a workload these tools manage: copy the snippet into the repository instead.
+
+<p align="center">
+  <img src="docs/screenshots/gitops.png" alt="Argo CD and Flux resources, with a degraded application selected" width="860" />
+</p>
+
 ### Operate
 
 - **Safe actions**: edit YAML with conflict handling (a `409` shows a diff, never overwrites), create from YAML (multi-document, server-side apply), delete (single and bulk), scale, rollout restart and pause, cordon, drain (respects PodDisruptionBudgets, with progress and cancel), trigger or suspend a CronJob.

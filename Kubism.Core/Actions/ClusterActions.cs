@@ -248,6 +248,46 @@ public sealed class ClusterActions
         RunAsync(suspended ? "SuspendCronJob" : "ResumeCronJob", $"cronjobs/{ns}/{name}", false, null, null,
             () => SendAsync("PATCH", Gvr.CronJobs.ObjectPath(ns, name), new JsonObject { ["spec"] = new JsonObject { ["suspend"] = suspended } }, Merge, ct));
 
+    // ---------- GitOps ----------
+
+    private static readonly Gvr ArgoApplications = new("argoproj.io", "v1alpha1", "applications");
+
+    /// <summary>Asks Argo CD to sync: sets the Application's <c>operation</c> like the CLI does. Pruning deletes what the repository no longer has, so it needs the production confirmation.</summary>
+    [ClusterAction("ArgoSync")]
+    public Task ArgoSyncAsync(string ns, string name, bool prune, CancellationToken ct, string? confirmation = null) =>
+        RunAsync("ArgoSync", $"applications/{ns}/{name}", prune, confirmation, name, () =>
+            SendAsync("PATCH", ArgoApplications.ObjectPath(ns, name), new JsonObject
+            {
+                ["operation"] = new JsonObject
+                {
+                    ["initiatedBy"] = new JsonObject { ["username"] = FieldManager },
+                    ["sync"] = new JsonObject { ["prune"] = prune },
+                },
+            }, Merge, ct));
+
+    /// <summary>Makes Argo CD re-read the repository (hard: also drops its manifest cache).</summary>
+    [ClusterAction("ArgoRefresh")]
+    public Task ArgoRefreshAsync(string ns, string name, bool hard, CancellationToken ct) =>
+        RunAsync("ArgoRefresh", $"applications/{ns}/{name}", false, null, null, () =>
+            SendAsync("PATCH", ArgoApplications.ObjectPath(ns, name), new JsonObject
+            {
+                ["metadata"] = new JsonObject { ["annotations"] = new JsonObject { ["argocd.argoproj.io/refresh"] = hard ? "hard" : "normal" } },
+            }, Merge, ct));
+
+    /// <summary>Flux reconciles an object whose <c>reconcile.fluxcd.io/requestedAt</c> annotation changes.</summary>
+    [ClusterAction("FluxReconcile")]
+    public Task FluxReconcileAsync(Gvr gvr, string ns, string name, CancellationToken ct) =>
+        RunAsync("FluxReconcile", Target(gvr, ns, name), false, null, null, () =>
+            SendAsync("PATCH", gvr.ObjectPath(ns, name), new JsonObject
+            {
+                ["metadata"] = new JsonObject { ["annotations"] = new JsonObject { ["reconcile.fluxcd.io/requestedAt"] = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fffffff'Z'") } },
+            }, Merge, ct));
+
+    [ClusterAction("FluxSuspend")]
+    public Task SetFluxSuspendedAsync(Gvr gvr, string ns, string name, bool suspended, CancellationToken ct) =>
+        RunAsync(suspended ? "FluxSuspend" : "FluxResume", Target(gvr, ns, name), false, null, null, () =>
+            SendAsync("PATCH", gvr.ObjectPath(ns, name), new JsonObject { ["spec"] = new JsonObject { ["suspend"] = suspended ? true : null } }, Merge, ct));
+
     [ClusterAction("TriggerCronJob")]
     public Task<string> TriggerCronJobAsync(string ns, string name, CancellationToken ct) =>
         RunAsync("TriggerCronJob", $"cronjobs/{ns}/{name}", false, null, null, async () =>
