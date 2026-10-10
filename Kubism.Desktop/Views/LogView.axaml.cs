@@ -52,7 +52,8 @@ public partial class LogView : UserControl
         }
         var baseOffset = replace ? 0 : doc.TextLength - text.Length;
         foreach (var s in spans) _colors.Add((baseOffset + s.Start, s.Length, s.Fg));
-        if (atBottom && _vm is { Paused: false }) Editor.ScrollToEnd();
+        // ScrollToEnd can overshoot into blank space (extent not measured yet); scrolling to the last line cannot.
+        if (atBottom && _vm is { Paused: false }) Editor.ScrollToLine(doc.LineCount);
         if (!string.IsNullOrEmpty(_vm?.Search)) Search();
     }
 
