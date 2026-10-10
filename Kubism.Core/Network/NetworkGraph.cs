@@ -45,10 +45,12 @@ public sealed partial class NetworkGraph
     // ---------- build ----------
 
     public static NetworkGraph Build(IEnumerable<KubeObject> ingresses, IEnumerable<KubeObject> ingressClasses, IEnumerable<KubeObject> services, IEnumerable<KubeObject> endpointSlices,
-        IEnumerable<KubeObject> pods, IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus>? tls = null, IReadOnlyList<RbacKindStatus>? availability = null, DateTimeOffset? now = null)
+        IEnumerable<KubeObject> pods, IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus>? tls = null, IReadOnlyList<RbacKindStatus>? availability = null, DateTimeOffset? now = null,
+        IEnumerable<KubeObject>? nodes = null)
     {
         var g = new NetworkGraph(availability ?? [new("ingresses", true, null), new("ingressclasses", true, null), new("services", true, null), new("endpointslices", true, null), new("pods", true, null)]);
-        new Builder(g, ingresses.ToList(), ingressClasses.ToList(), services.ToList(), endpointSlices.ToList(), pods.ToList(), tls ?? new Dictionary<(string, string), TlsSecretStatus>(), now ?? DateTimeOffset.UtcNow).Run();
+        // Nodes are optional: a namespaced user often cannot list them. Null means "not readable" (the node boxes then say their status is unknown), not "no nodes".
+        new Builder(g, ingresses.ToList(), ingressClasses.ToList(), services.ToList(), endpointSlices.ToList(), pods.ToList(), tls ?? new Dictionary<(string, string), TlsSecretStatus>(), now ?? DateTimeOffset.UtcNow, nodes?.ToList()).Run();
         return g;
     }
 
@@ -76,7 +78,7 @@ public sealed partial class NetworkGraph
     }
 
     private sealed class Builder(NetworkGraph g, List<KubeObject> ingresses, List<KubeObject> classes, List<KubeObject> services, List<KubeObject> slices, List<KubeObject> pods,
-        IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus> tls, DateTimeOffset now)
+        IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus> tls, DateTimeOffset now, List<KubeObject>? nodeObjects)
     {
         private readonly Dictionary<string, ServiceInfo> _svc = [];
         private readonly Dictionary<string, NetworkNode> _nodes = [];
@@ -85,6 +87,8 @@ public sealed partial class NetworkGraph
         private readonly Dictionary<string, List<string>> _lines = [];
         private readonly HashSet<string> _workloadsBuilt = [];
         private readonly List<NetworkRoute> _routeList = [];
+        // node name → the workloads with pods there (workload id, label, pods)
+        private readonly Dictionary<string, List<(string Wid, string Label, List<KubeObject> Pods)>> _onNode = [];
 
         public void Run()
         {
@@ -92,6 +96,7 @@ public sealed partial class NetworkGraph
             var controllers = Controllers();
             foreach (var ing in ingresses.OrderBy(i => i.Namespace, StringComparer.Ordinal).ThenBy(i => i.Name, StringComparer.Ordinal)) AddIngress(ing, controllers);
             foreach (var s in _svc.Values.Where(s => !s.IsController).OrderBy(s => s.Ns, StringComparer.Ordinal).ThenBy(s => s.Obj.Name, StringComparer.Ordinal)) AddService(s);
+            AddNodes();
             Propagate();
             foreach (var n in _nodes.Values) g._nodes.Add(n with { Problems = Problems(n.Id), Lines = Lines(n.Id) });
             foreach (var ((from, to), (labels, ports, problem)) in _edges) g._edges.Add(new NetworkEdge(from, to, Join(labels), problem) { Ports = ports });
@@ -437,6 +442,11 @@ public sealed partial class NetworkGraph
             var hostPorts = ports.Where(p => p.HostPort is not null).ToList();
             Node(new NetworkNode(id, NetworkNodeKind.Workload, $"{w.Kind} {w.Name}", w.Namespace, $"{ready}/{workloadPods.Count} pods ready" + (ports.Count > 0 ? " · " + string.Join(", ", ports.Take(4).Select(p => p.Name is null ? p.Number.ToString() : $"{p.Name}:{p.Number}")) : ""),
                 ExposureLevel.InCluster, [], [], null));
+            foreach (var onNode in workloadPods.Where(p => (p.StringAt("spec", "nodeName") ?? "").Length > 0).GroupBy(p => p.StringAt("spec", "nodeName")!))
+            {
+                if (!_onNode.TryGetValue(onNode.Key, out var uses)) _onNode[onNode.Key] = uses = [];
+                uses.Add((id, $"{w.Namespace}/{w.Kind} {w.Name}", onNode.ToList()));
+            }
             Line(id, $"{ready} of {workloadPods.Count} pods ready");
             // Which nodes the pods run on: two pods on two nodes, or both on one, is not visible from the traffic path.
             foreach (var onNode in workloadPods.GroupBy(p => p.StringAt("spec", "nodeName") ?? "").OrderBy(x => x.Key.Length == 0 ? 1 : 0).ThenBy(x => x.Key, StringComparer.Ordinal))
@@ -452,6 +462,40 @@ public sealed partial class NetworkGraph
             return id;
         }
 
+        // ---------- nodes: where the pods run ----------
+
+        private void AddNodes()
+        {
+            var byName = nodeObjects?.ToDictionary(n => n.Name, n => n);
+            foreach (var (name, uses) in _onNode.OrderBy(k => k.Key, StringComparer.Ordinal))
+            {
+                var nid = $"n:{name}";
+                var obj = byName?.GetValueOrDefault(name);
+                var total = uses.Sum(u => u.Pods.Count);
+                string status; var missing = false;
+                if (byName is null) status = "status unknown (nodes cannot be read)";
+                else if (obj is null) { status = "not in the node list"; missing = true; }
+                else
+                {
+                    var ready = (obj.At("status", "conditions") as JsonArray ?? []).OfType<JsonObject>().FirstOrDefault(c => KubeObject.Str(c, "type") == "Ready");
+                    var state = KubeObject.Str(ready ?? new JsonObject(), "status");
+                    status = state == "True" ? "Ready" : state == "False" ? "NotReady" : "Ready status unknown";
+                    if (obj.At("spec", "unschedulable") is JsonValue u && u.TryGetValue<bool>(out var cordoned) && cordoned) status += " · cordoned";
+                    if (state != "True") Problem(nid, "node-not-ready", $"Node {name} is not Ready: its pods may not receive traffic.", FindingSeverity.High);
+                }
+                if (missing) Problem(nid, "node-missing", $"Pods are scheduled on {name}, which is not in the node list.", FindingSeverity.Medium);
+                Node(new NetworkNode(nid, NetworkNodeKind.Node, name, null, $"{status} · {total} pod{(total == 1 ? "" : "s")}", ExposureLevel.InCluster, [], [], obj, Missing: missing));
+                Line(nid, $"status: {status}");
+                foreach (var (wid, label, pods) in uses)
+                {
+                    Line(nid, $"{label}: {string.Join(", ", pods.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => p.Name + (PodReady(p) ? "" : " (not ready)")))}");
+                    var ready = pods.Count(PodReady);
+                    var notReady = ready < pods.Count;
+                    Edge(wid, nid, string.Join(", ", pods.Select(p => p.Name)), notReady, [notReady ? $"{ready}/{pods.Count} ready" : $"{pods.Count} pod{(pods.Count == 1 ? "" : "s")}"]);
+                }
+            }
+        }
+
         // ---------- exposure level, propagated from the exposure nodes along edges ----------
 
         private void Propagate()
@@ -463,7 +507,8 @@ public sealed partial class NetworkGraph
             {
                 var id = queue.Dequeue();
                 foreach (var to in next[id])
-                    if (level[to] < level[id]) { level[to] = level[id]; queue.Enqueue(to); }
+                    // Where a pod runs says nothing about how it is reached: nodes keep their own (in-cluster) level.
+                    if (_nodes[to].Kind != NetworkNodeKind.Node && level[to] < level[id]) { level[to] = level[id]; queue.Enqueue(to); }
             }
             foreach (var n in _nodes.Values.ToList()) if (level[n.Id] != n.Exposure) _nodes[n.Id] = n with { Exposure = level[n.Id] };
         }

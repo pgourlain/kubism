@@ -125,6 +125,36 @@ public class NetworkUiTests
     }
 
     [AvaloniaFact]
+    public async Task Show_nodes_adds_a_column_with_one_shared_box_per_node()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        Assert.False(vm.ShowNodes);                                               // off by default
+        Assert.Equal(4, vm.View!.Columns);
+        Assert.DoesNotContain(vm.View.Nodes, p => p.Node.Kind == NetworkNodeKind.Node);
+
+        vm.ShowNodes = true;
+        var v = vm.View!;
+        Assert.Equal(5, v.Columns);
+        var n1 = v.Nodes.Single(p => p.Id == "n:node-1");
+        var n2 = v.Nodes.Single(p => p.Id == "n:node-2");
+        Assert.Equal(4, n1.Column);
+        Assert.Contains("Ready", n1.Node.Detail);
+        // the web Deployment has a pod on each node; node-1 is shared with the other workloads that run there
+        Assert.Contains(v.Edges, e => e.From == "w:shop/Deployment/web" && e.To == "n:node-1");
+        Assert.Contains(v.Edges, e => e.From == "w:shop/Deployment/web" && e.To == "n:node-2");
+        Assert.True(v.Edges.Count(e => e.To == "n:node-1") >= 3);
+        h.Screenshot("69-network-nodes");
+
+        vm.NodeClickedCommand.Execute(n2);
+        Assert.Equal("n:node-2", vm.SelectedNode!.Id);
+        Assert.Contains(vm.NodeLines, l => l.StartsWith("shop/Deployment web: web-6d5f-b"));
+
+        vm.ShowNodes = false;
+        Assert.Equal(4, vm.View!.Columns);
+    }
+
+    [AvaloniaFact]
     public async Task An_unreadable_kind_shows_a_warning_instead_of_a_silent_partial_graph()
     {
         await using var h = await UiHarness.StartAsync();

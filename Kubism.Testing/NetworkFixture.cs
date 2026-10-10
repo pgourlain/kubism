@@ -27,10 +27,22 @@ public static class NetworkFixture
         [("shop", "admin-tls")] = new(false, null),
     };
 
-    public static NetworkGraph Graph(Func<KubeObject, bool>? skip = null, IReadOnlyList<RbacKindStatus>? availability = null, bool tls = true)
+    /// <summary>The two nodes the fixture's pods run on. The demo environment has nodes of the same names, so UI and MCP tests see the same.</summary>
+    public static IReadOnlyList<KubeObject> Nodes(bool node2Ready = true) =>
+    [
+        Node("node-1", true), Node("node-2", node2Ready),
+    ];
+
+    private static KubeObject Node(string name, bool ready) => new(new JsonObject
+    {
+        ["apiVersion"] = "v1", ["kind"] = "Node", ["metadata"] = new JsonObject { ["name"] = name },
+        ["status"] = new JsonObject { ["conditions"] = new JsonArray(new JsonObject { ["type"] = "Ready", ["status"] = ready ? "True" : "False" }) },
+    });
+
+    public static NetworkGraph Graph(Func<KubeObject, bool>? skip = null, IReadOnlyList<RbacKindStatus>? availability = null, bool tls = true, IReadOnlyList<KubeObject>? nodes = null, bool unreadableNodes = false)
     {
         var all = Objects().Where(o => skip is null || !skip(o)).ToList();
         IEnumerable<KubeObject> Of(string kind) => all.Where(o => o.Kind == kind);
-        return NetworkGraph.Build(Of("Ingress"), Of("IngressClass"), Of("Service"), Of("EndpointSlice"), Of("Pod"), tls ? Tls() : null, availability, Now);
+        return NetworkGraph.Build(Of("Ingress"), Of("IngressClass"), Of("Service"), Of("EndpointSlice"), Of("Pod"), tls ? Tls() : null, availability, Now, unreadableNodes ? null : nodes ?? Nodes());
     }
 }

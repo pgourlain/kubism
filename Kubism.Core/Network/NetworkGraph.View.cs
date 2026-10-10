@@ -16,7 +16,7 @@ public sealed partial class NetworkGraph
         bool InSelection(NetworkNode n) => filter.Namespaces is null || (n.Namespace is not null && filter.Namespaces.Contains(n.Namespace));
 
         // chains: union-find over the non-exposure nodes in the selection
-        var anchors = _nodes.Where(n => n.Kind != NetworkNodeKind.Exposure && InSelection(n)).ToList();
+        var anchors = _nodes.Where(n => n.Kind is not (NetworkNodeKind.Exposure or NetworkNodeKind.Node) && InSelection(n)).ToList();
         var parent = anchors.ToDictionary(n => n.Id, n => n.Id);
         string Find(string x) { while (parent[x] != x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
         foreach (var e in _edges)
@@ -45,10 +45,15 @@ public sealed partial class NetworkGraph
 
         var chosen = new Dictionary<string, NetworkNode>();
         foreach (var c in kept) foreach (var n in c.Nodes.Concat(c.Exposure)) chosen[n.Id] = n;
+        // The nodes column: a node is drawn once, with an arrow from every shown workload that has a pod on it.
+        if (filter.ShowNodes)
+            foreach (var e in _edges.Where(e => chosen.TryGetValue(e.From, out var f) && f.Kind == NetworkNodeKind.Workload && byId.TryGetValue(e.To, out var t) && t.Kind == NetworkNodeKind.Node))
+                chosen[e.To] = byId[e.To];
+        var columns = filter.ShowNodes ? 5 : 4;
         var edges = _edges.Where(e => chosen.ContainsKey(e.From) && chosen.ContainsKey(e.To)).ToList();
         var placed = chosen.Values.Select(n => new PlacedNode(n, (int)n.Kind, 0, filter.Namespaces is not null && n.Namespace is not null && !filter.Namespaces.Contains(n.Namespace))).ToList();
         var rows = new Dictionary<string, int>();
-        var maxRows = ColumnLayout.Arrange(placed, 4, p => p.Id, p => p.Column, (p, r) => rows[p.Id] = r, p => p.Node.Namespace + "/" + p.Node.Label, edges.Select(e => (e.From, e.To)), p => -(int)p.Node.Exposure);
+        var maxRows = ColumnLayout.Arrange(placed, columns, p => p.Id, p => p.Column, (p, r) => rows[p.Id] = r, p => p.Node.Namespace + "/" + p.Node.Label, edges.Select(e => (e.From, e.To)), p => -(int)p.Node.Exposure);
         var ingressIds = chosen.Values.Where(n => n.Kind == NetworkNodeKind.Ingress).Select(n => n.Id).ToHashSet();
         var routeRows = _routes.Where(r => ingressIds.Contains(r.IngressId)).Select(r => RowOf(r, byId)).ToList();
         routeRows.Sort((a, b) =>
@@ -61,7 +66,7 @@ public sealed partial class NetworkGraph
         {
             Routes = routeRows,
             Nodes = placed.Select(p => p with { Row = rows[p.Id] }).ToList(),
-            Edges = edges, MaxRows = maxRows, Truncated = truncated,
+            Edges = edges, MaxRows = maxRows, Columns = columns, Truncated = truncated,
             Chains = kept.Count, OutsideChains = kept.Count(c => c.Level == ExposureLevel.Outside), ProblemChains = kept.Count(c => c.Problem),
             Warning = IncompleteWarning,
         };

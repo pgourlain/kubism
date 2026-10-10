@@ -23,7 +23,7 @@ public sealed class NetworkGraphControl : Control
 
     public const double BoxW = 250, BoxH = 60, GapX = 100, GapY = 12, Pad = 14, HeaderH = 22, LineH = 13, MaxFilterLines = 6, BadgeH = 16;
     private static readonly Typeface Face = new("Inter, Segoe UI, Helvetica Neue, sans-serif");
-    private static readonly string[] Headers = ["Exposure", "Ingresses (what they match)", "Services", "Workloads"];
+    private static readonly string[] Headers = ["Exposure", "Ingresses (what they match)", "Services", "Workloads", "Nodes (where the pods run)"];
 
     private NetworkView? _layoutFor;
     private double[] _tops = [];
@@ -79,7 +79,7 @@ public sealed class NetworkGraphControl : Control
         EnsureLayout();
         if (ViewData is not { Nodes.Count: > 0 } v) return new Size(0, 0);
         var bottom = v.Nodes.Max(n => _boxes[n.Id].Bottom);
-        return new Size(Pad * 2 + 4 * BoxW + 3 * GapX, bottom + Pad);
+        return new Size(Pad * 2 + v.Columns * BoxW + (v.Columns - 1) * GapX, bottom + Pad);
     }
 
     private static IBrush B(string key, IBrush fallback) => Converters.Brush(key) ?? fallback;
@@ -98,7 +98,7 @@ public sealed class NetworkGraphControl : Control
         var byId = view.Nodes.ToDictionary(n => n.Id);
         var culture = System.Globalization.CultureInfo.CurrentUICulture;
 
-        for (var c = 0; c < 4; c++)
+        for (var c = 0; c < view.Columns; c++)
             ctx.DrawText(new FormattedText(Headers[c].ToUpperInvariant(), culture, FlowDirection.LeftToRight, Face, 10, muted), new Point(Pad + c * (BoxW + GapX), Pad - 2));
 
         IBrush LevelBrush(ExposureLevel l) => l switch { ExposureLevel.Outside => outside, ExposureLevel.Unknown => muted, _ => inside };

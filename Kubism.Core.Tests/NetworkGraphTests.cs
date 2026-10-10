@@ -291,6 +291,63 @@ public class NetworkGraphTests
         Assert.True(v.OutsideChains > 0 && v.ProblemChains > 0);
     }
 
+    // ---------- nodes: where the pods run ----------
+
+    [Fact]
+    public void The_nodes_column_is_off_by_default_and_adds_one_shared_box_per_node()
+    {
+        var plain = Graph.View();
+        Assert.DoesNotContain(plain.Nodes, p => p.Node.Kind == NetworkNodeKind.Node);
+        Assert.Equal(4, plain.Columns);
+
+        var v = Graph.View(new NetworkFilter { ShowNodes = true });
+        Assert.Equal(5, v.Columns);
+        var nodes = v.Nodes.Where(p => p.Node.Kind == NetworkNodeKind.Node).ToList();
+        Assert.Equal(["n:node-1", "n:node-2"], nodes.Select(p => p.Id).Order().ToArray());
+        Assert.All(nodes, p => Assert.Equal(4, p.Column));
+        // two pods on two nodes: the Deployment has an arrow to each, one pod on each
+        Assert.Equal("web-6d5f-a", v.Edges.Single(e => e.From == "w:shop/Deployment/web" && e.To == "n:node-1").Label);
+        Assert.Equal(["1 pod"], v.Edges.Single(e => e.From == "w:shop/Deployment/web" && e.To == "n:node-1").Ports);
+        Assert.Equal(["1 pod"], v.Edges.Single(e => e.From == "w:shop/Deployment/web" && e.To == "n:node-2").Ports);
+        // node-1 is shared: the api Deployment and the worker StatefulSet also run there, so it receives all three
+        Assert.Equal(["w:shop/Deployment/api", "w:shop/Deployment/web", "w:shop/StatefulSet/worker"], v.Edges.Where(e => e.To == "n:node-1").Select(e => e.From).Order().ToArray());
+        // two pods on one node, one of them not ready: a red "1/2 ready"
+        var worker = v.Edges.Single(e => e.From == "w:shop/StatefulSet/worker" && e.To == "n:node-1");
+        Assert.Equal(["1/2 ready"], worker.Ports);
+        Assert.True(worker.Problem);
+        Assert.Contains("web-6d5f-a", N("n:node-1").Lines.Single(l => l.StartsWith("shop/Deployment web:")));
+        Assert.Contains("worker-1 (not ready)", N("n:node-1").Lines.Single(l => l.StartsWith("shop/StatefulSet worker:")));
+        // pods with no node are not drawn on any node
+        Assert.DoesNotContain(v.Edges, e => e.From == "w:tools/Deployment/grafana" && e.To.StartsWith("n:"));
+        // the level of exposure does not flow to a node
+        Assert.All(nodes, p => Assert.Equal(ExposureLevel.InCluster, p.Node.Exposure));
+        // unique places, and the node boxes follow the filters (only nodes of the shown workloads)
+        Assert.Equal(v.Nodes.Count, v.Nodes.Select(p => (p.Column, p.Row)).Distinct().Count());
+        var tools = Graph.View(new NetworkFilter { Namespaces = new HashSet<string> { "tools" }, ShowNodes = true });
+        Assert.DoesNotContain(tools.Nodes, p => p.Node.Kind == NetworkNodeKind.Node);
+    }
+
+    [Fact]
+    public void A_node_that_is_not_ready_or_unreadable_or_missing_says_so()
+    {
+        var notReady = NetworkFixture.Graph(nodes: NetworkFixture.Nodes(node2Ready: false));
+        var n2 = notReady.Nodes.Single(n => n.Id == "n:node-2");
+        Assert.Contains("NotReady", n2.Detail);
+        Assert.Equal(FindingSeverity.High, n2.Problems.Single(p => p.Code == "node-not-ready").Severity);
+        Assert.Empty(notReady.Nodes.Single(n => n.Id == "n:node-1").Problems);
+        // a node problem does not turn the Ingress → Service → workload chain into a "problem chain"
+        Assert.DoesNotContain(notReady.View(new NetworkFilter { ProblemsOnly = true, Namespaces = new HashSet<string> { "tools" } }).Nodes, p => p.Id == "n:node-2");
+
+        var unreadable = NetworkFixture.Graph(unreadableNodes: true);
+        Assert.Contains("status unknown", unreadable.Nodes.Single(n => n.Id == "n:node-1").Detail);
+        Assert.Empty(unreadable.Nodes.Single(n => n.Id == "n:node-1").Problems);
+        Assert.True(unreadable.IsComplete);                                                      // nodes are optional: not an "incomplete data" case
+
+        var missing = NetworkFixture.Graph(nodes: NetworkFixture.Nodes().Where(n => n.Name == "node-1").ToList());
+        Assert.True(missing.Nodes.Single(n => n.Id == "n:node-2").Missing);
+        Assert.Contains("node-missing", missing.Nodes.Single(n => n.Id == "n:node-2").Problems.Select(p => p.Code));
+    }
+
     [Fact]
     public void Unreadable_kinds_are_reported_in_every_view()
     {

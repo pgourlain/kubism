@@ -9,7 +9,7 @@ namespace Kubism.Core.Network;
 /// </summary>
 public enum ExposureLevel { InCluster = 0, Unknown = 1, Outside = 2 }
 
-public enum NetworkNodeKind { Exposure = 0, Ingress = 1, Service = 2, Workload = 3 }
+public enum NetworkNodeKind { Exposure = 0, Ingress = 1, Service = 2, Workload = 3, Node = 4 }
 
 public sealed record NetworkProblem(string Code, string Description, FindingSeverity Severity);
 
@@ -21,7 +21,7 @@ public sealed record NetworkNode(string Id, NetworkNodeKind Kind, string Label, 
     public IReadOnlyList<string> FilterLines { get; init; } = Filters ?? [];
     public bool HasProblem => Problems.Count > 0;
     public FindingSeverity? Worst => Problems.Count == 0 ? null : Problems.Max(p => p.Severity);
-    public string KindText => Kind switch { NetworkNodeKind.Exposure => "Exposure", NetworkNodeKind.Ingress => "Ingress", NetworkNodeKind.Service => "Service", _ => "Workload" };
+    public string KindText => Kind switch { NetworkNodeKind.Exposure => "Exposure", NetworkNodeKind.Ingress => "Ingress", NetworkNodeKind.Service => "Service", NetworkNodeKind.Node => "Node", _ => "Workload" };
 }
 
 /// <param name="Label">The full text of the hop (paths, port mapping), for tooltips and the MCP tool.</param>
@@ -60,6 +60,8 @@ public sealed record NetworkFilter
     public string? Search { get; init; }
     /// <summary>Also draw Services nothing routes to (ClusterIP only). They are many and rarely what one is looking for, so off by default.</summary>
     public bool IncludeInternalServices { get; init; }
+    /// <summary>A fifth column: the nodes the pods run on, one box per node shared by every workload that has a pod there. Off by default: it adds boxes and arrows.</summary>
+    public bool ShowNodes { get; init; }
     public int MaxChains { get; init; } = 120;
 }
 
@@ -74,6 +76,8 @@ public sealed class NetworkView
     public IReadOnlyList<PlacedNode> Nodes { get; init; } = [];
     public IReadOnlyList<NetworkEdge> Edges { get; init; } = [];
     public int MaxRows { get; init; }
+    /// <summary>4 (Exposure, Ingresses, Services, Workloads), or 5 with the nodes column.</summary>
+    public int Columns { get; init; } = 4;
     public bool Truncated { get; init; }
     public int Chains { get; init; }
     /// <summary>Every URL the shown Ingresses serve, sorted by host then path.</summary>

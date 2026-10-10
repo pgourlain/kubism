@@ -21,6 +21,7 @@ public class NetworkStoreTests
         var t = new FakeKubeTransport();
         var all = NetworkFixture.Objects();
         JsonObject[] Of(string kind) => all.Where(o => o.Kind == kind).Select(o => (JsonObject)o.Json.DeepClone()).ToArray();
+        t.Set(new Gvr("", "v1", "nodes"), NetworkFixture.Nodes().Select(n => (JsonObject)n.Json.DeepClone()).ToArray());
         t.Set(Ingresses, Of("Ingress")); t.Set(Classes, Of("IngressClass")); t.Set(Services, Of("Service")); t.Set(Slices, Of("EndpointSlice")); t.Set(Pods, Of("Pod"));
         // shop-tls exists (no certificate inside: only existence is known), admin-tls does not (the fake answers 404)
         t.SetGet("/api/v1/namespaces/shop/secrets/shop-tls", new JsonObject { ["kind"] = "Secret", ["type"] = "kubernetes.io/tls", ["metadata"] = new JsonObject { ["name"] = "shop-tls", ["namespace"] = "shop" } });
@@ -44,6 +45,7 @@ public class NetworkStoreTests
         Assert.True(store.Graph.IsComplete);
         Assert.Contains(store.Graph.Nodes, n => n.Id == "i:shop/shop");
         Assert.Equal(ExposureLevel.Outside, store.Graph.Nodes.Single(n => n.Id == "i:shop/shop").Exposure);
+        Assert.Contains("Ready", store.Graph.Nodes.Single(n => n.Id == "n:node-1").Detail);                   // the nodes come from their own informer
 
         // the TLS lookups arrive after the first graph: the missing secret becomes a problem, the existing one does not
         Assert.True(await Until(() => store.Graph.Nodes.Single(n => n.Id == "i:shop/admin").Problems.Any(p => p.Code == "tls-secret-missing")));
@@ -85,6 +87,12 @@ public class NetworkStoreTests
         var g = await NetworkLoader.LoadAsync(t, CancellationToken.None);
         Assert.True(g.IsComplete);
         Assert.Contains(g.Nodes.Single(n => n.Id == "i:shop/admin").Problems, p => p.Code == "tls-secret-missing");
+        t.ListFailure = (gvr, _) => gvr == Pods ? new KubeApiException(403, "Forbidden", "pods is forbidden") : null;
+        Assert.Contains("Ready", g.Nodes.Single(n => n.Id == "n:node-1").Detail);
+        t.ListFailure = (gvr, _) => gvr == new Gvr("", "v1", "nodes") ? new KubeApiException(403, "Forbidden", "nodes is forbidden") : null;
+        var noNodes = await NetworkLoader.LoadAsync(t, CancellationToken.None, checkTls: false);
+        Assert.True(noNodes.IsComplete);                                                                       // optional kind
+        Assert.Contains("status unknown", noNodes.Nodes.Single(n => n.Id == "n:node-1").Detail);
         t.ListFailure = (gvr, _) => gvr == Pods ? new KubeApiException(403, "Forbidden", "pods is forbidden") : null;
         var partial = await NetworkLoader.LoadAsync(t, CancellationToken.None, checkTls: false);
         Assert.Equal(["pods"], partial.MissingKinds);

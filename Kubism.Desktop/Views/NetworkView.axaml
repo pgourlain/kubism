@@ -26,6 +26,7 @@
         <ComboBox ItemsSource="{Binding ExposureChoices}" SelectedItem="{Binding SelectedExposure, Mode=TwoWay}" MinWidth="210" Margin="0,0,8,4" AutomationProperties.Name="Exposure filter" />
         <CheckBox Content="Problems only" IsChecked="{Binding ProblemsOnly}" Margin="0,0,8,4" />
         <CheckBox Content="Show internal services" IsChecked="{Binding IncludeInternal}" Margin="0,0,8,4" ToolTip.Tip="Services that nothing routes to (ClusterIP only) are hidden by default" />
+        <CheckBox Content="Show nodes" IsChecked="{Binding ShowNodes}" Margin="0,0,8,4" ToolTip.Tip="Add a column with the nodes the pods run on: one box per node, shared by every workload that has a pod there" />
         <TextBox Text="{Binding Search}" Watermark="Search a host, path, service, workload" MinWidth="280" Margin="0,0,8,4" AutomationProperties.Name="Search" />
       </WrapPanel>
       <WrapPanel>

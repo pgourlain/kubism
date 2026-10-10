@@ -36,6 +36,8 @@ public sealed class NetworkStore : IDisposable
         (new("", "v1", "services"), "services", "Service"), (new("discovery.k8s.io", "v1", "endpointslices"), "endpointslices", "EndpointSlice"), (new("", "v1", "pods"), "pods", "Pod"),
     ];
 
+    // Nodes are optional (a namespaced user often cannot list them): not part of Kinds, so an unreadable node list does not make the whole graph "incomplete".
+    private static readonly Gvr NodesGvr = new("", "v1", "nodes");
     private readonly List<InformerLease> _leases = [];
     private readonly List<IDisposable> _subscriptions = [];
     private readonly IKubeTransport _transport;
@@ -57,6 +59,10 @@ public sealed class NetworkStore : IDisposable
             _subscriptions.Add(lease.Informer.Changes.Subscribe(_ => Schedule()));
             lease.Informer.StateChanged += OnState;
         }
+        var nodeLease = cache.Subscribe(NodesGvr);
+        _leases.Add(nodeLease);
+        _subscriptions.Add(nodeLease.Informer.Changes.Subscribe(_ => Schedule()));
+        nodeLease.Informer.StateChanged += OnState;
         Graph = Rebuild();
     }
 
@@ -106,7 +112,9 @@ public sealed class NetworkStore : IDisposable
         }
         var needed = NetworkGraph.TlsSecretsOf(sets[0]);
         var known = needed.Where(k => _tls.TryGetValue(k, out _)).ToDictionary(k => k, k => _tls[k].Status);
-        var graph = NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], known, status);
+        var nodeInformer = _leases[Kinds.Length].Informer;
+        var nodes = nodeInformer.IsListed ? nodeInformer.Snapshot().Select(c => Tag(c.Object, "Node")).ToList() : null;
+        var graph = NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], known, status, null, nodes);
         foreach (var k in needed) if (!_tls.TryGetValue(k, out var e) || DateTimeOffset.UtcNow - e.At > TlsTtl) _ = FetchTlsAsync(k);
         return graph;
     }
@@ -179,7 +187,21 @@ public static class NetworkLoader
         var tls = new Dictionary<(string Namespace, string Secret), TlsSecretStatus>();
         if (checkTls)
             foreach (var k in NetworkGraph.TlsSecretsOf(sets[0])) tls[k] = await NetworkTls.LookupAsync(transport, k.Namespace, k.Secret, ct).ConfigureAwait(false);
-        return NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], tls, status);
+        // Optional: without the right to list nodes, node boxes say their status is unknown.
+        List<KubeObject>? nodes = null;
+        try
+        {
+            nodes = [];
+            string? cont = null;
+            do
+            {
+                var page = await transport.ListAsync(new Gvr("", "v1", "nodes"), null, new ListOptions { Limit = 500, Continue = cont }, ct).ConfigureAwait(false);
+                foreach (var item in page.Items) { var o = new KubeObject(item); if (o.Kind.Length == 0) item["kind"] = "Node"; nodes.Add(o); }
+                cont = string.IsNullOrEmpty(page.Continue) ? null : page.Continue;
+            } while (cont is not null);
+        }
+        catch (Exception ex) when (ex is KubeApiException or KubeConnectionException) { nodes = null; }
+        return NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], tls, status, null, nodes);
     }
 
     private static readonly (Gvr Gvr, string Name, string Kind)[] Kinds =

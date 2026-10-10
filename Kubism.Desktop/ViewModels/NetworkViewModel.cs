@@ -60,6 +60,7 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
     [ObservableProperty] private string _selectedExposure = "Any exposure";
     [ObservableProperty] private bool _problemsOnly;
     [ObservableProperty] private bool _includeInternal;
+    [ObservableProperty] private bool _showNodes;
     [ObservableProperty] private string _search = "";
     [ObservableProperty] private string _viewSummary = "";
 
@@ -69,6 +70,7 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
     partial void OnSelectedExposureChanged(string value) => Rebuild();
     partial void OnProblemsOnlyChanged(bool value) => Rebuild();
     partial void OnIncludeInternalChanged(bool value) => Rebuild();
+    partial void OnShowNodesChanged(bool value) => Rebuild();
     partial void OnSearchChanged(string value) => Rebuild();
 
     private void OnNamespacesChanged() => _ws.Ui.Post(Rebuild);
@@ -102,7 +104,7 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
         {
             Namespaces = ns,
             Exposure = SelectedExposure switch { "Outside the cluster only" => ExposureFilter.OutsideOnly, "In-cluster only" => ExposureFilter.InClusterOnly, _ => ExposureFilter.Any },
-            ProblemsOnly = ProblemsOnly, IncludeInternalServices = IncludeInternal, Search = string.IsNullOrWhiteSpace(Search) ? null : Search,
+            ProblemsOnly = ProblemsOnly, IncludeInternalServices = IncludeInternal, ShowNodes = ShowNodes, Search = string.IsNullOrWhiteSpace(Search) ? null : Search,
         };
         var v = _graph.View(filter);
         var keep = SelectedNode?.Id;

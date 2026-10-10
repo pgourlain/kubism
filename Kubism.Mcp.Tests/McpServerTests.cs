@@ -334,6 +334,19 @@ public class McpNetworkTests
     }
 
     [Fact]
+    public async Task Network_exposure_can_add_the_nodes_the_pods_run_on()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var without = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake" }))!;
+        Assert.DoesNotContain(without["nodes"]!.AsArray(), n => n!["kind"]!.ToString() == "Node");
+        var r = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["showNodes"] = true }))!;
+        var node = Node(r, "n:node-1");
+        Assert.Equal("Node", node["kind"]!.ToString());
+        Assert.Contains("Ready", node["detail"]!.ToString());
+        Assert.Contains(r["edges"]!.AsArray(), e => e!["from"]!.ToString() == "w:shop/Deployment/web" && e["to"]!.ToString() == "n:node-1" && e["entryPorts"]!.AsArray().Select(x => x!.ToString()).SequenceEqual(new[] { "1 pod" }));
+    }
+
+    [Fact]
     public async Task Network_exposure_says_when_a_kind_could_not_be_read()
     {
         await using var f = await McpFixture.StartAsync([]);

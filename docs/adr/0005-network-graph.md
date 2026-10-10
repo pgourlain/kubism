@@ -26,6 +26,8 @@ The level flows from the exposure nodes along the edges (the highest wins), so a
 
 **Namespace filter.** A chain is kept when its Ingress, Service or workload is in a chosen namespace. Exposure nodes of another namespace (the controller's Service) stay as dimmed context, so the path to the outside is never cut, but the other chains they feed are not pulled in. Services nothing routes to are hidden unless asked for, except when looking for problems.
 
+**Nodes.** With "Show nodes" a fifth column shows the nodes the pods run on, one box per node shared by the workloads that have a pod there, from `spec.nodeName`. Node status (Ready, cordoned) comes from the node list, which is optional: when it cannot be read the boxes say "status unknown" and the graph is not reported incomplete. The exposure level does not flow to a node (where a pod runs says nothing about how it is reached), and a node problem does not make a chain a problem chain. Workload details list the nodes either way.
+
 **Incomplete data is stated:** a kind that cannot be listed (typically 403) is named in a banner and in the MCP answer instead of a silently partial graph.
 
 ## Not visible (known limits)

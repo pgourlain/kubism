@@ -264,7 +264,8 @@ public sealed class KubismReadTools(McpContext ctx)
     [McpServerTool(Name = "network_exposure"), Description("How traffic reaches the pods (read-only): what is exposed outside the cluster, through Ingresses and Services, to endpoints and workloads, with hosts, paths and ports on every hop and what does not line up (missing backend, unresolved targetPort, no ready endpoint, missing or expiring TLS secret, no ingress class…). 'Outside the cluster' is judged from Services (LoadBalancer, NodePort, externalIPs), ingress controllers and hostPort, not from DNS, firewalls or WAFs. With a namespace, the controller of another namespace stays as context. The result says when some kinds could not be read.")]
     public Task<string> NetworkExposure(string cluster, [Description("Namespace to show; omit for all. The ingress controller's Service of another namespace is kept as context.")] string? @namespace = null,
         [Description("any, outside (reachable from outside the cluster) or incluster")] string exposure = "any", [Description("Only chains with a problem")] bool problemsOnly = false,
-        [Description("Host, path, service, workload or namespace to look for")] string? search = null, [Description("Also list Services nothing routes to")] bool includeInternalServices = false, CancellationToken ct = default) =>
+        [Description("Host, path, service, workload or namespace to look for")] string? search = null, [Description("Also list Services nothing routes to")] bool includeInternalServices = false,
+        [Description("Add the nodes the pods run on (one node per box, shared by workloads), with an edge per workload and its pod count")] bool showNodes = false, CancellationToken ct = default) =>
         ctx.Run(async () =>
         {
             var s = await ctx.SessionAsync(cluster, ct);
@@ -273,7 +274,7 @@ public sealed class KubismReadTools(McpContext ctx)
             {
                 Namespaces = string.IsNullOrWhiteSpace(@namespace) ? null : new HashSet<string> { @namespace },
                 Exposure = exposure.ToLowerInvariant() switch { "outside" => Core.Network.ExposureFilter.OutsideOnly, "incluster" or "in-cluster" => Core.Network.ExposureFilter.InClusterOnly, "any" => Core.Network.ExposureFilter.Any, _ => throw new McpException("exposure must be any, outside or incluster") },
-                ProblemsOnly = problemsOnly, Search = search, IncludeInternalServices = includeInternalServices,
+                ProblemsOnly = problemsOnly, Search = search, IncludeInternalServices = includeInternalServices, ShowNodes = showNodes,
             };
             var view = graph.View(filter);
             var o = new JsonObject
