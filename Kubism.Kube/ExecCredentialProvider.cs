@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json.Nodes;
+using Kubism.Core;
 using Kubism.Core.Api;
 
 namespace Kubism.Kube;
@@ -13,14 +14,25 @@ public sealed class ExecCredentialProvider(ExecSpec spec, IExecPluginObserver? o
     private string? _token;
     private DateTimeOffset? _expires;
 
-    public async Task<string?> GetTokenAsync(CancellationToken ct, bool forceRefresh = false)
+    private bool Fresh => _token is not null && (_expires is null || _expires > DateTimeOffset.UtcNow.AddSeconds(60));
+
+    /// <summary>
+    /// Returns the cached token, or runs the plugin. <paramref name="rejectedToken"/> is the token the server just refused with 401:
+    /// the plugin is only re-run if it is still the cached one, so N parallel requests that fail together trigger one plugin run
+    /// (concurrent runs race on the plugin's token cache, notably kubelogin on Windows).
+    /// </summary>
+    public async Task<string?> GetTokenAsync(CancellationToken ct, string? rejectedToken = null)
     {
-        if (!forceRefresh && _token is not null && (_expires is null || _expires > DateTimeOffset.UtcNow.AddSeconds(60))) return _token;
+        if (Fresh && _token != rejectedToken) return _token;
         await _lock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!forceRefresh && _token is not null && (_expires is null || _expires > DateTimeOffset.UtcNow.AddSeconds(60))) return _token;
-            (_token, _expires) = await RunAsync(ct).ConfigureAwait(false);
+            if (Fresh && _token != rejectedToken) return _token;
+            AppLog.Info($"Exec plugin '{spec.Command}': {(rejectedToken is not null ? "token rejected by server (401), refreshing" : _token is null ? "no token yet" : $"token expired at {_expires:O}")}");
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try { (_token, _expires) = await RunAsync(ct).ConfigureAwait(false); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { AppLog.Error($"Exec plugin '{spec.Command}' failed after {sw.ElapsedMilliseconds} ms", ex); throw; }
+            AppLog.Info($"Exec plugin '{spec.Command}' returned a token in {sw.ElapsedMilliseconds} ms, expires {(_expires is null ? "never (no expirationTimestamp)" : _expires.Value.ToString("O"))}, token {(_token is null ? "MISSING (status.token empty: client-certificate output is not supported)" : "present")}");
             return _token;
         }
         finally { _lock.Release(); }
@@ -30,6 +42,7 @@ public sealed class ExecCredentialProvider(ExecSpec spec, IExecPluginObserver? o
     {
         var exe = ShellEnvironment.Which(spec.Command)
                   ?? throw new KubeConnectionException($"Exec plugin '{spec.Command}' not found. PATH searched: {Environment.GetEnvironmentVariable("PATH")}");
+        AppLog.Info($"Exec plugin: running {exe} {string.Join(' ', spec.Args)}");
         var psi = new ProcessStartInfo(exe)
         {
             RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = false, UseShellExecute = false,
@@ -68,6 +81,7 @@ public sealed class ExecCredentialProvider(ExecSpec spec, IExecPluginObserver? o
         if (p.ExitCode != 0)
         {
             string err; lock (stderr) err = stderr.ToString().Trim();
+            AppLog.Warn($"Exec plugin '{spec.Command}' exit {p.ExitCode}, stderr: {err}");
             throw new KubeConnectionException($"Exec plugin '{spec.Command}' failed (exit {p.ExitCode}): {err}");
         }
         var json = JsonNode.Parse(output) as JsonObject ?? throw new KubeConnectionException($"Exec plugin '{spec.Command}' returned invalid output");
@@ -88,13 +102,16 @@ public sealed class ExecAuthHandler(ExecCredentialProvider provider) : Delegatin
         var response = await base.SendAsync(request, ct).ConfigureAwait(false);
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && request.Content is null)
         {
-            token = await provider.GetTokenAsync(ct, forceRefresh: true).ConfigureAwait(false);
-            if (token is not null)
+            AppLog.Warn($"401 on GET {request.RequestUri?.AbsolutePath}, retrying with a refreshed token");
+            var fresh = await provider.GetTokenAsync(ct, rejectedToken: token).ConfigureAwait(false);
+            if (fresh is not null)
             {
                 response.Dispose();
-                using var retry = await CloneAsync(request).ConfigureAwait(false);
-                retry.Headers.Authorization = new("Bearer", token);
-                return await base.SendAsync(retry, ct).ConfigureAwait(false);
+                var retry = await CloneAsync(request).ConfigureAwait(false);
+                retry.Headers.Authorization = new("Bearer", fresh);
+                var second = await base.SendAsync(retry, ct).ConfigureAwait(false);
+                if (second.StatusCode == System.Net.HttpStatusCode.Unauthorized) AppLog.Warn($"401 again on GET {request.RequestUri?.AbsolutePath} after refresh: the server rejects the plugin's token");
+                return second;
             }
         }
         return response;

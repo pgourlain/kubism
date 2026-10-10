@@ -158,6 +158,7 @@ public sealed class Informer : IAsyncDisposable
             {
                 failures++;
                 LastError = ex.Message;
+                AppLog.Warn($"Informer {Gvr.Resource} ns={Namespace ?? "*"} failure #{failures}: {ex.GetType().Name}: {ex.Message}");
                 SetState(IsListed ? InformerState.Reconnecting : InformerState.Failed);
                 if (failures >= 3) needList = true;
                 var delay = Backoff(failures);

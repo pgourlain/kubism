@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using k8s;
 using k8s.KubeConfigModels;
+using Kubism.Core;
 using Kubism.Core.Api;
 using Kubism.Core.Catalog;
 using WatchEventType = Kubism.Core.Api.WatchEventType;
@@ -39,6 +40,7 @@ public sealed class KubeTransport : IKubeTransport
         _baseUri = new Uri(config.Host.TrimEnd('/') + "/");
         _client = new RawClient(config, handlers);
         _http = _client.Http;
+        AppLog.Info($"Transport for {entry.ContextName} ({_baseUri}), auth: {(handlers.Length > 0 && handlers[0] is ExecAuthHandler ? "exec plugin" : !string.IsNullOrEmpty(config.AccessToken) ? "token" : config.ClientCertificateData is not null || config.ClientCertificateFilePath is not null ? "client certificate" : !string.IsNullOrEmpty(config.Username) ? "basic" : "none")}");
         _http.Timeout = Timeout.InfiniteTimeSpan; // watches and logs are long-lived; callers use cancellation tokens
     }
 
@@ -62,9 +64,19 @@ public sealed class KubeTransport : IKubeTransport
 
     private async Task<HttpResponseMessage> RequestAsync(HttpRequestMessage req, HttpCompletionOption option, CancellationToken ct)
     {
-        try { return await _http.SendAsync(req, option, ct).ConfigureAwait(false); }
+        try
+        {
+            var res = await _http.SendAsync(req, option, ct).ConfigureAwait(false);
+            // Path only (no query, headers or body): enough to tell which call the server refused.
+            if (!res.IsSuccessStatusCode) AppLog.Warn($"{req.Method} {_baseUri.Host}{req.RequestUri?.AbsolutePath} -> {(int)res.StatusCode} {res.ReasonPhrase}");
+            return res;
+        }
         catch (OperationCanceledException) { throw; }
-        catch (Exception ex) { throw MapException(ex); }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"{req.Method} {_baseUri.Host}{req.RequestUri?.AbsolutePath} failed: {ex.GetType().Name}: {(ex.InnerException ?? ex).Message}");
+            throw MapException(ex);
+        }
     }
 
     public static Exception MapException(Exception ex)

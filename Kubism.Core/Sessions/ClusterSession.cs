@@ -98,6 +98,7 @@ public sealed class ClusterSession : IAsyncDisposable
         catch (Exception ex)
         {
             var msg = Describe(ex);
+            AppLog.Error($"Connect {Entry.ContextName} failed", ex);
             await TearDownAsync().ConfigureAwait(false);
             SetState(SessionState.Error, msg);
             throw;
@@ -140,6 +141,7 @@ public sealed class ClusterSession : IAsyncDisposable
             catch (Exception ex)
             {
                 failures++;
+                AppLog.Warn($"Health check ({Entry.ContextName}) failed #{failures}: {ex.Message}");
                 if (State == SessionState.Connected) SetState(SessionState.Degraded, ex.Message);
             }
         }

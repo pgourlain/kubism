@@ -40,6 +40,7 @@ public partial class App : Application
                 };
             }
             AppLog.Path = Path.Combine(options.DataFolder ?? AppPaths.DataFolder, "log.txt");
+            AppLog.Info($"Kubism {typeof(App).Assembly.GetName().Version} on {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, log {AppLog.Path}");
             Services = AppServices.Build(so);
             if (_demo is not null)
             {
