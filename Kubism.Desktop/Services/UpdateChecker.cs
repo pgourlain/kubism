@@ -11,11 +11,15 @@ public sealed class UpdateChecker(Kubism.Core.Catalog.ISettingsStore settings, H
     public const string LatestReleaseUrl = "https://api.github.com/repos/pgourlain/kubism/releases/latest";
     private readonly Func<DateTimeOffset> _now = clock ?? (() => DateTimeOffset.UtcNow);
 
-    public async Task<UpdateInfo?> CheckAsync(Version current, CancellationToken ct = default)
+    /// <param name="manual">User asked from the menu: ignores the opt-in and the once-a-day limit, and lets failures through so they can be shown.</param>
+    public async Task<UpdateInfo?> CheckAsync(Version current, CancellationToken ct = default, bool manual = false)
     {
         var s = settings.Current;
-        if (!s.CheckForUpdates) return null;
-        if (s.LastUpdateCheck is { } last && _now() - last < TimeSpan.FromHours(23)) return null;
+        if (!manual)
+        {
+            if (!s.CheckForUpdates) return null;
+            if (s.LastUpdateCheck is { } last && _now() - last < TimeSpan.FromHours(23)) return null;
+        }
         s.LastUpdateCheck = _now(); settings.Save();
         try
         {
@@ -25,8 +29,15 @@ public sealed class UpdateChecker(Kubism.Core.Catalog.ISettingsStore settings, H
             var json = JsonNode.Parse(await http.GetStringAsync(LatestReleaseUrl, ct)) as JsonObject;
             var tag = json?["tag_name"]?.ToString()?.TrimStart('v');
             if (tag is null || !Version.TryParse(tag, out var latest)) return null;
-            return new UpdateInfo(tag, json?["html_url"]?.ToString() ?? "", latest > current);
+            // The assembly version is 4 parts (0.2.1.0), a tag is 3 (0.2.1): 0.2.1 < 0.2.1.0 for System.Version, so compare 3 parts.
+            static Version Norm(Version v) => new(v.Major, v.Minor, Math.Max(v.Build, 0));
+            return new UpdateInfo(tag, json?["html_url"]?.ToString() ?? "", Norm(latest) > Norm(current));
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { return null; }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            Kubism.Core.AppLog.Warn($"Update check failed: {ex.Message}");
+            if (manual) throw;
+            return null;
+        }
     }
 }

@@ -246,9 +246,14 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
 
     public async Task CheckForUpdatesAsync(bool force = false)
     {
-        if (force) Settings.Current.LastUpdateCheck = null;
-        var info = await new UpdateChecker(Settings).CheckAsync(typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 1));
-        if (info is { IsNewer: true }) SetStatus($"Kubism {info.Version} is available: {info.Url}");
+        var current = typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 1);
+        try
+        {
+            var info = await new UpdateChecker(Settings).CheckAsync(current, default, manual: force);
+            if (info is { IsNewer: true }) SetStatus($"Kubism {info.Version} is available: {info.Url}");
+            else if (force && info is not null) SetStatus($"Kubism is up to date (current {current.ToString(3)}, latest release {info.Version})");
+        }
+        catch (Exception ex) when (force) { SetStatus($"Update check failed: {ex.Message}"); }
     }
 
     [RelayCommand]
