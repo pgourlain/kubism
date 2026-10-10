@@ -27,6 +27,12 @@ public sealed partial class SecretKeyViewModel(string key, JsonObject secret) : 
     public string? RevealedValue => SecretMasker.Reveal(secret, Key);
 }
 
+public sealed record TimelineRow(string Age, string Title, string Detail, string Source, string KindLabel, Severity Severity, string CountText)
+{
+    public bool HasDetail => Detail.Length > 0;
+    public bool HasCount => CountText.Length > 0;
+}
+
 public sealed record EventRow(string Type, string Reason, string Age, string Message, bool IsWarning);
 
 /// <summary>Right-hand panel: Overview, YAML (with edit and conflict flow), Events, Related.</summary>
@@ -62,6 +68,14 @@ public sealed partial class DetailsViewModel : ViewModelBase
     private CancellationTokenSource? _graphCts;
     private string? _graphUid;
     public const int GraphTab = 4;
+    public const int TimelineTab = 5;
+    private IReadOnlyList<TimelineItem> _timeline = [];
+    private CancellationTokenSource? _timelineCts;
+    private string? _timelineUid;
+    [ObservableProperty] private string _timelineStatus = "";
+    [ObservableProperty] private bool _timelineLoading;
+    [ObservableProperty] private bool _problemsOnly;
+    public ObservableCollection<TimelineRow> TimelineRows { get; } = [];
     [ObservableProperty] private bool _hasUsage;
     [ObservableProperty] private string _usageText = "";
     private IDisposable? _metricsLease;
@@ -93,6 +107,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
         if (!IsEditing) { Rebuild(); }
         _ = LoadAsync(obj);
         if (SelectedTab == GraphTab) _ = LoadGraphAsync();
+        if (SelectedTab == TimelineTab) _ = LoadTimelineAsync();
     }
 
     /// <summary>Live refresh of the selected object (informer update).</summary>
@@ -133,11 +148,17 @@ public sealed partial class DetailsViewModel : ViewModelBase
     [RelayCommand]
     public void Close()
     {
-        IsOpen = false; IsEditing = false; _cts?.Cancel(); _graphCts?.Cancel(); Object = null; Graph = null; _graphUid = null;
+        IsOpen = false; IsEditing = false; _cts?.Cancel(); _graphCts?.Cancel(); _timelineCts?.Cancel(); Object = null; Graph = null; _graphUid = null; _timeline = []; _timelineUid = null; TimelineRows.Clear();
         if (_metricsService is not null) { _metricsService.Updated -= RefreshUsage; _metricsLease?.Dispose(); _metricsService = null; _metricsLease = null; }
     }
 
-    partial void OnSelectedTabChanged(int value) { if (value == GraphTab && IsOpen) _ = LoadGraphAsync(); }
+    partial void OnSelectedTabChanged(int value)
+    {
+        if (value == GraphTab && IsOpen) _ = LoadGraphAsync();
+        if (value == TimelineTab && IsOpen) _ = LoadTimelineAsync();
+    }
+
+    partial void OnProblemsOnlyChanged(bool value) => ShowTimeline();
 
     partial void OnShowManagedFieldsChanged(bool value) { if (!IsEditing) BuildYaml(); }
 
@@ -256,6 +277,47 @@ public sealed partial class DetailsViewModel : ViewModelBase
         catch (OperationCanceledException) { }
         catch (Exception ex) { AppLog.Warn($"Graph load failed: {ex.Message}"); _ws.Ui.Post(() => GraphStatus = ex.Message); }
         finally { _ws.Ui.Post(() => GraphLoading = false); }
+    }
+
+    // ---------- timeline ----------
+
+    /// <summary>Events, rollouts, restarts and OOM kills of the selected workload or pod on one time axis (only when the Timeline tab is shown).</summary>
+    public async Task LoadTimelineAsync()
+    {
+        var obj = Object;
+        if (obj is null) return;
+        if (!TimelineLoader.SupportedKinds.Contains(obj.Kind)) { _timeline = []; TimelineRows.Clear(); TimelineStatus = "The timeline is available for workloads and pods"; return; }
+        if (_timelineUid == obj.Uid) return;
+        _timelineCts?.Cancel();
+        _timelineCts = new CancellationTokenSource();
+        var ct = CancellationTokenSource.CreateLinkedTokenSource(_timelineCts.Token, _ws.Session.SessionToken).Token;
+        TimelineLoading = true; TimelineStatus = "";
+        try
+        {
+            var items = await TimelineLoader.LoadAsync(_ws, obj, ct).ConfigureAwait(false);
+            _ws.Ui.Post(() =>
+            {
+                if (Object?.Uid != obj.Uid) return;
+                _timeline = items; _timelineUid = obj.Uid;
+                ShowTimeline();
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { AppLog.Warn($"Timeline load failed: {ex.Message}"); _ws.Ui.Post(() => TimelineStatus = ex.Message); }
+        finally { _ws.Ui.Post(() => TimelineLoading = false); }
+    }
+
+    private void ShowTimeline()
+    {
+        var skew = _ws.Session.ClockSkew;
+        TimelineRows.Clear();
+        foreach (var i in _timeline.Where(i => !ProblemsOnly || i.IsProblem))
+            TimelineRows.Add(new TimelineRow(KubeTime.Age(i.Time, skew), i.Title, i.Detail, i.Source, i.Kind switch
+            {
+                TimelineKind.Rollout => "rollout", TimelineKind.Created => "created", TimelineKind.Restart => "restart", TimelineKind.OomKilled => "oom", TimelineKind.Condition => "condition", _ => "event",
+            }, i.Severity switch { TimelineSeverity.Error => Severity.Error, TimelineSeverity.Warning => Severity.Warning, _ => Severity.Neutral }, i.Count > 1 ? $"×{i.Count}" : ""));
+        TimelineStatus = _timeline.Count == 0 ? "Nothing recorded (events expire after about an hour)"
+            : $"{TimelineRows.Count} of {_timeline.Count} entries, newest first";
     }
 
     [RelayCommand]

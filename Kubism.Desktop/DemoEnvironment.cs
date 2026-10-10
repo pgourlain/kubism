@@ -41,6 +41,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
             d[name] = (Core.Views.Quantities.FormatCpu(cpu), Core.Views.Quantities.FormatMemoryMi(mem));
         }
         SeedHelm(server);
+        SeedTimeline(server);
         server.NodeMetrics["node-1"] = ("1200m", "6Gi"); server.NodeMetrics["node-2"] = ("900m", "5Gi");
         var drifted = withDrift ? await StartDriftedAsync() : null;
         var devCluster = drifted is null ? "" : "- {name: demo-dev, cluster: {server: " + drifted.Url + "}}";
@@ -69,6 +70,52 @@ public sealed class DemoEnvironment : IAsyncDisposable
             {{devContext}}
             """.Replace("\r\n", "\n"));
         return new DemoEnvironment(server, prom, path, drifted);
+    }
+
+    /// <summary>A story for the Timeline tab: "web" rolled out two hours ago (the old revision is still around, scaled to zero), and crashy-0 was OOM-killed minutes ago.</summary>
+    private static void SeedTimeline(FakeApiServer server)
+    {
+        var now = DateTimeOffset.UtcNow;
+        string At(TimeSpan ago) => now.Subtract(ago).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        JsonObject Template(string image) => new() { ["spec"] = new JsonObject { ["containers"] = new JsonArray(new JsonObject { ["name"] = "main", ["image"] = image }) } };
+        if (server.Get(Gvr.ReplicaSets, "default", "web-5d8f7c") is { } rs)
+        {
+            rs["metadata"]!["creationTimestamp"] = At(TimeSpan.FromHours(2));
+            rs["metadata"]!["annotations"] = new JsonObject { ["deployment.kubernetes.io/revision"] = "2" };
+            rs["spec"]!["template"] = Template("nginx:1.27");
+            server.Upsert(rs, silent: true);
+        }
+        server.Upsert(new JsonObject
+        {
+            ["apiVersion"] = "apps/v1", ["kind"] = "ReplicaSet",
+            ["metadata"] = new JsonObject
+            {
+                ["name"] = "web-7c4b8d", ["namespace"] = "default", ["uid"] = "rs-default-web-old", ["creationTimestamp"] = At(TimeSpan.FromDays(3)),
+                ["labels"] = new JsonObject { ["app"] = "web" }, ["annotations"] = new JsonObject { ["deployment.kubernetes.io/revision"] = "1" },
+                ["ownerReferences"] = new JsonArray(new JsonObject { ["apiVersion"] = "apps/v1", ["kind"] = "Deployment", ["name"] = "web", ["uid"] = "dep-default-web", ["controller"] = true }),
+            },
+            ["spec"] = new JsonObject { ["replicas"] = 0, ["template"] = Template("nginx:1.25") }, ["status"] = new JsonObject { ["replicas"] = 0 },
+        }, silent: true);
+        var minute = 0;
+        foreach (var pod in server.List(Gvr.Pods, "default").Where(p => p["metadata"]!["name"]!.GetValue<string>().StartsWith("web-")))
+        {
+            pod["metadata"]!["creationTimestamp"] = At(TimeSpan.FromMinutes(119 - minute++));
+            server.Upsert(pod, silent: true);
+        }
+        void Event(string name, string reason, string message, TimeSpan ago, string uid = "dep-default-web", string kind = "Deployment", string objName = "web") =>
+            server.Upsert(new JsonObject
+            {
+                ["apiVersion"] = "v1", ["kind"] = "Event", ["metadata"] = new JsonObject { ["name"] = name, ["namespace"] = "default" },
+                ["type"] = "Normal", ["reason"] = reason, ["message"] = message, ["lastTimestamp"] = At(ago),
+                ["involvedObject"] = new JsonObject { ["kind"] = kind, ["name"] = objName, ["namespace"] = "default", ["uid"] = uid },
+            }, silent: true);
+        Event("web.scale-up", "ScalingReplicaSet", "Scaled up replica set web-5d8f7c to 3", TimeSpan.FromHours(2));
+        Event("web.scale-down", "ScalingReplicaSet", "Scaled down replica set web-7c4b8d to 0", TimeSpan.FromMinutes(117));
+        if (server.Get(Gvr.Pods, "default", "crashy-0") is { } crashy)
+        {
+            crashy["status"]!["containerStatuses"]![0]!["lastState"]!["terminated"]!["finishedAt"] = At(TimeSpan.FromMinutes(9));
+            server.Upsert(crashy, silent: true);
+        }
     }
 
     private static async Task<FakeApiServer> StartDriftedAsync()

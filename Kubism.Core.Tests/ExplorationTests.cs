@@ -233,3 +233,60 @@ public class HelmGraphTests
         Assert.DoesNotContain(fromCm.Nodes, n => n.Kind == "Deployment");
     }
 }
+
+public class EventTimelineTests
+{
+    private static KubeObject O(string json) => new(JsonNode.Parse(json)!.AsObject());
+
+    private static (KubeObject dep, List<KubeObject> rest, List<KubeObject> events) Web()
+    {
+        var dep = O("""{"kind":"Deployment","metadata":{"name":"web","namespace":"d","uid":"u-dep","creationTimestamp":"2026-10-01T08:00:00Z"},"status":{"conditions":[{"type":"Available","status":"True","lastTransitionTime":"2026-10-10T09:00:00Z","reason":"MinimumReplicasAvailable"},{"type":"Progressing","status":"False","lastTransitionTime":"2026-10-10T09:30:00Z","reason":"ProgressDeadlineExceeded","message":"ReplicaSet web-2 has timed out progressing."}]}}""");
+        var rs1 = O("""{"kind":"ReplicaSet","metadata":{"name":"web-1","namespace":"d","uid":"u-rs1","creationTimestamp":"2026-10-01T08:00:00Z","annotations":{"deployment.kubernetes.io/revision":"1"},"ownerReferences":[{"kind":"Deployment","name":"web","uid":"u-dep","controller":true}]},"spec":{"template":{"spec":{"containers":[{"image":"web:1"}]}}}}""");
+        var rs2 = O("""{"kind":"ReplicaSet","metadata":{"name":"web-2","namespace":"d","uid":"u-rs2","creationTimestamp":"2026-10-10T09:10:00Z","annotations":{"deployment.kubernetes.io/revision":"2"},"ownerReferences":[{"kind":"Deployment","name":"web","uid":"u-dep","controller":true}]},"spec":{"template":{"spec":{"containers":[{"image":"web:2"}]}}}}""");
+        var pod = O("""{"kind":"Pod","metadata":{"name":"web-2-a","namespace":"d","uid":"u-pod","creationTimestamp":"2026-10-10T09:11:00Z","ownerReferences":[{"kind":"ReplicaSet","name":"web-2","uid":"u-rs2","controller":true}]},"spec":{"nodeName":"n1"},"status":{"conditions":[{"type":"Ready","status":"True","lastTransitionTime":"2026-10-10T09:12:00Z"},{"type":"ContainersReady","status":"False","lastTransitionTime":"2026-10-10T09:13:00Z","reason":"ContainersNotReady"}],"containerStatuses":[{"name":"c","restartCount":3,"lastState":{"terminated":{"reason":"OOMKilled","exitCode":137,"finishedAt":"2026-10-10T09:20:00Z"}}},{"name":"ok","lastState":{"terminated":{"reason":"Completed","exitCode":0,"finishedAt":"2026-10-10T09:21:00Z"}}}]}}""");
+        var other = O("""{"kind":"Pod","metadata":{"name":"other","namespace":"d","uid":"u-other","creationTimestamp":"2026-10-10T09:00:00Z"}}""");
+        var ev = O("""{"kind":"Event","type":"Warning","reason":"BackOff","message":"Back-off restarting","count":5,"lastTimestamp":"2026-10-10T09:25:00Z","involvedObject":{"kind":"Pod","name":"web-2-a","uid":"u-pod"}}""");
+        var ev2 = O("""{"kind":"Event","type":"Normal","reason":"ScalingReplicaSet","message":"Scaled up web-2 to 3","lastTimestamp":"2026-10-10T09:10:01Z","involvedObject":{"kind":"Deployment","name":"web","uid":"u-dep"}}""");
+        var foreign = O("""{"kind":"Event","type":"Warning","reason":"Nope","lastTimestamp":"2026-10-10T09:26:00Z","involvedObject":{"kind":"Pod","name":"other","uid":"u-other"}}""");
+        return (dep, [rs1, rs2, pod, other], [ev, ev2, foreign]);
+    }
+
+    [Fact]
+    public void Timeline_merges_events_rollouts_pods_terminations_and_conditions_newest_first()
+    {
+        var (dep, rest, events) = Web();
+        var items = EventTimeline.Build(dep, rest, events);
+        Assert.True(items.Zip(items.Skip(1)).All(p => p.First.Time >= p.Second.Time));
+        Assert.Contains(items, i => i is { Kind: TimelineKind.Rollout, Title: "Rollout to revision 2", Detail: "web:2" });
+        Assert.Contains(items, i => i is { Kind: TimelineKind.Rollout, Title: "Rollout to revision 1" });
+        Assert.Contains(items, i => i is { Kind: TimelineKind.Created, Source: "Pod/web-2-a", Detail: "scheduled on n1" });
+        var oom = items.Single(i => i.Kind == TimelineKind.OomKilled);
+        Assert.Equal(TimelineSeverity.Error, oom.Severity); Assert.Contains("3 restart", oom.Detail);
+        var backoff = items.Single(i => i.Title == "BackOff");
+        Assert.Equal(5, backoff.Count); Assert.True(backoff.IsProblem); Assert.Equal("Pod/web-2-a", backoff.Source);
+        Assert.Contains(items, i => i.Title.StartsWith("Progressing: False (ProgressDeadlineExceeded)") && i.IsProblem);
+        Assert.Contains(items, i => i.Title.StartsWith("Available: True") && !i.IsProblem);
+    }
+
+    [Fact]
+    public void Timeline_ignores_other_objects_clean_exits_and_healthy_pod_conditions()
+    {
+        var (dep, rest, events) = Web();
+        var items = EventTimeline.Build(dep, rest, events);
+        Assert.DoesNotContain(items, i => i.Source == "Pod/other" || i.Title == "Nope");
+        Assert.DoesNotContain(items, i => i.Title.Contains("Completed"));
+        Assert.DoesNotContain(items, i => i.Title.StartsWith("Ready: True"));
+        Assert.Contains(items, i => i.Title.StartsWith("ContainersReady: False"));
+    }
+
+    [Fact]
+    public void Timeline_of_a_pod_covers_just_that_pod()
+    {
+        var (_, rest, events) = Web();
+        var pod = rest.Single(r => r.Name == "web-2-a");
+        var items = EventTimeline.Build(pod, rest.Where(r => r.Name != "web-2-a"), events);
+        Assert.All(items, i => Assert.Equal("Pod/web-2-a", i.Source));
+        Assert.Contains(items, i => i.Kind == TimelineKind.OomKilled);
+        Assert.DoesNotContain(items, i => i.Kind == TimelineKind.Rollout);
+    }
+}

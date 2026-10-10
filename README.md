@@ -53,8 +53,13 @@ A cross-platform desktop app to explore and operate **one or several Kubernetes 
 ### Understand how things connect
 
 - **Relation graph.** Open the *Graph* tab on any object to see its neighbourhood, top to bottom: Ingress → Service → Pod ← ReplicaSet ← Deployment, plus the ConfigMaps, Secrets, volume claims, service accounts and nodes it uses, HPAs scaling it, and the **Helm release** that rendered it, at the top with its revision and status (recognised from the annotations Helm puts on everything it installs). The *Graph* tab of the Helm page does the reverse: a release at the top, then everything it manages and what runs below. Boxes show the live status (green, amber, red); click one to open that object. Shared config is shown but never expanded, so one popular ConfigMap does not drown the picture.
+- **Timeline.** The *Timeline* tab of a workload or pod puts everything on one time axis, newest first: events (those of its replica sets and pods too), rollouts (one per revision, with the image), pod creations, OOM kills and crashes with the exit code, and failing conditions. *Problems only* keeps what went wrong, so "what changed before it broke" reads top to bottom.
 - **Compare clusters.** Pick another connected cluster (or another namespace), a kind, and see what exists on one side only and what differs, as a line diff of the manifests. Server-generated fields are ignored, so only real drift remains. Secret values are never shown: a key is masked, and marked when it differs. Also available from any object with **Compare…**.
 - **Global search.** One query across every connected cluster, grouped by cluster: `checkout` (name), `app=web` (label), `image:nginx:1.25` (a container image: *who still runs this tag?*), `ns:staging`, `kind:deploy`. Tokens combine.
+
+<p align="center">
+  <img src="docs/screenshots/timeline.png" alt="The timeline of a deployment: rollouts, scaling events and pod creations" width="860" />
+</p>
 
 <p align="center">
   <img src="docs/screenshots/helm-release-graph.png" alt="A Helm release with the objects it manages and the pods running below" width="860" />

@@ -182,6 +182,41 @@
             </ScrollViewer>
           </Grid>
         </TabItem>
+        <TabItem Header="Timeline">
+          <Grid RowDefinitions="Auto,*">
+            <StackPanel Orientation="Horizontal" Spacing="12" Margin="4,6">
+              <CheckBox Content="Problems only" IsChecked="{Binding ProblemsOnly}" />
+              <TextBlock Text="{Binding TimelineStatus}" Classes="muted" VerticalAlignment="Center" />
+              <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding TimelineLoading}" VerticalAlignment="Center" />
+            </StackPanel>
+            <ScrollViewer Grid.Row="1">
+              <ItemsControl ItemsSource="{Binding TimelineRows}" Margin="4,0,4,12">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TimelineRow">
+                    <Grid ColumnDefinitions="52,18,*" Margin="0,0,0,2">
+                      <TextBlock Text="{Binding Age}" Classes="muted" FontSize="11" HorizontalAlignment="Right" Margin="0,3,8,0" />
+                      <Grid Grid.Column="1" RowDefinitions="Auto,*">
+                        <Ellipse Width="9" Height="9" Margin="0,5,0,0" HorizontalAlignment="Center" Fill="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                        <Rectangle Grid.Row="1" Width="1" HorizontalAlignment="Center" Fill="{DynamicResource KubismBorderBrush}" />
+                      </Grid>
+                      <StackPanel Grid.Column="2" Margin="0,0,0,10" Spacing="1">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                          <TextBlock Text="{Binding CountText}" Classes="muted" IsVisible="{Binding HasCount}" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding Detail}" IsVisible="{Binding HasDetail}" TextWrapping="Wrap" Classes="muted" FontSize="12" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <Border Classes="chip"><TextBlock Text="{Binding KindLabel}" FontSize="10" /></Border>
+                          <TextBlock Text="{Binding Source}" Classes="muted" FontSize="11" VerticalAlignment="Center" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Grid>
+        </TabItem>
       </TabControl>
     </Grid>
   </Border>

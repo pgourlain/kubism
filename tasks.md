@@ -337,7 +337,8 @@ See "Right-sizing" in CLAUDE.md. Depends on Phase 9.
   - Done. Screenshot `32-search-by-image`.
 - [x] README with features and screenshots (`docs/screenshots/`, rendered by `DocsScreenshotTests`), install instructions in the release notes (`packaging/release-notes.md`, used by `release.yml` as CinnabarSharp does).
   - Done.
-- [ ] Event timeline per workload: events, rollouts, restarts and OOM kills on one time axis.
+- [x] Event timeline per workload: events, rollouts, restarts and OOM kills on one time axis.
+  - Done. `EventTimeline` in Core (events of the workload, its replica sets and pods; one rollout per replica set revision with its image; pod creations; last termination of each container, OOM kills flagged; failing conditions), Timeline tab in the details panel (workloads, CronJob, Pod), "Problems only" filter. `--demo` gets a rollout story for `web` and an OOM kill for `crashy-0`. `EventTimelineTests`, `UiExplorationTests`, screenshots `35-timeline`, `36-timeline-problems`. Limit: a pod only reports its *last* termination, and events expire after about an hour on a real cluster.
 - [ ] Ephemeral debug: `kubectl debug` natively (ephemeral container, node shell, pod copy) through `ClusterActions` (see Phase 7's open items).
 - [ ] Security: RBAC explorer (who can do what, `can-i` for a ServiceAccount, wildcard and cluster-admin findings); pod audit (privileged, hostPath, root, no securityContext, `:latest`); Trivy Operator reports (CRDs) shown per workload; certificate expiry (TLS secrets, cert-manager `Certificate`, kubeconfig certs).
 - [ ] Ecosystem views over CRDs: Argo CD (sync, health, diff; sync button through `ClusterActions`), Flux, cert-manager, Gateway API / Istio, KEDA, Karpenter, Crossplane / Azure Service Operator resource trees.

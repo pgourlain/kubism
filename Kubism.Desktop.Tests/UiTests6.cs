@@ -170,4 +170,36 @@ public class UiExplorationTests
         Assert.DoesNotContain(g.Nodes, n => n.Name == "crashy-0");
         h.Screenshot("34-helm-release-graph");
     }
+
+    [AvaloniaFact]
+    public async Task Timeline_tab_shows_rollouts_events_and_oom_kills_on_one_axis()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.Select("default");
+        ws.OpenKind(ws.Session.Discovery.FindByName("deployments")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Rows.Count > 0, what: "deployments");
+        var list = (ResourceListViewModel)ws.CurrentContent!;
+        list.SelectedRow = list.Rows.First(r => r.Name == "web");
+        var d = ws.Details;
+        d.SelectedTab = DetailsViewModel.TimelineTab;
+        await UiHarness.WaitFor(() => d.TimelineRows.Count > 4, what: "timeline");
+        Assert.Contains(d.TimelineRows, r => r.Title == "Rollout to revision 2" && r.Detail == "nginx:1.27");
+        Assert.Contains(d.TimelineRows, r => r.Title == "Rollout to revision 1" && r.Detail == "nginx:1.25");
+        Assert.Contains(d.TimelineRows, r => r.Title == "ScalingReplicaSet" && r.Source == "Deployment/web");
+        Assert.Contains(d.TimelineRows, r => r.KindLabel == "created" && r.Source.StartsWith("Pod/web-"));
+        h.Screenshot("35-timeline");
+
+        list = (ResourceListViewModel)ws.CurrentContent!;
+        ws.OpenKind(ws.Session.Discovery.FindByName("pods")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l2 && l2.Kind.Kind == "Pod" && l2.Rows.Count > 0, what: "pods");
+        var pods = (ResourceListViewModel)ws.CurrentContent!;
+        pods.SelectedRow = pods.Rows.First(r => r.Name == "crashy-0");
+        d.SelectedTab = DetailsViewModel.TimelineTab;
+        await UiHarness.WaitFor(() => d.TimelineRows.Any(r => r.KindLabel == "oom"), what: "oom entry");
+        d.ProblemsOnly = true;
+        Assert.All(d.TimelineRows, r => Assert.NotEqual(Severity.Neutral, r.Severity));
+        Assert.Contains(d.TimelineRows, r => r.Title == "BackOff");
+        h.Screenshot("36-timeline-problems");
+    }
 }

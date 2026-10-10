@@ -194,4 +194,16 @@ public class DocsScreenshotTests
         await UiHarness.WaitFor(() => vm.Graph is { Nodes.Count: > 3 }, what: "release graph");
         Shot(h, "helm-release-graph");
     }
+
+    [AvaloniaFact]
+    public async Task Timeline()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        var list = await OpenListAsync(ws, "deployments", "default");
+        list.SelectedRow = list.Rows.First(r => r.Name == "web");
+        ws.Details.SelectedTab = DetailsViewModel.TimelineTab;
+        await UiHarness.WaitFor(() => ws.Details.TimelineRows.Count > 4, what: "timeline");
+        Shot(h, "timeline");
+    }
 }
