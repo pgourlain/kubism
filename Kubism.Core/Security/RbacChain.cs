@@ -117,31 +117,9 @@ public sealed class RbacChain
             }
         }
         foreach (var n in nodes.Values) n.Column = (int)n.Kind;
-        var maxRows = Layout(nodes.Values.ToList(), edges);
+        var list = nodes.Values.ToList();
+        var maxRows = Util.ColumnLayout.Arrange(list, 4, n => n.Id, n => n.Column, (n, r) => n.Row = r, n => n.Label, edges.Select(e => (e.From, e.To)), n => n.Scope is null ? 0 : 1);
         return new RbacChain { Nodes = nodes.Values.ToList(), Edges = edges.ToList(), MaxRows = maxRows, Truncated = truncated, Warning = graph.IncompleteWarning };
     }
 
-    /// <summary>Barycentre ordering: a few sweeps left to right then right to left put each node near the average row of its neighbours.</summary>
-    private static int Layout(List<RbacChainNode> nodes, IEnumerable<RbacChainEdge> edges)
-    {
-        var byId = nodes.ToDictionary(n => n.Id);
-        var neighbours = nodes.ToDictionary(n => n.Id, _ => new List<string>());
-        foreach (var e in edges) { neighbours[e.From].Add(e.To); neighbours[e.To].Add(e.From); }
-        var columns = Enumerable.Range(0, 4).Select(c => nodes.Where(n => n.Column == c).OrderBy(n => n.Scope is null ? 0 : 1).ThenBy(n => n.Label, StringComparer.Ordinal).ToList()).ToArray();
-        void Number(List<RbacChainNode> col) { for (var i = 0; i < col.Count; i++) col[i].Row = i; }
-        foreach (var c in columns) Number(c);
-        void Sweep(int col, int from)
-        {
-            var list = columns[col];
-            var keyed = list.Select(n => (n, key: neighbours[n.Id].Where(id => byId[id].Column == from).Select(id => (double)byId[id].Row).DefaultIfEmpty(double.MaxValue / 4).Average())).ToList();
-            columns[col] = keyed.OrderBy(k => k.key).ThenBy(k => k.n.Label, StringComparer.Ordinal).Select(k => k.n).ToList();
-            Number(columns[col]);
-        }
-        for (var pass = 0; pass < 4; pass++)
-        {
-            for (var c = 1; c < 4; c++) Sweep(c, c - 1);
-            for (var c = 2; c >= 0; c--) Sweep(c, c + 1);
-        }
-        return columns.Max(c => c.Count);
-    }
 }

@@ -1,0 +1,97 @@
+# Network fixture: a public ingress through a LoadBalancer controller living in another namespace, an internal-load-balancer ingress, a controller that is
+# ClusterIP only, an Application Gateway ingress (controller outside the cluster), a controller that cannot be found, an ingress with no class,
+# a missing backend service, a port the Service does not define, a named targetPort, an unresolved targetPort, a NodePort service, a Service
+# matching no pod, a pod not ready, a hostPort DaemonSet and a database nothing routes to. Used by the Core network tests, the UI tests and the MCP tests.
+{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "shop"}, "status": {"phase": "Active"}}
+---
+{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "ingress-nginx"}, "status": {"phase": "Active"}}
+---
+{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": "tools"}, "status": {"phase": "Active"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "nginx", "annotations": {}}, "spec": {"controller": "k8s.io/ingress-nginx"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "nginx-internal", "annotations": {}}, "spec": {"controller": "k8s.io/ingress-nginx"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "nginx-private", "annotations": {}}, "spec": {"controller": "k8s.io/ingress-nginx"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "azure-application-gateway", "annotations": {}}, "spec": {"controller": "azure/application-gateway"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "IngressClass", "metadata": {"name": "traefik", "annotations": {}}, "spec": {"controller": "traefik.io/ingress-controller"}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "ingress-nginx-controller", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx", "app.kubernetes.io/component": "controller"}, "annotations": {}}, "spec": {"type": "LoadBalancer", "ports": [{"name": "http", "port": 80, "targetPort": "http"}, {"name": "https", "port": 443, "targetPort": "https"}], "selector": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx"}}, "status": {"loadBalancer": {"ingress": [{"ip": "20.1.2.3"}]}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "ingress-nginx-internal-controller", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx-internal", "app.kubernetes.io/component": "controller"}, "annotations": {"service.beta.kubernetes.io/azure-load-balancer-internal": "true"}}, "spec": {"type": "LoadBalancer", "ports": [{"name": "http", "port": 80, "targetPort": "http"}, {"name": "https", "port": 443, "targetPort": "https"}], "selector": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx-internal"}}, "status": {"loadBalancer": {"ingress": [{"ip": "10.0.0.50"}]}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "ingress-nginx-private-controller", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx-private", "app.kubernetes.io/component": "controller"}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"name": "http", "port": 80, "targetPort": "http"}, {"name": "https", "port": 443, "targetPort": "https"}], "selector": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx-private"}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "ingress-nginx-controller-admission", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/component": "controller"}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 443, "targetPort": "webhook"}], "selector": {"app.kubernetes.io/name": "ingress-nginx"}}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "ingress-nginx-controller-0", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx"}}, "spec": {"containers": [{"name": "controller", "image": "registry.k8s.io/ingress-nginx/controller:v1.11", "ports": [{"name": "http", "containerPort": 80}, {"name": "https", "containerPort": 443}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "ingress-nginx-internal-controller-0", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx-internal"}}, "spec": {"containers": [{"name": "controller", "image": "registry.k8s.io/ingress-nginx/controller:v1.11", "ports": [{"name": "http", "containerPort": 80}, {"name": "https", "containerPort": 443}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "ingress-nginx-private-controller-0", "namespace": "ingress-nginx", "labels": {"app.kubernetes.io/name": "ingress-nginx", "app.kubernetes.io/instance": "ingress-nginx-private"}}, "spec": {"containers": [{"name": "controller", "image": "registry.k8s.io/ingress-nginx/controller:v1.11", "ports": [{"name": "http", "containerPort": 80}, {"name": "https", "containerPort": 443}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "web-6d5f-a", "namespace": "shop", "labels": {"app": "web", "pod-template-hash": "6d5f"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-6d5f", "uid": "uid-web-6d5f", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/web:1.0", "ports": [{"name": "http", "containerPort": 8080}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "web-6d5f-b", "namespace": "shop", "labels": {"app": "web", "pod-template-hash": "6d5f"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-6d5f", "uid": "uid-web-6d5f", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/web:1.0", "ports": [{"name": "http", "containerPort": 8080}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "api-7c9d-a", "namespace": "shop", "labels": {"app": "api", "pod-template-hash": "7c9d"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "api-7c9d", "uid": "uid-api-7c9d", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/api:1.0", "ports": [{"containerPort": 3000}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "worker-0", "namespace": "shop", "labels": {"app": "worker"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "StatefulSet", "name": "worker", "uid": "uid-worker", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/worker:1.0", "ports": [{"name": "jobs", "containerPort": 9000}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "worker-1", "namespace": "shop", "labels": {"app": "worker"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "StatefulSet", "name": "worker", "uid": "uid-worker", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/worker:1.0", "ports": [{"name": "jobs", "containerPort": 9000}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "False"}]}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "web", "namespace": "shop", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"name": "http", "port": 80, "targetPort": "http"}], "selector": {"app": "web"}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "api", "namespace": "shop", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 80, "targetPort": 3000}], "selector": {"app": "api"}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "worker-lb", "namespace": "shop", "labels": {}, "annotations": {}}, "spec": {"type": "NodePort", "ports": [{"name": "jobs", "port": 9000, "targetPort": "jobs", "nodePort": 30900}], "selector": {"app": "worker"}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "legacy", "namespace": "shop", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 80, "targetPort": 8080}], "selector": {"app": "legacy"}}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "broken-port", "namespace": "shop", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 9100, "targetPort": "metrics"}], "selector": {"app": "web"}}}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "web-abc12", "namespace": "shop", "labels": {"kubernetes.io/service-name": "web"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "web-6d5f-a"}}, {"addresses": ["10.244.0.11"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "web-6d5f-b"}}], "ports": []}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "api-abc12", "namespace": "shop", "labels": {"kubernetes.io/service-name": "api"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "api-7c9d-a"}}], "ports": []}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "worker-lb-abc12", "namespace": "shop", "labels": {"kubernetes.io/service-name": "worker-lb"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "worker-0"}}, {"addresses": ["10.244.0.11"], "conditions": {"ready": false}, "targetRef": {"kind": "Pod", "name": "worker-1"}}], "ports": []}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "broken-port-abc12", "namespace": "shop", "labels": {"kubernetes.io/service-name": "broken-port"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "web-6d5f-a"}}, {"addresses": ["10.244.0.11"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "web-6d5f-b"}}], "ports": []}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "shop", "namespace": "shop", "annotations": {}}, "spec": {"rules": [{"host": "shop.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "web", "port": {"number": 80}}}}, {"path": "/api", "pathType": "Prefix", "backend": {"service": {"name": "api", "port": {"number": 80}}}}]}}], "ingressClassName": "nginx", "tls": [{"hosts": ["shop.example.com"], "secretName": "shop-tls"}]}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "admin", "namespace": "shop", "annotations": {}}, "spec": {"rules": [{"host": "admin.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "web", "port": {"name": "http"}}}}]}}], "ingressClassName": "nginx-internal", "tls": [{"hosts": ["admin.example.com"], "secretName": "admin-tls"}]}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "docs", "namespace": "shop", "annotations": {"kubernetes.io/ingress.class": "nginx"}}, "spec": {"rules": [{"host": "docs.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "docs-svc", "port": {"number": 80}}}}]}}]}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "agw", "namespace": "shop", "annotations": {}}, "spec": {"rules": [{"host": "agw.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "web", "port": {"number": 80}}}}]}}], "ingressClassName": "azure-application-gateway"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "portbad", "namespace": "shop", "annotations": {}}, "spec": {"rules": [{"host": "bad.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "web", "port": {"number": 9999}}}}]}}], "ingressClassName": "nginx"}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "grafana-5b-a", "namespace": "tools", "labels": {"app": "grafana", "pod-template-hash": "5b"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "grafana-5b", "uid": "uid-grafana-5b", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/grafana:1.0", "ports": [{"name": "http", "containerPort": 3000}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "grafana", "namespace": "tools", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 3000, "targetPort": "http"}], "selector": {"app": "grafana"}}}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "grafana-abc12", "namespace": "tools", "labels": {"kubernetes.io/service-name": "grafana"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "grafana-5b-a"}}], "ports": []}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "grafana", "namespace": "tools", "annotations": {}}, "spec": {"rules": [{"host": "grafana.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}], "ingressClassName": "nginx"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "intranet", "namespace": "tools", "annotations": {}}, "spec": {"rules": [{"host": "wiki.internal", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}], "ingressClassName": "nginx-private"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "unknown-ctl", "namespace": "tools", "annotations": {}}, "spec": {"rules": [{"host": "traefik.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}], "ingressClassName": "traefik"}}
+---
+{"apiVersion": "networking.k8s.io/v1", "kind": "Ingress", "metadata": {"name": "noclass", "namespace": "tools"}, "spec": {"rules": [{"host": "noclass.example.com", "http": {"paths": [{"path": "/", "pathType": "Prefix", "backend": {"service": {"name": "grafana", "port": {"number": 3000}}}}]}}]}}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "node-agent-x", "namespace": "tools", "labels": {"app": "node-agent"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "DaemonSet", "name": "node-agent", "uid": "uid-node-agent", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/node-agent:1.0", "ports": [{"name": "metrics", "containerPort": 9100, "hostPort": 9100}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "node-agent", "namespace": "tools", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 9100, "targetPort": "metrics"}], "selector": {"app": "node-agent"}}}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "node-agent-abc12", "namespace": "tools", "labels": {"kubernetes.io/service-name": "node-agent"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "node-agent-x"}}], "ports": []}
+---
+{"apiVersion": "v1", "kind": "Pod", "metadata": {"name": "db-0", "namespace": "tools", "labels": {"app": "db"}, "ownerReferences": [{"apiVersion": "apps/v1", "kind": "StatefulSet", "name": "db", "uid": "uid-db", "controller": true}]}, "spec": {"containers": [{"name": "main", "image": "example/db:1.0", "ports": [{"name": "mysql", "containerPort": 3306}]}]}, "status": {"phase": "Running", "conditions": [{"type": "Ready", "status": "True"}]}}
+---
+{"apiVersion": "v1", "kind": "Service", "metadata": {"name": "db", "namespace": "tools", "labels": {}, "annotations": {}}, "spec": {"type": "ClusterIP", "ports": [{"port": 3306, "targetPort": "mysql"}], "selector": {"app": "db"}}}
+---
+{"apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSlice", "metadata": {"name": "db-abc12", "namespace": "tools", "labels": {"kubernetes.io/service-name": "db"}}, "addressType": "IPv4", "endpoints": [{"addresses": ["10.244.0.10"], "conditions": {"ready": true}, "targetRef": {"kind": "Pod", "name": "db-0"}}], "ports": []}
