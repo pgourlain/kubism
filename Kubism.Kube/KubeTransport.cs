@@ -19,32 +19,38 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Kubism.Kube;
 
-/// <summary>KubernetesClient subclass exposing the configured HttpClient and WebSocket connect.</summary>
-internal sealed class RawClient(KubernetesClientConfiguration config, DelegatingHandler[] handlers) : Kubernetes(config, handlers)
-{
-    public HttpClient Http => HttpClient;
-    public Task<WebSocket> ConnectAsync(Uri uri, string? subProtocol, CancellationToken ct) => StreamConnectAsync(uri, subProtocol, null, ct);
-}
-
 /// <summary>IKubeTransport on top of KubernetesClient's configured HTTP client: raw JSON in, raw JSON out.</summary>
 public sealed class KubeTransport : IKubeTransport
 {
     private const string TableAccept = "application/json;as=Table;v=v1;g=meta.k8s.io,application/json";
-    private readonly RawClient _client;
     private readonly HttpClient _http;
+    private readonly System.Security.Cryptography.X509Certificates.X509Certificate2? _clientCertificate;
     private readonly Uri _baseUri;
 
     public KubeTransport(ClusterEntry entry, IExecPluginObserver? observer = null)
     {
         var (config, handlers) = BuildConfig(entry, observer);
         _baseUri = new Uri(config.Host.TrimEnd('/') + "/");
-        _client = new RawClient(config, handlers);
-        _http = _client.Http;
-        AppLog.Info($"Transport for {entry.ContextName} ({_baseUri}), auth: {(handlers.Length > 0 && handlers[0] is ExecAuthHandler ? "exec plugin" : !string.IsNullOrEmpty(config.AccessToken) ? "token" : config.ClientCertificateData is not null || config.ClientCertificateFilePath is not null ? "client certificate" : !string.IsNullOrEmpty(config.Username) ? "basic" : "none")}");
+        // KubernetesClient only parses the kubeconfig (our reader) and runs exec plugins' handlers: the TLS and the chain of handlers are ours.
+        _clientCertificate = KubeTls.LoadClientCertificate(config);
+        HttpMessageHandler pipeline = KubeTls.CreateHandler(config, _clientCertificate);
+        foreach (var h in handlers.Reverse()) { h.InnerHandler = pipeline; pipeline = h; }
+        _http = new HttpClient(pipeline, disposeHandler: true);
+        AppLog.Info($"Transport for {entry.ContextName} ({_baseUri}), auth: {Describe(handlers, config, _clientCertificate)}");
         _http.Timeout = Timeout.InfiniteTimeSpan; // watches and logs are long-lived; callers use cancellation tokens
     }
 
     public TimeSpan ClockSkew { get; private set; }
+
+    private static string Describe(DelegatingHandler[] handlers, KubernetesClientConfiguration config, object? cert)
+    {
+        var parts = new List<string>();
+        if (handlers.Any(h => h is ExecAuthHandler)) parts.Add("exec plugin");
+        else if (handlers.Any(h => h is StaticBearerHandler)) parts.Add("bearer token");
+        else if (handlers.Any(h => h is BasicAuthHandler)) parts.Add("basic");
+        if (cert is not null) parts.Add("client certificate");
+        return parts.Count == 0 ? "none" : string.Join(" + ", parts);
+    }
 
     private static (KubernetesClientConfiguration, DelegatingHandler[]) BuildConfig(ClusterEntry entry, IExecPluginObserver? observer)
     {
@@ -52,9 +58,9 @@ public sealed class KubeTransport : IKubeTransport
         var handlers = new List<DelegatingHandler>();
         // Exec plugins are run by us: stderr capture for device-code login, refresh before expiry and on 401.
         if (read.Exec is { } spec) handlers.Add(new ExecAuthHandler(new ExecCredentialProvider(spec, observer)));
-        // The client library never sends credentials over plain HTTP; the fake API server (tests, --demo) needs them.
-        else if (read.Config.Host.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(read.Config.AccessToken))
-            handlers.Add(new StaticBearerHandler(read.Config.AccessToken));
+        // A static token goes out with every request, next to the client certificate if there is one: both, as kubectl does.
+        else if (!string.IsNullOrEmpty(read.Config.AccessToken)) handlers.Add(new StaticBearerHandler(read.Config.AccessToken));
+        else if (!string.IsNullOrEmpty(read.Config.Username)) handlers.Add(new BasicAuthHandler(read.Config.Username, read.Config.Password ?? ""));
         return (read.Config, [.. handlers]);
     }
 
@@ -291,7 +297,16 @@ public sealed class KubeTransport : IKubeTransport
         {
             try
             {
-                var ws = await _client.ConnectAsync(uri, protocol, ct).ConfigureAwait(false);
+                var ws = new ClientWebSocket();
+                try
+                {
+                    ws.Options.AddSubProtocol(protocol);
+                    ws.Options.HttpVersion = HttpVersion.Version11;
+                    ws.Options.HttpVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionExact;
+                    // Through our HTTP client: same TLS, same authentication handlers as every other call.
+                    await ws.ConnectAsync(uri, _http, ct).ConfigureAwait(false);
+                }
+                catch { ws.Dispose(); throw; }
                 return new WebSocketAdapter(ws);
             }
             catch (OperationCanceledException) { throw; }
@@ -309,7 +324,7 @@ public sealed class KubeTransport : IKubeTransport
         throw mapped;
     }
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose() { _http.Dispose(); _clientCertificate?.Dispose(); }
 
     private sealed class OwnedStream(Stream inner, IDisposable owner) : Stream
     {
@@ -333,6 +348,15 @@ internal sealed class StaticBearerHandler(string token) : DelegatingHandler
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         request.Headers.Authorization = new("Bearer", token);
+        return base.SendAsync(request, ct);
+    }
+}
+
+internal sealed class BasicAuthHandler(string user, string password) : DelegatingHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        request.Headers.Authorization = new("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{user}:{password}")));
         return base.SendAsync(request, ct);
     }
 }

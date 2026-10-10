@@ -114,6 +114,8 @@ To check UI changes visually without a display, run `Kubism.Desktop.Tests` and l
 
 ### Auth
 
+**TLS and the handler chain are ours** (`KubeTls`, `KubeTransport`): `KubernetesClient` is only used as a data holder for the parsed kubeconfig. The library applies tokens only to its own typed calls (never to the raw HTTP client Kubism uses), and leaves the client-certificate choice to the OS: on Windows, SChannel filters by the issuers the server lists, and a kubeconfig's client certificate is issued by the cluster's own CA (in no system store), so it was silently not sent and every request got 401. Now the certificate is always offered (`LocalCertificateSelectionCallback`, PKCS#12 round trip on Windows), a static token is sent with every request next to the certificate (as kubectl does), basic auth is supported, and WebSockets (exec, port-forward) go through the same HTTP client. `MutualTlsTests` runs an HTTPS server that requires a client certificate issued by a private CA.
+
 Delegate to `KubernetesClient`'s `KubernetesClientConfiguration.BuildConfigFromConfigFile(...)` (certs, bearer tokens, token files, exec plugins, OIDC). Known pitfalls to handle explicitly:
 - **PATH of GUI apps on macOS (and some Linux desktops):** an app launched from Finder/Dock does not inherit the shell's `PATH`, so `kubelogin`/`aws` are not found. At startup, resolve the login shell's `PATH` once (`$SHELL -l -c 'echo $PATH'`, with a timeout) and use it for exec plugins; show the binary that was not found in the error.
 - **Exec credential expiry:** credentials returned with `expirationTimestamp` must be refreshed before they expire and on any `401`. Verify the client library does it for long-lived watches; if not, wrap it in our own refreshing `ServiceClientCredentials`.
