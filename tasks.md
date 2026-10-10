@@ -290,6 +290,57 @@ See "Right-sizing" in CLAUDE.md. Depends on Phase 9.
 - [ ] (automated) Helm release decoding test with a captured secret.
 - [ ] (manual) On a cluster with ingress-nginx and cert-manager installed by Helm: releases, values and history match `helm list/history/get values`.
 
+## Phase 11b — RBAC graph
+
+Read-only (no `ClusterActions`). Explains Kubernetes rights with graphs, under Access Control in the sidebar. Overlaps the Phase 14 `RbacAnalysis` (risky grants, rules a subject holds); `RbacGraph` is the exact-semantics engine (aggregation, implicit groups, `resourceNames`, `nonResourceURLs`) and `RbacAnalysis` should be rebuilt on top of it rather than kept as a second evaluator.
+
+- [ ] `RbacGraph` (`Core/Security`, pure): built from Roles, ClusterRoles, RoleBindings and ClusterRoleBindings held by `ResourceCache`, kept current from `CacheChange` batches (no relist, no UI types).
+- [ ] RBAC authorizer semantics, same as the API server: `*` in verbs, apiGroups and resources; subresources (`pods/exec`, `pods/log`, `deployments/scale`); `resourceNames`; `nonResourceURLs`; aggregated ClusterRoles (`aggregationRule`, `rbac.authorization.k8s.io/aggregate-to-*` labels); implicit groups (`system:authenticated`, `system:serviceaccounts`, `system:serviceaccounts:<ns>`); ServiceAccount subjects with their namespace; bindings to a missing role reported as such. RoleBinding → ClusterRole is a first-class case (cluster role applied to one namespace). Rights are additive (no deny).
+- [ ] Queries: `RightsOf(subject)`, `WhoCan(verb, resource, namespace)`, `Explain(subject, verb, resource, ns)` returning every binding → role → rule path.
+- [ ] Risk flags: `*` on verbs or resources, `escalate`, `bind`, `impersonate`, `create pods/exec`, `create pods/attach`, `get/list/watch secrets`, `create pods` (privileged-pod bypass), `cluster-admin`, over-broad subjects (`system:authenticated`, `system:unauthenticated`).
+- [ ] Cross-check with the API server: `SelfSubjectAccessReview` for the current user (a difference between computed and server answer is shown, e.g. webhook authorizer or Entra RBAC on AKS); `SubjectAccessReview` for other subjects only when the user may `create subjectaccessreviews`, otherwise disabled with a tooltip.
+- [ ] Incomplete data is never silent: when Roles or Bindings cannot be listed, the view says which kinds are missing instead of drawing a partial graph.
+- [ ] Graph layout computed in Core as a pure model (columns Subject → Binding → Role → Rules, ordering to reduce crossings, scope namespace/cluster on each node); rendering stays in Desktop.
+- [ ] Table-driven tests with realistic RBAC sets (aggregation, RoleBinding → ClusterRole, wildcards, `resourceNames`, implicit groups, orphan binding). Expected results captured from `kubectl auth can-i` / `--list` on a kind cluster and stored with the test data.
+- [ ] Desktop: "RBAC graph" entry under Access Control with three views — **Chain** (subject → binding → role → rules), **Subject** ("what can X do": verbs × resources matrix per namespace), **Resource** ("who can `<verb>` `<resource>` in `<namespace>`": subjects with the binding + role + rule path). Filters: namespace, subject kind, "risky only"; subject search.
+- [ ] Desktop: graph control (Avalonia `Canvas`) drawn from the Core layout, colour by scope, click a node → details panel with the RBAC object's YAML, click a subject → Subject view. Virtualized verbs × resources matrix with risky cells highlighted. Entra object IDs shown as they are.
+- [ ] Test data `Kubism.Testing/Data/rbac.yaml`; headless UI test against `FakeApiServer` rendering each of the three views, with a screenshot each.
+- [ ] MCP read tools `rbac_who_can` (verb, resource, namespace) and `rbac_rights_of` (subject), returning the explaining paths and risk flags; tests in `Kubism.Mcp.Tests`; `docs/mcp.md` updated.
+- [ ] ADR `docs/adr/000X-rbac-graph.md`: chosen semantics and known limits (webhook authorizers, Azure RBAC for Kubernetes, ABAC not covered).
+- [ ] Future: resolve Entra group object IDs to names through Microsoft Graph (out of scope here).
+
+**Validation**
+- [ ] (automated) Table-driven `RbacGraph` tests green on the 3 OSes; computed answers equal the captured `kubectl auth can-i` results.
+- [ ] (automated) Headless UI test renders Chain, Subject and Resource views and saves screenshots; MCP tools answer over stdio.
+- [ ] (manual) On kind: `WhoCan` / `RightsOf` match `kubectl auth can-i` and `--list` for `cluster-admin`, a namespaced Role, a RoleBinding → ClusterRole and a ServiceAccount.
+- [ ] (manual) On AKS with Entra ID: the current user's computed rights are compared with `SelfSubjectAccessReview`; a gap from Azure RBAC is shown, not hidden.
+- [ ] (manual) A user who cannot list RoleBindings sees the "incomplete data" warning, not a partial graph.
+
+## Phase 11c — Access diagnosis
+
+When the API answers 403, Kubism explains why in plain terms and proposes a minimal fix; a "My access" panel shows the user's own rights. Builds on the Phase 11b `RbacGraph` (`RightsOf`, `WhoCan`, `Explain`, risk flags): reuse it, do not duplicate it. Anything that writes (applying the fix) goes through `ClusterActions.ApplyYaml`.
+
+- [ ] `ForbiddenDiagnosis` (Core): from a 403 `KubeApiException`, extract verb, API group, resource, subresource, namespace and name. `Status.details` first, the message as fallback (`User "x" cannot <verb> resource "<r>" in API group "<g>" in the namespace "<ns>"`, with variants for cluster-scoped resources, subresources and ServiceAccounts). Parsing tests on real captured messages.
+- [ ] Real identity: `SelfSubjectReview` (`authentication.k8s.io/v1`) for username, groups and extra as the API server sees them, cached per session and shown (many "forbidden" come from the wrong context or subject).
+- [ ] Denial classification: **RBAC**; **admission webhook** (`admission webhook "…" denied the request`: not a rights problem); **policy engine** (Kyverno, Gatekeeper, ValidatingAdmissionPolicy) recognised from the message; **webhook authorizer / Azure RBAC for Kubernetes** (RbacGraph says allowed but the API refuses: authorization lives outside the cluster, e.g. the Azure portal); **401** (authentication, not authorization: point to reconnecting).
+- [ ] Explanation from `RbacGraph`: the closest rights the subject already has (same resource with other verbs, same verb in another namespace, `get pods` without `pods/log`…) and who holds the missing right (resource-centred `WhoCan`), i.e. who could grant it.
+- [ ] Minimal fix: a Role + RoleBinding (ClusterRole + ClusterRoleBinding for cluster-scoped resources) with only the missing verb and resource, `resourceNames` when the denial named an object; also suggest a built-in role (`view`, `edit`) when it covers the need. Flag risky requests with the Phase 11b flags (`pods/exec`, secrets, `escalate`, `bind`, `impersonate`…).
+- [ ] `MyAccess` (Core): `SelfSubjectRulesReview` for the current namespace (`kubectl auth can-i --list`), grouped by resource; the result states that the API does not guarantee completeness with webhook authorizers.
+- [ ] Table-driven tests: message parsing, classification, minimal fix (verb only, subresource, `resourceNames`, cluster-scoped, CRD), consistency with `RbacGraph`.
+- [ ] Desktop: "Why?" wherever a 403 is shown (error dialog, a refused list, details, actions) opens an "Access diagnosis" panel: identity and context used; a plain sentence ("You cannot read logs of pods in team-a: your role `viewer` allows `get pods` but not `get pods/log`"); the denial type when not RBAC and what to do; nearby rights and who holds the right; the minimal-fix YAML with Copy.
+- [ ] Desktop: "Apply" on the fix only through `ClusterActions.ApplyYaml`, shown only when `SelfSubjectAccessReview` says the user may create the Roles/Bindings (and `bind`/`escalate` when needed); production and read-only rules apply. The default path is "Copy request for admin" (short text with identity, need and YAML).
+- [ ] Desktop: "My access" panel under Access Control: matrix of the user's own rights in the selected namespace, with a filter.
+- [ ] `FakeApiServer` returns realistic denials (RBAC 403 on `pods/log`, admission webhook) and serves `SelfSubjectReview` and `SelfSubjectRulesReview`; headless UI tests (RBAC 403 on `pods/log`, admission webhook denial, "My access") with a screenshot each.
+- [ ] MCP read-only tools `explain_forbidden` (error message, or verb/resource/namespace → diagnosis, denial type, fix YAML) and `my_access` (namespace); tests in `Kubism.Mcp.Tests`; `docs/mcp.md` updated.
+- [ ] ADR section (in the rbac-graph ADR, or a short new one): supported message formats and limits (webhook authorizers, Azure RBAC, non-standard messages).
+
+**Validation**
+- [ ] (automated) Parsing, classification, minimal-fix and RbacGraph-consistency tests green on the 3 OSes.
+- [ ] (automated) Headless UI tests render the three cases and save screenshots; MCP tools answer over stdio.
+- [ ] (manual) A real 403 on AKS with Entra ID and Azure RBAC for Kubernetes enabled is classified as external authorization, not RBAC.
+- [ ] (manual) A Kyverno or Gatekeeper denial on kind is classified as a policy engine.
+- [ ] (manual) On kind, the generated fix applied by an admin removes the 403 (`kubectl auth can-i` agrees).
+
 ## Phase 12 — MCP server
 
 - [x] `Kubism.Mcp` with the read tools from CLAUDE.md, resources `kubism://clusters`, `kubism://clusters/{id}/kinds`; secrets redacted at the tool layer and tested.
