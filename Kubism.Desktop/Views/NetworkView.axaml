@@ -1,0 +1,55 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:v="using:Kubism.Desktop.Views"
+             xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             x:Class="Kubism.Desktop.Views.NetworkView"
+             x:DataType="vm:NetworkViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16" RowSpacing="6">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="Network graph" Classes="h1" />
+        <TextBlock Text="{Binding Summary}" Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <TextBlock Grid.Column="1" Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Top" />
+    </Grid>
+    <StackPanel Grid.Row="1" Spacing="4">
+      <Border IsVisible="{Binding HasWarning}" BorderBrush="{DynamicResource KubismWarnBrush}" BorderThickness="1" CornerRadius="6" Padding="10,6" AutomationProperties.Name="Incomplete data warning">
+        <TextBlock Text="{Binding Warning}" TextWrapping="Wrap" Foreground="{DynamicResource KubismWarnBrush}" />
+      </Border>
+      <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" TextWrapping="Wrap" />
+    </StackPanel>
+    <StackPanel Grid.Row="2" Spacing="4">
+      <WrapPanel>
+        <v:NamespacePicker DataContext="{Binding Workspace.Namespaces}" Margin="0,0,8,4" />
+        <ComboBox ItemsSource="{Binding ExposureChoices}" SelectedItem="{Binding SelectedExposure, Mode=TwoWay}" MinWidth="210" Margin="0,0,8,4" AutomationProperties.Name="Exposure filter" />
+        <CheckBox Content="Problems only" IsChecked="{Binding ProblemsOnly}" Margin="0,0,8,4" />
+        <CheckBox Content="Show internal services" IsChecked="{Binding IncludeInternal}" Margin="0,0,8,4" ToolTip.Tip="Services that nothing routes to (ClusterIP only) are hidden by default" />
+        <TextBox Text="{Binding Search}" Watermark="Search a host, path, service, workload" MinWidth="280" Margin="0,0,8,4" AutomationProperties.Name="Search" />
+      </WrapPanel>
+      <WrapPanel>
+        <TextBlock Text="{Binding ViewSummary}" Classes="muted" Margin="0,0,16,0" />
+        <TextBlock Text="■ outside the cluster" Foreground="{DynamicResource KubismWarnBrush}" Margin="0,0,10,0" />
+        <TextBlock Text="■ in-cluster only" Foreground="{DynamicResource KubismAccentBrush}" Margin="0,0,10,0" />
+        <TextBlock Text="■ unknown" Foreground="{DynamicResource KubismMutedBrush}" Margin="0,0,10,0" />
+        <TextBlock Text="▌ problem" Foreground="{DynamicResource KubismErrorBrush}" Margin="0,0,10,0" />
+        <TextBlock Text="┅ missing" Foreground="{DynamicResource KubismErrorBrush}" />
+      </WrapPanel>
+    </StackPanel>
+    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+      <c:NetworkGraphControl ViewData="{Binding View}" SelectedNode="{Binding SelectedNode}" NodeCommand="{Binding NodeClickedCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="Network graph" />
+    </ScrollViewer>
+    <Grid Grid.Row="4" ColumnDefinitions="*,Auto">
+      <!-- The details scroll and wrap: a controller or an Ingress can hold many lines. -->
+      <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Selected node details">
+        <ItemsControl ItemsSource="{Binding NodeLines}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" TextWrapping="Wrap" /></DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Button Grid.Column="1" Content="Copy" Command="{Binding CopyDetailsCommand}" VerticalAlignment="Top" Margin="8,0,0,0" ToolTip.Tip="Copy the selected node's details, or the hosts and paths on screen" />
+    </Grid>
+  </Grid>
+</UserControl>

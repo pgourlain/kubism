@@ -84,7 +84,7 @@ public class McpReadToolsTests
     public async Task Server_lists_read_tools_and_hides_write_tools_by_default()
     {
         await using var f = await McpFixture.StartAsync([]);
-        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of" })
+        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of", "network_exposure" })
             Assert.Contains(t, f.ToolNames);
         foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart" })
             Assert.DoesNotContain(t, f.ToolNames);
@@ -291,5 +291,49 @@ public class McpRbacTests
         Assert.False(r["complete"]!.GetValue<bool>());
         Assert.Contains("rolebindings", r["warning"]!.ToString());
         Assert.DoesNotContain(r["subjects"]!.AsArray(), x => x!["subject"]!.ToString() == "Group devs");     // devs get pods in staging through a RoleBinding we could not read
+    }
+}
+
+public class McpNetworkTests
+{
+    private static JsonObject Node(JsonNode r, string id) => r["nodes"]!.AsArray().Select(n => n!.AsObject()).Single(n => n["id"]!.ToString() == id);
+
+    [Fact]
+    public async Task Network_exposure_lists_chains_with_ports_exposure_and_problems()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var r = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["exposure"] = "outside" }))!;
+        Assert.True(r["complete"]!.GetValue<bool>());
+        Assert.Contains("DNS, firewalls", r["limits"]!.ToString());
+        Assert.Equal("outside the cluster", Node(r, "i:shop/shop")["exposure"]!.ToString());
+        Assert.Equal("outside the cluster", Node(r, "x:svc/ingress-nginx/ingress-nginx-controller")["exposure"]!.ToString());
+        Assert.Contains(r["edges"]!.AsArray(), e => e!["from"]!.ToString() == "s:shop/web" && e["ports"]!.ToString() == "80 → http (8080)");
+        Assert.Contains(Node(r, "i:shop/admin")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "tls-secret-missing");     // looked up by GET
+        Assert.Contains(Node(r, "s:shop/docs-svc")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "missing-service");
+        Assert.True(Node(r, "s:shop/docs-svc")["missing"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Network_exposure_filters_by_namespace_keeping_the_controller_as_context_and_by_problems()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var tools = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["namespace"] = "tools" }))!;
+        Assert.True(Node(tools, "x:svc/ingress-nginx/ingress-nginx-controller")["context"]!.GetValue<bool>());
+        Assert.DoesNotContain(tools["nodes"]!.AsArray(), n => n!["namespace"]?.ToString() == "shop");
+
+        var problems = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["problemsOnly"] = true }))!;
+        Assert.Contains(problems["nodes"]!.AsArray(), n => n!["id"]!.ToString() == "s:shop/legacy");
+        Assert.DoesNotContain(problems["nodes"]!.AsArray(), n => n!["id"]!.ToString() == "s:tools/db");
+        await Assert.ThrowsAsync<McpException>(() => f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["exposure"] = "sideways" }));
+    }
+
+    [Fact]
+    public async Task Network_exposure_says_when_a_kind_could_not_be_read()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        f.Server.Deny("list", "endpointslices");
+        var r = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake" }))!;
+        Assert.False(r["complete"]!.GetValue<bool>());
+        Assert.Contains("endpointslices", r["warning"]!.ToString());
     }
 }

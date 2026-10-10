@@ -207,6 +207,9 @@ public class NetworkGraphTests
         var problems = Graph.View(new NetworkFilter { ProblemsOnly = true, IncludeInternalServices = true });
         Assert.DoesNotContain(problems.Nodes, p => p.Id == "s:tools/db");        // healthy
         Assert.Contains(problems.Nodes, p => p.Id == "s:shop/legacy");
+        // looking for problems also surfaces a broken in-cluster Service without ticking "internal services"
+        Assert.Contains(Graph.View(new NetworkFilter { ProblemsOnly = true }).Nodes, p => p.Id == "s:shop/legacy");
+        Assert.DoesNotContain(Graph.View(new NetworkFilter { ProblemsOnly = true }).Nodes, p => p.Id == "s:tools/db");
 
         var agw = Graph.View(new NetworkFilter { Search = "agw.example.com" });
         Assert.Contains(agw.Nodes, p => p.Id == "i:shop/agw");

@@ -31,7 +31,8 @@ public sealed partial class NetworkGraph
             var level = nodes.Concat(exposure).Max(n => n.Exposure);
             var hasProblem = nodes.Concat(exposure).Any(n => n.HasProblem) || _edges.Any(e => e.Problem && nodes.Any(n => n.Id == e.From) && nodes.Any(n => n.Id == e.To));
             // Services nothing routes to are not a way in: hidden unless asked for.
-            if (exposure.Count == 0 && !nodes.Any(n => n.Kind == NetworkNodeKind.Ingress) && !filter.IncludeInternalServices) continue;
+            // ... except when looking for problems: a broken in-cluster Service is one.
+            if (exposure.Count == 0 && !nodes.Any(n => n.Kind == NetworkNodeKind.Ingress) && !filter.IncludeInternalServices && !(filter.ProblemsOnly && hasProblem)) continue;
             if (filter.Exposure == ExposureFilter.OutsideOnly && level != ExposureLevel.Outside) continue;
             if (filter.Exposure == ExposureFilter.InClusterOnly && level != ExposureLevel.InCluster) continue;
             if (filter.ProblemsOnly && !hasProblem) continue;

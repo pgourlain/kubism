@@ -88,6 +88,8 @@ public static class FakeKinds
         new("batch", "v1", "cronjobs", "CronJob", true, ["cj"], StdColl, ["status"],
             [Name, new("Schedule", "string", 0, o => S(o, "spec", "schedule")), new("Suspend", "boolean", 0, o => S(o, "spec", "suspend") ?? "false"), AgeCol], ["all"]),
         new("networking.k8s.io", "v1", "ingresses", "Ingress", true, ["ing"], StdColl, ["status"], [Name, AgeCol]),
+        new("networking.k8s.io", "v1", "ingressclasses", "IngressClass", false, [], StdColl, [], [Name, new("Controller", "string", 0, o => S(o, "spec", "controller")), AgeCol]),
+        new("discovery.k8s.io", "v1", "endpointslices", "EndpointSlice", true, [], StdColl, [], [Name, AgeCol]),
         new("policy", "v1", "poddisruptionbudgets", "PodDisruptionBudget", true, ["pdb"], StdColl, ["status"], [Name, AgeCol]),
         new("autoscaling", "v2", "horizontalpodautoscalers", "HorizontalPodAutoscaler", true, ["hpa"], StdColl, ["status"], [Name, AgeCol]),
         new("autoscaling.k8s.io", "v1", "verticalpodautoscalers", "VerticalPodAutoscaler", true, ["vpa"], StdColl, ["status"], [Name, AgeCol]),

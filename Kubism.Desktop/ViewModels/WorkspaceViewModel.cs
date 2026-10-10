@@ -112,6 +112,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
                 if (Find(n) is { } k) g.Children.Add(new NavNode(Plural(k.Kind), NavTarget.Kind, k));
             // The RBAC graph lives with the RBAC kinds; it needs to list at least the bindings or the roles.
             if (section == "Access Control" && (Find("rolebindings") is not null || Find("clusterrolebindings") is not null)) g.Children.Add(new NavNode("RBAC graph".T(), NavTarget.Rbac, null, "security"));
+            if (section == "Network" && (Find("ingresses") is not null || Find("services") is not null)) g.Children.Add(new NavNode("Network graph".T(), NavTarget.NetworkGraph, null, "network"));
             if (g.Children.Count > 0) NavRoots.Add(g);
         }
         if (Find("namespaces") is { } ns) NavRoots.Add(new NavNode("Namespaces".T(), NavTarget.Kind, ns, "namespaces"));
@@ -210,6 +211,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Compare => new CompareViewModel(this),
             NavTarget.Security => new SecurityViewModel(this),
             NavTarget.Rbac => new RbacViewModel(this),
+            NavTarget.NetworkGraph => new NetworkViewModel(this),
             NavTarget.GitOps => new GitOpsViewModel(this),
             NavTarget.Capacity => new CapacityViewModel(this),
             _ => null,

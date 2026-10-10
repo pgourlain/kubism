@@ -43,6 +43,7 @@ Read tools (always on). Every `cluster` argument accepts the context name, the l
 | `rightsizing_report` | Requests/limits vs usage per workload container, verdicts, recommendations and a YAML snippet |
 | `rbac_who_can` | Who can `<verb>` `<resource>` in `<namespace>`: subjects with the binding → role → rule paths and risk flags (RBAC objects only; says when a kind could not be read) |
 | `rbac_rights_of` | What a subject can do: paths per namespace through its bindings and implicit groups, risk flags, and a verbs × resources matrix for one namespace |
+| `network_exposure` | How traffic reaches the pods: exposure (outside the cluster or not) → Ingress → Service → workload with hosts, paths, ports and problems; namespace, exposure and problems filters (the controller of another namespace stays as context) |
 
 Resources: `kubism://clusters`, `kubism://clusters/{id}/kinds`.
 
