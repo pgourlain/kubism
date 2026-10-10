@@ -254,13 +254,13 @@ public sealed class DemoEnvironment : IAsyncDisposable
     {
         var now = DateTimeOffset.UtcNow;
         string Manifest(string kind, string name) => $"---\napiVersion: apps/v1\nkind: {kind}\nmetadata:\n  name: {name}\n";
-        void Rev(string name, string ns, int rev, string status, string desc, DateTimeOffset at, string chart, string chartVersion, string app, JsonObject chartValues, JsonObject user, string manifest, string? notes = null)
+        void Rev(string name, string ns, int rev, string status, string desc, DateTimeOffset at, string chart, string chartVersion, string app, JsonObject chartValues, JsonObject user, string manifest, string? notes = null, JsonArray? templates = null)
         {
             var release = new JsonObject
             {
                 ["name"] = name, ["namespace"] = ns, ["version"] = rev,
                 ["info"] = new JsonObject { ["status"] = status, ["description"] = desc, ["first_deployed"] = at.AddDays(-30).ToString("O"), ["last_deployed"] = at.ToString("O"), ["notes"] = notes ?? $"{name} installed from chart {chart}." },
-                ["chart"] = new JsonObject { ["metadata"] = new JsonObject { ["name"] = chart, ["version"] = chartVersion, ["appVersion"] = app }, ["values"] = chartValues.DeepClone() },
+                ["chart"] = new JsonObject { ["metadata"] = new JsonObject { ["name"] = chart, ["version"] = chartVersion, ["appVersion"] = app }, ["values"] = chartValues.DeepClone(), ["templates"] = templates?.DeepClone() },
                 ["config"] = user.DeepClone(), ["manifest"] = manifest,
             };
             using var ms = new MemoryStream();
@@ -292,7 +292,11 @@ public sealed class DemoEnvironment : IAsyncDisposable
         if (ev is not null) { ev["lastTimestamp"] = now.AddMinutes(-4).ToString("O"); server.Upsert(ev); }
         // A healthy release that rendered the "api" deployment, its service and its config (Helm stamps these annotations on everything it installs),
         // plus the failed "payments" release owning the crash-looping pod: the graph shows both under their release.
-        Rev("api", "default", 1, "deployed", "Install complete", now.AddDays(-12), "api", "1.4.2", "3.1.0", J("{\"replicaCount\":2}"), J("{}"), Manifest("Deployment", "api"));
+        // The chart is stored with its template, so Edit values can rebuild it, and the manifest is what that template renders (a preview with unchanged values shows no change).
+        var settingsTemplate = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: {{ .Release.Name }}-settings\ndata:\n  replicaCount: {{ .Values.replicaCount | quote }}\n  logLevel: {{ .Values.logLevel | default \"info\" | quote }}\n";
+        Rev("api", "default", 1, "deployed", "Install complete", now.AddDays(-12), "api", "1.4.2", "3.1.0", J("{\"replicaCount\":2}"), J("{}"),
+            "---\n# Source: api/templates/settings.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-settings\ndata:\n  replicaCount: \"2\"\n  logLevel: \"info\"\n",
+            templates: new JsonArray(new JsonObject { ["name"] = "templates/settings.yaml", ["data"] = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(settingsTemplate)) }));
         void Stamp(Gvr gvr, string ns, string name, string release)
         {
             if (server.Get(gvr, ns, name) is not { } o) return;

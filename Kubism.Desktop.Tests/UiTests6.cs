@@ -336,4 +336,109 @@ public class UiExplorationTests
         Assert.Contains(vm.SimRows, r => r.Namespace == "production" && r.Ns.CpuAfter > r.Ns.CpuNow);       // checkout is under-provisioned: it costs more
         h.Screenshot("43-capacity-what-if");
     }
+
+    private static async Task<(UiHarness h, WorkspaceViewModel ws, HelmViewModel vm)> OpenHelmAsync(string context, string release)
+    {
+        var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync(context);
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Helm)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Any(r => r.Name == release), what: "releases");
+        var vm = (HelmViewModel)ws.CurrentContent!;
+        vm.Selected = vm.Releases.First(r => r.Name == release);
+        return (h, ws, vm);
+    }
+
+    [AvaloniaFact]
+    public async Task Edit_values_previews_the_change_then_upgrades_through_cluster_actions()
+    {
+        var (h, ws, vm) = await OpenHelmAsync("demo-staging", "api");
+        await using var _ = h;
+        vm.EditValuesCommand.Execute(null);
+        Assert.Equal(HelmViewModel.UpgradeTabIndex, vm.Tab);
+        await UiHarness.WaitFor(() => vm.CanRebuild && vm.UseInstalledChart, what: "installed chart read");
+        Assert.Equal("{}", vm.UpgradeValues.Trim());   // nothing was supplied at install time
+        h.Helm.Output["template"] = "---\n# Source: api/templates/settings.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-settings\ndata:\n  replicaCount: \"2\"\n  logLevel: \"debug\"\n";
+        vm.UpgradeValues = "logLevel: debug\n";
+        await vm.PreviewUpgradeCommand.ExecuteAsync(null);
+        Assert.Null(vm.UpgradeError);
+        Assert.Contains(vm.PreviewLines, l => l.Kind == DiffLineKind.Removed && l.Text.Contains("info"));
+        Assert.Contains(vm.PreviewLines, l => l.Kind == DiffLineKind.Added && l.Text.Contains("debug"));
+        Assert.Contains("would change", vm.UpgradeStatus);
+        Assert.Equal("template", h.Helm.Calls[^1][0]);
+        h.Screenshot("44-helm-edit-values");
+
+        vm.Atomic = true;
+        await vm.UpgradeCommand.ExecuteAsync(null);
+        var upgrade = h.Helm.Calls.Last(c => c[0] == "upgrade");
+        Assert.Equal(["upgrade", "api"], upgrade[..2]);
+        Assert.Contains("--atomic", upgrade); Assert.Contains("--reset-values", upgrade);
+        Assert.Equal("logLevel: debug\n", h.Helm.Values[^1]);
+        Assert.Contains(ws.Session.Activity.Entries, e => e.Action == "HelmUpgrade" && e.Success);
+        Assert.Contains(h.Dialogs.Shown, s => s.StartsWith("confirm:Upgrade"));
+        await UiHarness.WaitFor(() => vm.Selected?.Name == "api", what: "release reselected");
+    }
+
+    [AvaloniaFact]
+    public async Task Unchanged_values_show_no_change_and_bad_values_or_helm_errors_are_reported()
+    {
+        var (h, _, vm) = await OpenHelmAsync("demo-staging", "api");
+        await using var _ = h;
+        vm.EditValuesCommand.Execute(null);
+        await UiHarness.WaitFor(() => vm.CanRebuild, what: "installed chart read");
+        h.Helm.Output["template"] = "---\n# Source: api/templates/settings.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-settings\ndata:\n  replicaCount: \"2\"\n  logLevel: \"info\"\n";
+        await vm.PreviewUpgradeCommand.ExecuteAsync(null);
+        Assert.Contains("No change", vm.UpgradeStatus);
+        Assert.Empty(vm.PreviewLines);
+
+        vm.UpgradeValues = "- a list\n- is not values\n";
+        await vm.PreviewUpgradeCommand.ExecuteAsync(null);
+        Assert.Contains("mapping", vm.UpgradeError);
+        vm.UpgradeValues = "a: [unclosed\n";
+        await vm.UpgradeCommand.ExecuteAsync(null);
+        Assert.StartsWith("Values:", vm.UpgradeError);
+        Assert.DoesNotContain(h.Helm.Calls, c => c[0] == "upgrade");   // nothing ran
+
+        vm.UpgradeValues = "logLevel: warn\n"; h.Helm.FailWith = "helm failed (exit 1): template: api/templates/settings.yaml: bad value";
+        await vm.PreviewUpgradeCommand.ExecuteAsync(null);
+        Assert.Contains("bad value", vm.UpgradeError);   // helm's own message
+    }
+
+    [AvaloniaFact]
+    public async Task A_chart_with_no_stored_templates_needs_a_chart_reference()
+    {
+        var (h, _, vm) = await OpenHelmAsync("demo-staging", "ingress-nginx");
+        await using var _ = h;
+        h.Helm.Output["search"] = "[{\"name\":\"other/nginx\",\"version\":\"1\"},{\"name\":\"ingress-nginx/ingress-nginx\",\"version\":\"4.11.1\"}]";
+        vm.EditValuesCommand.Execute(null);
+        await UiHarness.WaitFor(() => vm.RebuildBlockedReason is not null && vm.ChartRef.Length > 0, what: "chart suggestion");
+        Assert.False(vm.CanRebuild); Assert.False(vm.UseInstalledChart); Assert.True(vm.UseReference);
+        Assert.Equal("ingress-nginx/ingress-nginx", vm.ChartRef);   // found by name in the repositories helm knows
+        Assert.Equal("4.11.0", vm.ChartVersion);                       // the installed version, until you change it
+        vm.UseInstalledChart = true;
+        await vm.UpgradeCommand.ExecuteAsync(null);
+        Assert.Contains("templates", vm.UpgradeError);
+        vm.UseReference = true; vm.ChartRef = ""; await vm.UpgradeCommand.ExecuteAsync(null);
+        Assert.Contains("chart reference", vm.UpgradeError);
+        vm.ChartRef = "ingress-nginx/ingress-nginx"; vm.ChartVersion = "4.11.2";
+        await vm.UpgradeCommand.ExecuteAsync(null);
+        var up = h.Helm.Calls.Last(c => c[0] == "upgrade");
+        Assert.Equal("ingress-nginx/ingress-nginx", up[2]); Assert.Contains("4.11.2", up);
+    }
+
+    [AvaloniaFact]
+    public async Task Upgrade_on_production_needs_the_release_name_typed()
+    {
+        var (h, _, vm) = await OpenHelmAsync("demo-production", "api");
+        await using var _ = h;
+        vm.EditValuesCommand.Execute(null);
+        await UiHarness.WaitFor(() => vm.CanRebuild, what: "installed chart read");
+        vm.UpgradeValues = "logLevel: debug\n";
+        h.Dialogs.TypedResponse = _ => "wrong";
+        await vm.UpgradeCommand.ExecuteAsync(null);
+        Assert.DoesNotContain(h.Helm.Calls, c => c[0] == "upgrade");
+        h.Dialogs.TypedResponse = e => e;
+        await vm.UpgradeCommand.ExecuteAsync(null);
+        Assert.Contains(h.Helm.Calls, c => c[0] == "upgrade");
+    }
 }

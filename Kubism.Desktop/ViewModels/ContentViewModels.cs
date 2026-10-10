@@ -101,7 +101,25 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     private CancellationTokenSource? _diagCts;
     private CancellationTokenSource? _graphCts;
     private (string ns, string name)? _pendingSelect;
-    public const int GraphTabIndex = 6;
+    public const int UpgradeTabIndex = 6;
+    public const int GraphTabIndex = 7;
+    private System.Text.Json.Nodes.JsonObject? _releaseChart;
+    private CancellationTokenSource? _upgradeCts;
+    public ObservableCollection<DiffLine> PreviewLines { get; } = [];
+    [ObservableProperty] private string _upgradeValues = "";
+    [ObservableProperty] private string _chartRef = "";
+    [ObservableProperty] private string _chartVersion = "";
+    [ObservableProperty] private bool _useInstalledChart = true;
+    [ObservableProperty] private bool _wait;
+    [ObservableProperty] private bool _atomic;
+    [ObservableProperty] private bool _upgradeBusy;
+    [ObservableProperty] private string _upgradeStatus = "";
+    [ObservableProperty] private string? _upgradeError;
+    [ObservableProperty] private string? _rebuildBlockedReason;
+    public bool CanRebuild => RebuildBlockedReason is null;
+    public bool UseReference { get => !UseInstalledChart; set { if (value) UseInstalledChart = false; } }
+    partial void OnUseInstalledChartChanged(bool value) => OnPropertyChanged(nameof(UseReference));
+    partial void OnRebuildBlockedReasonChanged(string? value) => OnPropertyChanged(nameof(CanRebuild));
     [ObservableProperty] private RelationGraph? _graph;
     [ObservableProperty] private string _graphStatus = "";
     [ObservableProperty] private bool _graphLoading;
@@ -142,7 +160,115 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         else _ = LoadAsync();
     }
 
-    partial void OnTabChanged(int value) { if (value == GraphTabIndex) _ = LoadGraphAsync(); }
+    partial void OnTabChanged(int value)
+    {
+        if (value == GraphTabIndex) _ = LoadGraphAsync();
+        if (value == UpgradeTabIndex) _ = PrepareUpgradeAsync();
+    }
+
+    // ---------- edit values and upgrade ----------
+
+    [RelayCommand]
+    private void EditValues() { Tab = UpgradeTabIndex; if (Tab == UpgradeTabIndex) _ = PrepareUpgradeAsync(); }
+
+    [RelayCommand]
+    private void ResetValues() { if (Selected is { } r) UpgradeValues = YamlJson.ToYaml(r.UserValues ?? new System.Text.Json.Nodes.JsonObject()); PreviewLines.Clear(); UpgradeError = null; }
+
+    private void ResetUpgrade(HelmRelease? r)
+    {
+        _upgradeCts?.Cancel(); _releaseChart = null;
+        PreviewLines.Clear(); UpgradeError = null; UpgradeStatus = ""; RebuildBlockedReason = null; UseInstalledChart = true; ChartRef = "";
+        UpgradeValues = r is null ? "" : YamlJson.ToYaml(r.UserValues ?? new System.Text.Json.Nodes.JsonObject());
+        ChartVersion = r?.ChartVersion ?? "";
+    }
+
+    /// <summary>Reads the installed chart (to know whether it can be reused) and, when it cannot, looks for the same chart in the repositories helm knows.</summary>
+    private async Task PrepareUpgradeAsync()
+    {
+        var r = Selected;
+        if (r is null || _releaseChart is not null) return;
+        _upgradeCts?.Cancel(); _upgradeCts = new CancellationTokenSource();
+        var ct = CancellationTokenSource.CreateLinkedTokenSource(_upgradeCts.Token, _ws.Session.SessionToken).Token;
+        try
+        {
+            _releaseChart = await new HelmReleases(_ws.Session.Transport).GetChartAsync(r.Namespace, r.Name, r.Revision, ct);
+            if (Selected != r) return;
+            RebuildBlockedReason = HelmUpgrade.CannotRebuildReason(_releaseChart);
+            UseInstalledChart = RebuildBlockedReason is null;
+            if (RebuildBlockedReason is not null && ChartRef.Length == 0) ChartRef = await SuggestChartAsync(r, ct) ?? "";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { UpgradeError = ex.Message; }
+    }
+
+    /// <summary><c>helm search repo</c> for a chart of the same name (best effort: the repository may not be added).</summary>
+    private async Task<string?> SuggestChartAsync(HelmRelease r, CancellationToken ct)
+    {
+        if (_ws.Session.Actions.Helm is not { IsAvailable: true } helm) return null;
+        try
+        {
+            var json = System.Text.Json.Nodes.JsonNode.Parse(await helm.RunAsync(["search", "repo", r.Chart, "-o", "json"], ct)) as System.Text.Json.Nodes.JsonArray;
+            return json?.Select(x => x?["name"]?.ToString()).FirstOrDefault(n => n is not null && n.EndsWith("/" + r.Chart, StringComparison.Ordinal));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { return null; }
+    }
+
+    private HelmUpgradeRequest? BuildRequest()
+    {
+        UpgradeError = null;
+        if (Selected is not { } r) return null;
+        try
+        {
+            var parsed = YamlJson.Parse(UpgradeValues);
+            if (parsed is not (null or System.Text.Json.Nodes.JsonObject)) throw new FormatException("The values must be a YAML mapping (key: value).");
+        }
+        catch (Exception ex) { UpgradeError = "Values: " + ex.Message; return null; }
+        if (!UseInstalledChart && ChartRef.Trim().Length == 0) { UpgradeError = "Give a chart reference (repo/name, oci://…, or a folder), or reuse the installed chart."; return null; }
+        if (UseInstalledChart && RebuildBlockedReason is { } why) { UpgradeError = why; return null; }
+        return new HelmUpgradeRequest(r.Namespace, r.Name, UseInstalledChart ? "" : ChartRef.Trim(), UseInstalledChart ? null : ChartVersion.Trim(), UpgradeValues, Wait, Atomic, _releaseChart);
+    }
+
+    /// <summary>Renders the chart with the new values (no cluster needed) and shows what would change against the installed manifest.</summary>
+    [RelayCommand]
+    private async Task PreviewUpgradeAsync()
+    {
+        if (_releaseChart is null) await PrepareUpgradeAsync();
+        if (BuildRequest() is not { } req || Selected is not { } r) return;
+        if (_ws.Session.Actions.Helm is not { IsAvailable: true } helm) { UpgradeError = WriteTooltip; return; }
+        UpgradeBusy = true; UpgradeStatus = "Rendering…"; PreviewLines.Clear();
+        try
+        {
+            var (diff, changed, _) = await HelmUpgrade.PreviewAsync(helm, req, r.Manifest, _ws.Session.SessionToken);
+            if (Selected != r) return;
+            if (!changed) { UpgradeStatus = "No change: the new values render the same manifests as the installed release."; return; }
+            foreach (var l in diff.Split('\n'))
+            {
+                if (l.Length == 0) continue;
+                PreviewLines.Add(l.StartsWith("+ ") ? new DiffLine(l, DiffLineKind.Added) : l.StartsWith("- ") ? new DiffLine(l, DiffLineKind.Removed) : l.TrimStart() == "…" ? new DiffLine("  …", DiffLineKind.Gap) : new DiffLine(l, DiffLineKind.Context));
+            }
+            var (add, rem) = LineDiff.Count(diff);
+            UpgradeStatus = $"The rendered manifests would change: +{add} −{rem} lines (installed revision {r.Revision} → {r.Revision + 1}).";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { UpgradeError = ex.Message; UpgradeStatus = ""; }
+        finally { UpgradeBusy = false; }
+    }
+
+    [RelayCommand]
+    private async Task UpgradeAsync()
+    {
+        if (_releaseChart is null) await PrepareUpgradeAsync();
+        if (BuildRequest() is not { } req || Selected is not { } r) return;
+        UpgradeBusy = true; UpgradeStatus = "Upgrading… (helm waits for the cluster to accept it)";
+        try
+        {
+            var ok = await _ws.RunActionAsync("Upgrade", $"release {r.Name}", true, r.Name, c => _ws.Session.Actions.UpgradeHelmReleaseAsync(req, _ws.Session.SessionToken, c));
+            if (!ok) { UpgradeStatus = ""; return; }
+            UpgradeStatus = "Upgraded."; PreviewLines.Clear();
+            SelectWhenLoaded(r.Namespace, r.Name);
+        }
+        finally { UpgradeBusy = false; }
+    }
 
     /// <summary>The release at the top, then what it rendered and what runs below.</summary>
     public async Task LoadGraphAsync()
@@ -172,7 +298,9 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     {
         History.Clear();
         Graph = null; GraphStatus = "";
+        ResetUpgrade(value);
         if (value is null) return;
+        if (Tab == UpgradeTabIndex) _ = PrepareUpgradeAsync();
         if (Tab == GraphTabIndex) _ = LoadGraphAsync();
         ValuesText = YamlJson.ToYaml(value.ComputedValues);
         UserValuesText = YamlJson.ToYaml(value.UserValues ?? new JsonObject());
@@ -187,7 +315,7 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         var ct = CancellationTokenSource.CreateLinkedTokenSource(_diagCts.Token, _ws.Session.SessionToken).Token;
         var problem = HelmDiagnostics.IsProblem(r, DateTimeOffset.UtcNow);
         DiagIsProblem = problem; DiagHeadline = HelmDiagnostics.Headline(r, DateTimeOffset.UtcNow);
-        if (Tab != GraphTabIndex) Tab = problem ? 0 : 1;
+        if (Tab != GraphTabIndex && Tab != UpgradeTabIndex) Tab = problem ? 0 : 1;
         DiagEvents.Clear(); DiagPods.Clear();
         if (!problem) { DiagHeadline = $"Release {r.Status}: no problem detected."; return; }
         DiagLoading = true;

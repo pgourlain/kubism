@@ -258,4 +258,22 @@ public class DocsScreenshotTests
         await UiHarness.WaitFor(() => vm.SimRows.Count > 0, what: "simulation");
         Shot(h, "capacity-what-if");
     }
+
+    [AvaloniaFact]
+    public async Task Helm_edit_values()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.Select("default");
+        ws.Navigate(ws.FindNav(NavTarget.Helm)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is HelmViewModel v && v.Releases.Any(r => r.Name == "api"), what: "releases");
+        var vm = (HelmViewModel)ws.CurrentContent!;
+        vm.Selected = vm.Releases.First(r => r.Name == "api");
+        vm.EditValuesCommand.Execute(null);
+        await UiHarness.WaitFor(() => vm.CanRebuild, what: "installed chart read");
+        h.Helm.Output["template"] = "---\n# Source: api/templates/settings.yaml\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: api-settings\ndata:\n  replicaCount: \"3\"\n  logLevel: \"debug\"\n";
+        vm.UpgradeValues = "replicaCount: 3\nlogLevel: debug\n";
+        await vm.PreviewUpgradeCommand.ExecuteAsync(null);
+        Shot(h, "helm-edit-values");
+    }
 }

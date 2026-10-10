@@ -54,3 +54,27 @@ public sealed class TestUiThread : IUiThread
     public Task InvokeAsync(Action action) => _inner.InvokeAsync(action);
     public bool CheckAccess() => _inner.CheckAccess();
 }
+
+public sealed class FakeHelmRunner : Kubism.Core.Helm.IHelmRunner
+{
+    public List<string[]> Calls { get; } = [];
+    public List<string> Values { get; } = [];
+    public bool IsAvailable { get; set; } = true;
+    /// <summary>What a call prints, by its first argument ("template" output is the rendered manifest).</summary>
+    public Dictionary<string, string> Output { get; } = new() { ["search"] = "[]" };
+    public string? FailWith { get; set; }
+
+    public Task<string> RunAsync(IReadOnlyList<string> args, CancellationToken ct)
+    {
+        Calls.Add([.. args]);
+        var f = args.ToList().IndexOf("-f");
+        if (f >= 0 && File.Exists(args[f + 1])) Values.Add(File.ReadAllText(args[f + 1]));
+        if (FailWith is not null && args[0] is "template" or "upgrade") throw new InvalidOperationException(FailWith);
+        return Task.FromResult(Output.GetValueOrDefault(args[0], "ok"));
+    }
+}
+
+public sealed class FakeHelmFactory(FakeHelmRunner runner) : Kubism.Core.Helm.IHelmRunnerFactory
+{
+    public Kubism.Core.Helm.IHelmRunner Create(Kubism.Core.Catalog.ClusterEntry entry) => runner;
+}

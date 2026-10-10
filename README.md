@@ -151,7 +151,11 @@ You can apply the change (a rollout is announced, production rules apply), or co
 
 ### Helm and custom resources
 
-Releases are read from the cluster's `helm.sh/release.v1` secrets, with no `helm` binary needed: status, chart, revisions, values (user-supplied or computed), manifest, notes and history. Failed or stuck releases are flagged and diagnosed on the spot (warning events, crashing pods and their logs). Rollback and uninstall use the `helm` CLI when it is on your `PATH`. The CRD browser lists definitions, schemas and instances.
+Releases are read from the cluster's `helm.sh/release.v1` secrets, with no `helm` binary needed: status, chart, revisions, values (user-supplied or computed), manifest, notes and history. Failed or stuck releases are flagged and diagnosed on the spot (warning events, crashing pods and their logs). Writes use the `helm` CLI when it is on your `PATH`: **Edit values…** (change the values you supplied, **preview** the rendered manifests that would change, then **Upgrade**, optionally waiting for readiness or atomically), **Roll back…** and **Uninstall**. An upgrade can keep the installed chart (rebuilt from the release, so no repository is needed) or take a chart reference and version to move to a newer chart. The CRD browser lists definitions, schemas and instances.
+
+<p align="center">
+  <img src="docs/screenshots/helm-edit-values.png" alt="Editing the values of a Helm release and previewing the change" width="860" />
+</p>
 
 <p align="center">
   <img src="docs/screenshots/helm.png" alt="A failed Helm release and its diagnosis" width="860" />

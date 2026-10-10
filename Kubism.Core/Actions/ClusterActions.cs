@@ -412,6 +412,16 @@ public sealed class ClusterActions
             (Helm is { IsAvailable: true } h ? h : throw new InvalidOperationException("helm was not found on PATH"))
                 .RunAsync(["rollback", release, revision.ToString(), "-n", ns], ct));
 
+    /// <summary>Upgrades a release with new values (and optionally another chart or version) through <c>helm upgrade</c>. It rolls out changes, so production asks for the release name.</summary>
+    [ClusterAction("HelmUpgrade")]
+    public Task UpgradeHelmReleaseAsync(HelmUpgradeRequest request, CancellationToken ct, string? confirmation = null) =>
+        RunAsync("HelmUpgrade", $"helm/{request.Namespace}/{request.Release}", true, confirmation, request.Release, async () =>
+        {
+            var helm = Helm is { IsAvailable: true } h ? h : throw new InvalidOperationException("helm was not found on PATH");
+            using var ws = new HelmUpgrade.Workspace(request);
+            await helm.RunAsync(HelmUpgrade.BuildArgs(request, ws.ChartRef, ws.ValuesPath, template: false), ct).ConfigureAwait(false);
+        });
+
     [ClusterAction("HelmUninstall")]
     public Task UninstallHelmReleaseAsync(string ns, string release, CancellationToken ct, string? confirmation = null) =>
         RunAsync("HelmUninstall", $"helm/{ns}/{release}", true, confirmation, release, () =>

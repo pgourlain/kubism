@@ -6,7 +6,12 @@
              xmlns:c="using:Kubism.Desktop.Controls"
              x:Class="Kubism.Desktop.Views.HelmView"
              x:DataType="vm:HelmViewModel">
-  <Grid ColumnDefinitions="1.3*,Auto,*" Margin="16">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.added"><Setter Property="Foreground" Value="{DynamicResource KubismOkBrush}" /></Style>
+    <Style Selector="TextBlock.removed"><Setter Property="Foreground" Value="{DynamicResource KubismErrorBrush}" /></Style>
+    <Style Selector="TextBlock.gap"><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /></Style>
+  </UserControl.Styles>
+  <Grid ColumnDefinitions="1.15*,Auto,*" Margin="16">
     <Grid RowDefinitions="Auto,Auto,*">
       <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
         <StackPanel>
@@ -33,6 +38,7 @@
     <GridSplitter Grid.Column="1" Width="6" />
     <Grid Grid.Column="2" RowDefinitions="Auto,*">
     <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,0,0,6" IsVisible="{Binding Selected, Converter={x:Static app:Converters.NotNull}}">
+      <Button Content="Edit values…" Command="{Binding EditValuesCommand}" IsEnabled="{Binding CanWrite}" ToolTip.Tip="Change the values and upgrade the release" />
       <Button Content="Roll back…" Command="{Binding ShowHistoryCommand}" IsEnabled="{Binding CanWrite}" ToolTip.Tip="Choose a revision in the History tab" />
       <Button Classes="danger" Content="Uninstall" Command="{Binding UninstallCommand}" IsEnabled="{Binding CanWrite}" ToolTip.Tip="{Binding UninstallTooltip}" />
     </StackPanel>
@@ -123,6 +129,42 @@
             <Button Content="Uninstall" Command="{Binding UninstallCommand}" IsEnabled="{Binding CanWrite}" ToolTip.Tip="{Binding WriteTooltip}" />
           </StackPanel>
         </Grid>
+      </TabItem>
+      <TabItem Header="Upgrade">
+        <ScrollViewer>
+          <StackPanel Spacing="8" Margin="0,8,8,8">
+            <TextBlock Text="Change the values of this release and upgrade it with helm. The values below are the ones supplied when it was installed (helm get values): what you remove returns to the chart's default." Classes="muted" TextWrapping="Wrap" />
+            <RadioButton GroupName="chart" IsChecked="{Binding UseInstalledChart}" IsEnabled="{Binding CanRebuild}"><TextBlock Text="The installed chart, rebuilt from the release (same chart and version: only the values change)" TextWrapping="Wrap" /></RadioButton>
+            <TextBlock Text="{Binding RebuildBlockedReason}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" IsVisible="{Binding !CanRebuild}" FontSize="12" Margin="24,0,0,0" />
+            <RadioButton GroupName="chart" IsChecked="{Binding UseReference}"><TextBlock Text="A chart from a repository, an OCI registry or a folder (to change the chart version too)" TextWrapping="Wrap" /></RadioButton>
+            <Grid ColumnDefinitions="*,120" ColumnSpacing="8" Margin="24,0,0,0" IsEnabled="{Binding UseReference}">
+              <TextBox Text="{Binding ChartRef}" PlaceholderText="repo/chart · oci://registry/chart · ./folder" AutomationProperties.Name="Chart reference" />
+              <TextBox Grid.Column="1" Text="{Binding ChartVersion}" PlaceholderText="version" AutomationProperties.Name="Chart version" />
+            </Grid>
+            <TextBlock Text="VALUES" Classes="sectionTitle" />
+            <c:YamlEditor Height="170" Text="{Binding UpgradeValues, Mode=TwoWay}" IsReadOnly="False" />
+            <StackPanel Orientation="Horizontal" Spacing="14">
+              <CheckBox Content="Wait until ready" IsChecked="{Binding Wait}" />
+              <CheckBox Content="Atomic (roll back if it fails)" IsChecked="{Binding Atomic}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="Preview changes" Command="{Binding PreviewUpgradeCommand}" IsEnabled="{Binding !UpgradeBusy}" />
+              <Button Classes="primary" Content="Upgrade" Command="{Binding UpgradeCommand}" IsEnabled="{Binding !UpgradeBusy}" />
+              <Button Content="Reset values" Command="{Binding ResetValuesCommand}" />
+            </StackPanel>
+            <TextBlock Text="{Binding UpgradeError}" Foreground="{DynamicResource KubismErrorBrush}" TextWrapping="Wrap" IsVisible="{Binding UpgradeError, Converter={x:Static app:Converters.NotNull}}" />
+            <TextBlock Text="{Binding UpgradeStatus}" TextWrapping="Wrap" />
+            <Border Classes="card" Padding="0" IsVisible="{Binding PreviewLines.Count}">
+              <ItemsControl ItemsSource="{Binding PreviewLines}" MaxHeight="320">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:DiffLine">
+                    <TextBlock Text="{Binding Text}" FontFamily="Menlo,Consolas,monospace" FontSize="12" Margin="8,0" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}" Classes.gap="{Binding IsGap}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
       </TabItem>
       <TabItem Header="Graph">
         <Grid RowDefinitions="Auto,*">

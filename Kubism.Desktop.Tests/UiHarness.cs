@@ -20,6 +20,8 @@ public sealed class UiHarness : IAsyncDisposable
     public FakeDialogService Dialogs { get; } = new();
     public FakeClipboard Clipboard { get; } = new();
     public FakeBrowser Browser { get; } = new();
+    /// <summary>Stands in for the helm binary, so no test runs the real one against a fake cluster.</summary>
+    public FakeHelmRunner Helm { get; } = new();
     public string DataDir { get; private set; } = "";
 
     public static string ScreenshotDir
@@ -43,6 +45,7 @@ public sealed class UiHarness : IAsyncDisposable
             SettingsPath = Path.Combine(h.DataDir, "settings.json"), DataFolder = h.DataDir,
             KubeconfigEnv = () => h.Demo.KubeconfigPath, HomeConfig = Path.Combine(h.DataDir, "none"), WatchKubeconfig = false,
             Dialogs = h.Dialogs, Clipboard = h.Clipboard, Browser = h.Browser, Ui = new TestUiThread(),
+            Configure = services => services.AddSingleton<Kubism.Core.Helm.IHelmRunnerFactory>(new FakeHelmFactory(h.Helm)),
         });
         var settings = h.Services.GetRequiredService<ISettingsStore>();
         foreach (var e in h.Services.GetRequiredService<IKubeconfigCatalog>().Entries)

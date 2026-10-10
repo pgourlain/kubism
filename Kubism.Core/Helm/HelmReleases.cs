@@ -48,7 +48,16 @@ public sealed class HelmReleases(IKubeTransport transport)
     public async Task<IReadOnlyList<HelmRelease>> HistoryAsync(string ns, string name, CancellationToken ct) =>
         (await ListAllRevisionsAsync(ns, ct).ConfigureAwait(false)).Where(r => r.Namespace == ns && r.Name == name).OrderBy(r => r.Revision).ToList();
 
-    public static HelmRelease? Decode(KubeObject secret)
+    /// <summary>The raw <c>chart</c> object of one revision (templates, values, files, metadata), read from its release secret.</summary>
+    public async Task<JsonObject?> GetChartAsync(string ns, string name, int revision, CancellationToken ct)
+    {
+        var node = await transport.GetAsync(Gvr.Secrets.ObjectPath(ns, $"sh.helm.release.v1.{name}.v{revision}"), ct).ConfigureAwait(false) as JsonObject;
+        return node is null ? null : DecodeJson(new KubeObject(node))?["chart"] as JsonObject;
+    }
+
+    public static HelmRelease? Decode(KubeObject secret) => DecodeJson(secret) is { } json ? FromJson(json) : null;
+
+    public static JsonObject? DecodeJson(KubeObject secret)
     {
         var data = secret.At("data", "release")?.ToString();
         if (string.IsNullOrEmpty(data)) return null;
@@ -59,7 +68,7 @@ public sealed class HelmReleases(IKubeTransport transport)
         if (gz.Length > 2 && gz[0] == 0x1f && gz[1] == 0x8b) s = new GZipStream(ms, CompressionMode.Decompress);
         using var reader = new StreamReader(s);
         var json = JsonNode.Parse(reader.ReadToEnd()) as JsonObject ?? throw new InvalidDataException("release is not an object");
-        return FromJson(json);
+        return json;
     }
 
     public static HelmRelease FromJson(JsonObject r)
