@@ -67,10 +67,13 @@ public static class Icons
     // One vector set (24×24 grid, stroke style paths) for kinds and actions.
     public static readonly Dictionary<string, string> Paths = new()
     {
-        ["overview"] = "M3,3 H10 V10 H3 Z M14,3 H21 V10 H14 Z M3,14 H10 V21 H3 Z M14,14 H21 V21 H14 Z",
-        ["rightsizing"] = "M4,20 V10 H8 V20 Z M10,20 V4 H14 V20 Z M16,20 V13 H20 V20 Z",
-        ["node"] = "M4,5 H20 V11 H4 Z M4,13 H20 V19 H4 Z M7,8 H9 M7,16 H9",
-        ["helm"] = "M12,2 L22,12 L12,22 L2,12 Z M12,7 V17 M7,12 H17",
+        // Stroke icons (24×24 grid): drawn as outlines, never filled.
+        ["overview"] = "M4,4 H10 V10 H4 Z M14,4 H20 V10 H14 Z M4,14 H10 V20 H4 Z M14,14 H20 V20 H14 Z",
+        ["rightsizing"] = "M5,20 V11 M12,20 V4 M19,20 V14",
+        ["node"] = "M4,5 H20 V11 H4 Z M4,13 H20 V19 H4 Z M8,8 H8.5 M8,16 H8.5",
+        ["namespaces"] = "M3,7 L12,3 L21,7 L12,11 Z M3,12 L12,16 L21,12 M3,17 L12,21 L21,17",
+        ["events"] = "M6,16 V11 A6,6 0 0 1 18,11 V16 L20,18 H4 Z M10,21 H14",
+        ["helm"] = "M12,3 V21 M3,12 H21 M5.6,5.6 L18.4,18.4 M18.4,5.6 L5.6,18.4 M16,12 A4,4 0 1 1 8,12 A4,4 0 1 1 16,12",
         ["create"] = "M12,4 V20 M4,12 H20",
         ["activity"] = "M2,12 H6 L9,4 L15,20 L18,12 H22",
         ["portforward"] = "M3,12 H17 M13,7 L18,12 L13,17 M21,5 V19",

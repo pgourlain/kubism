@@ -41,7 +41,10 @@
           <TreeView.ItemTemplate>
             <TreeDataTemplate ItemsSource="{Binding Children}" x:DataType="vm:NavNode">
               <StackPanel Orientation="Horizontal" Spacing="6" Opacity="{Binding IsDimmed, Converter={x:Static app:Converters.BoolToOpacityDim}}">
-                <PathIcon Width="13" Height="13" Data="{Binding IconKey, Converter={x:Static app:Converters.Icon}}" IsVisible="{Binding IconKey, Converter={x:Static app:Converters.NotNull}}" />
+                <Panel Width="16" Height="16" VerticalAlignment="Center">
+                  <Path Width="15" Height="15" Stretch="Uniform" StrokeThickness="1.8" StrokeLineCap="Round" StrokeJoin="Round" Stroke="{DynamicResource KubismMutedBrush}"
+                        Data="{Binding IconKey, Converter={x:Static app:Converters.Icon}}" IsVisible="{Binding IconKey, Converter={x:Static app:Converters.NotNull}}" />
+                </Panel>
                 <TextBlock Text="{Binding Title}" FontWeight="{Binding IsGroup, Converter={x:Static app:Converters.GroupWeight}}" ToolTip.Tip="{Binding ShortNames}" />
               </StackPanel>
             </TreeDataTemplate>

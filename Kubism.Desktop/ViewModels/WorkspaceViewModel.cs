@@ -111,8 +111,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
                 if (Find(n) is { } k) g.Children.Add(new NavNode(Plural(k.Kind), NavTarget.Kind, k));
             if (g.Children.Count > 0) NavRoots.Add(g);
         }
-        if (Find("namespaces") is { } ns) NavRoots.Add(new NavNode("Namespaces".T(), NavTarget.Kind, ns));
-        if (Find("events") is { } ev) NavRoots.Add(new NavNode("Events".T(), NavTarget.Kind, ev));
+        if (Find("namespaces") is { } ns) NavRoots.Add(new NavNode("Namespaces".T(), NavTarget.Kind, ns, "namespaces"));
+        if (Find("events") is { } ev) NavRoots.Add(new NavNode("Events".T(), NavTarget.Kind, ev, "events"));
         NavRoots.Add(new NavNode("Helm".T(), NavTarget.Helm, null, "helm"));
         var custom = kinds.Where(k => !BuiltinGroups.Contains(k.Group)).GroupBy(k => k.Group).OrderBy(g => g.Key).ToList();
         var cr = new NavNode("Custom Resources".T()) { IsExpanded = false };

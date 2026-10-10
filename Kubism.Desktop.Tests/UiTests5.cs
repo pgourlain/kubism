@@ -346,3 +346,23 @@ public class UiTooltipTests
         Assert.All(act, c => Assert.Equal("Scale", ToolTip.GetTip(c)));
     }
 }
+
+public class UiNavIconTests
+{
+    [AvaloniaFact]
+    public async Task Top_level_nav_items_have_stroke_icons_that_are_not_filled()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        foreach (var n in ws.NavRoots.Where(n => n.Target != NavTarget.Group && n.Title != "All kinds"))
+        {
+            Assert.False(string.IsNullOrEmpty(n.IconKey), $"{n.Title} has no icon");
+            Assert.True(Icons.Paths.ContainsKey(n.IconKey!), n.IconKey);
+        }
+        UiHarness.Pump();
+        var paths = h.Window.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>().Where(p => p.Data is not null && p.Width == 15).ToList();
+        Assert.True(paths.Count >= 9);
+        Assert.All(paths, p => { Assert.Null(p.Fill); Assert.NotNull(p.Stroke); });
+        h.Screenshot("31-nav-icons");
+    }
+}
