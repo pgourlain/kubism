@@ -55,7 +55,9 @@ public sealed class ClusterSession : IAsyncDisposable
     public PortForwardManager PortForwards { get; private set; } = null!;
     public MetricsService Metrics { get; private set; } = null!;
     /// <summary>Cancelled when the session disconnects; views link their own tokens to it.</summary>
-    public CancellationToken SessionToken => _cts?.Token ?? new CancellationToken(true);
+    public CancellationToken SessionToken => _token;
+    // A token copy stays valid (cancelled) after its source is disposed; reading _cts.Token during teardown could throw ObjectDisposedException.
+    private CancellationToken _token = new(true);
 
     public event Action<SessionState>? StateChanged;
 
@@ -74,6 +76,7 @@ public sealed class ClusterSession : IAsyncDisposable
         SetState(SessionState.Connecting);
         _cts = new CancellationTokenSource();
         var token = _cts.Token;
+        _token = token;
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, token);
