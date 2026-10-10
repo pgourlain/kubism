@@ -1,0 +1,230 @@
+# RBAC fixture shaped like a real cluster: the bootstrap aggregated roles (view, edit, admin), cluster-admin,
+# team roles and bindings in staging/production, a RoleBinding to a ClusterRole, wildcards, resourceNames,
+# nonResourceURLs, a binding to a role that does not exist and one that opens secrets to every authenticated user.
+# Used by the Core RBAC tests, the headless UI tests and the MCP tests.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: cluster-admin, labels: {kubernetes.io/bootstrapping: rbac-defaults}}
+rules:
+- {apiGroups: ["*"], resources: ["*"], verbs: ["*"]}
+- {nonResourceURLs: ["*"], verbs: ["*"]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: view, labels: {kubernetes.io/bootstrapping: rbac-defaults, rbac.authorization.k8s.io/aggregate-to-edit: "true", rbac.authorization.k8s.io/aggregate-to-admin: "true"}}
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels: {rbac.authorization.k8s.io/aggregate-to-view: "true"}
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: edit, labels: {kubernetes.io/bootstrapping: rbac-defaults, rbac.authorization.k8s.io/aggregate-to-admin: "true"}}
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels: {rbac.authorization.k8s.io/aggregate-to-edit: "true"}
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: admin, labels: {kubernetes.io/bootstrapping: rbac-defaults}}
+aggregationRule:
+  clusterRoleSelectors:
+  - matchLabels: {rbac.authorization.k8s.io/aggregate-to-admin: "true"}
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: "system:aggregate-to-view", labels: {rbac.authorization.k8s.io/aggregate-to-view: "true", rbac.authorization.k8s.io/aggregate-to-edit: "true", rbac.authorization.k8s.io/aggregate-to-admin: "true"}}
+rules:
+- {apiGroups: [""], resources: [pods, services, configmaps, endpoints, persistentvolumeclaims, "pods/log", "pods/status"], verbs: [get, list, watch]}
+- {apiGroups: [apps], resources: [deployments, replicasets, statefulsets, daemonsets, "deployments/scale"], verbs: [get, list, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: "system:aggregate-to-edit", labels: {rbac.authorization.k8s.io/aggregate-to-edit: "true", rbac.authorization.k8s.io/aggregate-to-admin: "true"}}
+rules:
+- {apiGroups: [""], resources: ["pods/attach", "pods/exec", "pods/portforward", secrets], verbs: [get, list, watch, create, update, patch, delete]}
+- {apiGroups: [""], resources: [pods, services, configmaps], verbs: [create, update, patch, delete, deletecollection]}
+- {apiGroups: [apps], resources: [deployments, statefulsets, "deployments/scale"], verbs: [create, update, patch, delete]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: "system:aggregate-to-admin", labels: {rbac.authorization.k8s.io/aggregate-to-admin: "true"}}
+rules:
+- {apiGroups: [rbac.authorization.k8s.io], resources: [roles, rolebindings], verbs: [create, delete, deletecollection, get, list, patch, update, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: node-reader}
+rules:
+- {apiGroups: [""], resources: [nodes], verbs: [get, list, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: ci-deployer}
+rules:
+- {apiGroups: [apps], resources: [deployments], verbs: [get, list, patch, update]}
+- {apiGroups: [apps], resources: ["deployments/scale"], verbs: [update, patch]}
+- {apiGroups: [""], resources: [pods], verbs: [get, list]}
+- {apiGroups: [""], resources: [configmaps], resourceNames: [app-config], verbs: [get, update]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: secret-reader}
+rules:
+- {apiGroups: [""], resources: [secrets], verbs: [get, list, watch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: role-granter}
+rules:
+- {apiGroups: [rbac.authorization.k8s.io], resources: [clusterroles, roles], verbs: [bind, escalate]}
+- {apiGroups: [""], resources: [users, groups, serviceaccounts], verbs: [impersonate]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: metrics-reader}
+rules:
+- {nonResourceURLs: ["/metrics", "/healthz*"], verbs: [get]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: "system:public-info-viewer", labels: {kubernetes.io/bootstrapping: rbac-defaults}}
+rules:
+- {nonResourceURLs: ["/healthz", "/livez", "/readyz", "/version", "/version/"], verbs: [get]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: "system:basic-user", labels: {kubernetes.io/bootstrapping: rbac-defaults}}
+rules:
+- {apiGroups: [authorization.k8s.io], resources: [selfsubjectaccessreviews, selfsubjectrulesreviews], verbs: [create]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: pod-exec, namespace: production}
+rules:
+- {apiGroups: [""], resources: [pods], verbs: [get, list]}
+- {apiGroups: [""], resources: ["pods/exec"], verbs: [create]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: {name: app-config-editor, namespace: staging}
+rules:
+- {apiGroups: [""], resources: [configmaps], resourceNames: [app-config], verbs: [get, update, patch]}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: cluster-admins}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: platform-admins}
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: root}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: node-readers}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: node-reader}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: devs}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: monitoring-metrics}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: metrics-reader}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: monitoring}
+- {kind: ServiceAccount, name: prometheus, namespace: monitoring}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: legacy-open-secrets}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: secret-reader}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:authenticated"}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: granters}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: role-granter}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: dave}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: "system:basic-user", labels: {kubernetes.io/bootstrapping: rbac-defaults}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: "system:basic-user"}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:authenticated"}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: "system:public-info-viewer", labels: {kubernetes.io/bootstrapping: rbac-defaults}}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: "system:public-info-viewer"}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:authenticated"}
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:unauthenticated"}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: devs-edit, namespace: staging}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: edit}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: devs}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: devs-view, namespace: production}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: devs}
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: alice@corp}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: prod-ops-admin, namespace: production}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: admin}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: prod-ops}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: ci, namespace: staging}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: ci-deployer}
+subjects:
+- {kind: ServiceAccount, name: ci-bot, namespace: staging}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: exec, namespace: production}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: pod-exec}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: bob}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: config-editors, namespace: staging}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: app-config-editor}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: frank}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: intern-admin, namespace: staging}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-admin}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: intern}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: old-role, namespace: default}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: removed-role}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: User, name: carol}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: {name: sa-default-view, namespace: default}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: view}
+subjects:
+- {apiGroup: rbac.authorization.k8s.io, kind: Group, name: "system:serviceaccounts:default"}
