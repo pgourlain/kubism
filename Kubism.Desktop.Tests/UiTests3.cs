@@ -24,6 +24,28 @@ public class UiDockTests
     private static KubeObject Pod(UiHarness h, string name) => new(h.Demo.Server.Get(Gvr.Pods, "default", name)!);
 
     [AvaloniaFact]
+    public async Task A_flush_queued_before_pausing_does_not_show_what_arrives_while_paused()
+    {
+        var (h, ws) = await ConnectAsync();
+        await using var _ = h;
+        var name = h.Demo.Server.List(Gvr.Pods, "default").First(p => p["metadata"]!["name"]!.GetValue<string>().StartsWith("api-"))["metadata"]!["name"]!.GetValue<string>();
+        await ws.OpenPodLogsAsync(Pod(h, name), "main");
+        var logs = Assert.IsType<LogViewModel>(ws.Dock.Selected);
+        string text = "";
+        logs.TextChanged += (t, _, replace) => text = replace ? t : text + t;
+        await UiHarness.WaitFor(() => text.Split('\n').Count(l => l.Length > 0) == 20, what: "initial lines rendered");
+        h.Demo.Server.AppendLog("default", name, "QUEUED BEFORE PAUSE");
+        await UiHarness.WaitFor(() => logs.Buffer.Count == 21, what: "first line buffered");   // this queues a flush 100 ms away
+        logs.Paused = true;                                                                    // ...which fires after the pause
+        h.Demo.Server.AppendLog("default", name, "ARRIVED WHILE PAUSED");
+        await UiHarness.WaitFor(() => logs.Buffer.Count == 22, what: "second line buffered");
+        await Task.Delay(400); UiHarness.Pump();
+        Assert.DoesNotContain("ARRIVED WHILE PAUSED", text);
+        logs.Paused = false;
+        await UiHarness.WaitFor(() => text.Contains("ARRIVED WHILE PAUSED"), what: "shown after resuming");
+    }
+
+    [AvaloniaFact]
     public async Task Logs_tab_streams_and_follows_with_search_and_pause()
     {
         var (h, ws) = await ConnectAsync();

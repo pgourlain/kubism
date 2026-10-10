@@ -103,7 +103,12 @@ public sealed partial class LogViewModel : DockItemViewModel
     {
         if (Paused) return; // buffering continues in the ring buffer
         if (Interlocked.Exchange(ref _flushQueued, 1) == 1) return;
-        _ = Task.Delay(100).ContinueWith(_ => _ui.Post(() => { Interlocked.Exchange(ref _flushQueued, 0); Flush(); }), TaskScheduler.Default);
+        _ = Task.Delay(100).ContinueWith(_ => _ui.Post(() =>
+        {
+            Interlocked.Exchange(ref _flushQueued, 0);
+            // A flush queued just before the pause must not show what arrived since: resuming queues a new one.
+            if (!Paused) Flush();
+        }), TaskScheduler.Default);
     }
 
     public string FormatLine(LogLine l)
