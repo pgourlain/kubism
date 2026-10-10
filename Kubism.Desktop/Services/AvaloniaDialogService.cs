@@ -45,7 +45,8 @@ public sealed class AvaloniaDialogService : IDialogService
 
     private static StackPanel Buttons(Window w, string ok, bool okEnabled = true, object? okResult = null, Button? okOut = null, bool cancel = true, bool destructive = false)
     {
-        var panel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
+        // A lone OK is centered; Cancel + action pairs sit on the right.
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = cancel ? HorizontalAlignment.Right : HorizontalAlignment.Center, Spacing = 8, Margin = new Thickness(0, 12, 0, 0) };
         if (cancel)
         {
             var c = new Button { Content = "Cancel".T(), MinWidth = 80 };
@@ -123,20 +124,23 @@ public sealed class AvaloniaDialogService : IDialogService
         }
         catch (Exception) { /* icon is decoration */ }
         root.Children.Add(new TextBlock { Text = info.Name, FontSize = 24, FontWeight = FontWeight.SemiBold, HorizontalAlignment = HorizontalAlignment.Center });
-        root.Children.Add(new TextBlock { Text = info.Tagline, Opacity = 0.7, HorizontalAlignment = HorizontalAlignment.Center });
+        var tag = new TextBlock { Opacity = 0.8, HorizontalAlignment = HorizontalAlignment.Center };
+        // Kubernetes · Inspect. Steer. Monitor. with the leading letters in bold (Kub, I, S, M).
+        void Part(string bold, string rest) { tag.Inlines!.Add(new Avalonia.Controls.Documents.Run(bold) { FontWeight = FontWeight.Bold }); tag.Inlines.Add(new Avalonia.Controls.Documents.Run(rest)); }
+        Part("Kub", "ernetes  "); Part("I", "nspect. "); Part("S", "teer. "); Part("M", "onitor.");
+        root.Children.Add(tag);
         root.Children.Add(new TextBlock { Text = $"Version {info.Version}", Margin = new Thickness(0, 10, 0, 0), HorizontalAlignment = HorizontalAlignment.Center });
         root.Children.Add(new TextBlock { Text = $"{info.Runtime} · {info.Os}", Opacity = 0.6, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
         root.Children.Add(new TextBlock { Text = info.License, Opacity = 0.6, FontSize = 12, HorizontalAlignment = HorizontalAlignment.Center });
         var link = new Button { Content = info.Url, Classes = { "link" }, HorizontalAlignment = HorizontalAlignment.Center };
         link.Click += (_, _) => new SystemBrowserLauncher().Open(info.Url);
         root.Children.Add(link);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 12, 0, 0) };
-        var copy = new Button { Content = "Copy diagnostics" };
+        var copy = new Button { Content = "Copy diagnostics", Classes = { "link" }, HorizontalAlignment = HorizontalAlignment.Center };
         copy.Click += async (_, _) => await new AvaloniaClipboardService().SetTextAsync(info.Diagnostics);
-        var ok = new Button { Content = "OK", MinWidth = 80, IsDefault = true };
+        root.Children.Add(copy);
+        var ok = new Button { Content = "OK", MinWidth = 90, IsDefault = true, HorizontalAlignment = HorizontalAlignment.Center, HorizontalContentAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 10, 0, 0) };
         ok.Click += (_, _) => CloseWith(w, true);
-        row.Children.Add(copy); row.Children.Add(ok);
-        root.Children.Add(row);
+        root.Children.Add(ok);
         await ShowAsync<bool?>(Make(w, $"About {info.Name}", 420, 430, root));
     }
 

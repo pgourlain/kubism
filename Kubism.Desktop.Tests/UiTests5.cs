@@ -306,7 +306,7 @@ public class UiDialogTests
         void OnOpened(Window w) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { text = string.Join("|", w.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text)); w.Close(true); }, Avalonia.Threading.DispatcherPriority.Background);
         AvaloniaDialogService.DialogOpened += OnOpened;
         try { await new AvaloniaDialogService().ShowAboutAsync(info); } finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
-        Assert.Contains("Kubism", text); Assert.Contains("Version 1.2.3", text); Assert.Contains("Inspect. Steer. Monitor.", text);
+        Assert.Contains("Kubism", text); Assert.Contains("Version 1.2.3", text);
     }
 
     [AvaloniaFact]
@@ -383,5 +383,29 @@ public class UiDialogSizeTests
         finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
         Assert.NotNull(height);
         Assert.True(height < 170, $"confirmation is {height}px tall");
+    }
+}
+
+public class UiAboutLayoutTests
+{
+    [AvaloniaFact]
+    public async Task About_has_bold_acronym_tagline_and_a_centered_ok()
+    {
+        var info = new AboutInfo("Kubism", "x", "1.0.0", ".NET", "macOS", "MIT", "https://example.test", "d");
+        string? tagline = null; double? okCenter = null, winCenter = null; bool boldKub = false;
+        void OnOpened(Window w) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var tb = w.GetVisualDescendants().OfType<TextBlock>().First(t => t.Inlines is { Count: > 0 });
+            tagline = string.Concat(tb.Inlines!.OfType<Avalonia.Controls.Documents.Run>().Select(r => r.Text));
+            boldKub = tb.Inlines!.OfType<Avalonia.Controls.Documents.Run>().First().FontWeight == Avalonia.Media.FontWeight.Bold;
+            var ok = w.GetVisualDescendants().OfType<Button>().First(b => b.Content as string == "OK");
+            okCenter = Avalonia.VisualExtensions.TranslatePoint(ok, new Avalonia.Point(ok.Bounds.Width / 2, 0), w)!.Value.X; winCenter = w.Bounds.Width / 2;
+            w.Close(true);
+        }, Avalonia.Threading.DispatcherPriority.Background);
+        AvaloniaDialogService.DialogOpened += OnOpened;
+        try { await new AvaloniaDialogService().ShowAboutAsync(info); } finally { AvaloniaDialogService.DialogOpened -= OnOpened; }
+        Assert.Equal("Kubernetes  Inspect. Steer. Monitor.", tagline);
+        Assert.True(boldKub);
+        Assert.True(Math.Abs(okCenter!.Value - winCenter!.Value) < 2, $"OK centre {okCenter}, window centre {winCenter}");
     }
 }
