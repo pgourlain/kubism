@@ -33,7 +33,10 @@ public sealed record RbacChainEdge(string From, string To, string Label, bool Hi
 public sealed record RbacChainFilter
 {
     public string? Namespace { get; init; }
-    /// <summary>With a namespace: also draw cluster-wide bindings.</summary>
+    /// <summary>
+    /// With a namespace: also draw the cluster-wide bindings that concern it, i.e. those with a subject from that namespace (a ServiceAccount
+    /// of it, or the group system:serviceaccounts:&lt;ns&gt;). Only those subjects are drawn. Other cluster-wide bindings are left out.
+    /// </summary>
     public bool IncludeCluster { get; init; } = true;
     public IReadOnlySet<string>? SubjectKinds { get; init; }
     public bool RiskyOnly { get; init; }
@@ -59,13 +62,18 @@ public sealed class RbacChain
         var query = filter.SubjectQuery?.Trim();
         var focusBindings = filter.Focus is { } f ? graph.RightsOf(f).Paths.Select(p => p.Binding.Key).ToHashSet() : null;
 
+        // A subject is drawn when it passes the kind and search filters and, for a cluster-wide binding under a namespace filter, belongs to that namespace.
+        bool Shown(RbacBinding b, RbacSubject s) =>
+            (filter.SubjectKinds is null || filter.SubjectKinds.Contains(s.Kind))
+            && (string.IsNullOrEmpty(query) || s.Display.Contains(query, StringComparison.OrdinalIgnoreCase))
+            && (filter.Namespace is null || b.Namespace is not null || s.Namespace == filter.Namespace || s.Name == $"system:serviceaccounts:{filter.Namespace}");
+
         var selected = new List<RbacBinding>();
         foreach (var b in graph.Bindings)
         {
             if (focusBindings is not null && !focusBindings.Contains(b.Key) && !b.IsOrphan) continue;
             if (filter.Namespace is { } ns && b.Namespace != ns && !(filter.IncludeCluster && b.Namespace is null)) continue;
-            var subjects = b.Subjects.Where(s => filter.SubjectKinds is null || filter.SubjectKinds.Contains(s.Kind))
-                .Where(s => string.IsNullOrEmpty(query) || s.Display.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            var subjects = b.Subjects.Where(s => Shown(b, s)).ToList();
             if (subjects.Count == 0) continue;
             if (filter.RiskyOnly && RbacGraph.RisksOf(b).Count == 0 && (b.Role is null || RbacGraph.RisksOf(b.Role).Count == 0)) continue;
             selected.Add(b);
@@ -78,8 +86,7 @@ public sealed class RbacChain
             {
                 Detail = b.Kind, Risks = RbacGraph.RisksOf(b), Source = b.Source, Missing = b.IsOrphan,
             });
-            foreach (var s in b.Subjects.Where(s => filter.SubjectKinds is null || filter.SubjectKinds.Contains(s.Kind))
-                         .Where(s => string.IsNullOrEmpty(query) || s.Display.Contains(query, StringComparison.OrdinalIgnoreCase)))
+            foreach (var s in b.Subjects.Where(s => Shown(b, s)))
             {
                 var sid = "s:" + s.Key;
                 nodes.TryAdd(sid, new RbacChainNode(sid, RbacNodeKind.Subject, s.Kind == RbacSubject.ServiceAccount ? $"{s.Namespace}/{s.Name}" : s.Name, s.Namespace)

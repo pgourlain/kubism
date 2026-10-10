@@ -375,6 +375,14 @@ public class RbacGraphTests
         Assert.All(staging.Nodes.Where(n => n.Kind == RbacNodeKind.Binding), n => Assert.Equal("staging", n.Scope));
         Assert.DoesNotContain(staging.Nodes, n => n.Label == "devs-view");
 
+        // under a namespace filter, a cluster-wide binding only appears for the subjects that belong to that namespace
+        var monitoring = RbacChain.Build(Graph, new RbacChainFilter { Namespace = "monitoring" });
+        Assert.Contains(monitoring.Nodes, n => n.Label == "monitoring-metrics");
+        Assert.Equal(["monitoring/prometheus"], monitoring.Nodes.Where(n => n.Kind == RbacNodeKind.Subject).Select(n => n.Label));
+        Assert.DoesNotContain(monitoring.Nodes, n => n.Label is "cluster-admins" or "node-readers" or "legacy-open-secrets");
+        var other = RbacChain.Build(Graph, new RbacChainFilter { Namespace = "nothing-here", SubjectKinds = new HashSet<string> { "ServiceAccount" } });
+        Assert.Empty(other.Nodes);
+
         var sas = RbacChain.Build(Graph, new RbacChainFilter { SubjectKinds = new HashSet<string> { "ServiceAccount" } });
         Assert.All(sas.Nodes.Where(n => n.Kind == RbacNodeKind.Subject), n => Assert.Equal("ServiceAccount", n.Detail));
 
