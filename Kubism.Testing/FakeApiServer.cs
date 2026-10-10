@@ -184,7 +184,8 @@ public sealed class FakeApiServer : IAsyncDisposable
     {
         List<Watcher> ws;
         lock (_gate) ws = [.. _watchers];
-        foreach (var w in ws) w.Cts.Cancel();
+        // A watch may finish (and dispose its source) at the same moment: cancelling a disposed source is fine.
+        foreach (var w in ws) { try { w.Cts.Cancel(); } catch (ObjectDisposedException) { } }
     }
 
     public void SendBookmarks()
