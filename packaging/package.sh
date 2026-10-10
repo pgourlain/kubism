@@ -40,13 +40,22 @@ case "$RID" in
 PLIST
     cp Kubism.Desktop/Assets/Kubism.icns "$APP/Contents/Resources/Kubism.icns"
     chmod +x "$APP/Contents/MacOS/Kubism"
-    # hdiutil is flaky on CI runners ("resource busy"): retry, then fall back to a zip made with ditto (keeps the bundle intact).
+    # Apple Silicon refuses to run unsigned code: an ad-hoc signature is enough (the app is not notarized).
+    if command -v codesign >/dev/null; then codesign --force --deep --sign - "$APP"; fi
+    # Disk image: the app, a shortcut to Applications (drag and drop install) and the first-launch instructions.
+    # hdiutil is flaky on CI runners ("resource busy"): retry, then fall back to a ditto zip.
     made=0
     if command -v hdiutil >/dev/null; then
+      DMG="$OUT/dmg-$RID"
+      rm -rf "$DMG"; mkdir -p "$DMG"
+      ditto "$APP" "$DMG/Kubism.app"
+      ln -s /Applications "$DMG/Applications"
+      cp packaging/macos/ReadMeFirst.txt "$DMG/Read Me First.txt"
       for try in 1 2 3; do
-        if hdiutil create -quiet -volname Kubism -srcfolder "$APP" -ov -format UDZO "$OUT/Kubism-$VERSION-$RID.dmg"; then made=1; break; fi
+        if hdiutil create -quiet -volname "Kubism" -srcfolder "$DMG" -ov -format UDZO "$OUT/Kubism-$VERSION-$RID.dmg"; then made=1; break; fi
         sleep 5
       done
+      rm -rf "$DMG"
     fi
     if [[ "$made" == "0" ]]; then
       echo "dmg creation failed; shipping a zip instead"
