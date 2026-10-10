@@ -106,6 +106,11 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     [ObservableProperty] private string _graphStatus = "";
     [ObservableProperty] private bool _graphLoading;
     public bool CanWrite => _ws.Session.Actions.CanRunHelm;
+    public string UninstallTooltip => CanWrite ? "Uninstall the release with helm: removes the objects it installed and its history (not volume claims of StatefulSets, nor CRDs)" : WriteTooltip;
+
+    [RelayCommand]
+    private void ShowHistory() => Tab = 5;
+
     public string WriteTooltip => CanWrite ? "" : "The helm binary was not found on PATH: rollback and uninstall are disabled";
 
     [RelayCommand]
