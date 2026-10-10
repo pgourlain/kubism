@@ -52,7 +52,8 @@ public class NetworkStoreTests
         Assert.DoesNotContain(store.Graph.Nodes.Single(n => n.Id == "i:shop/shop").Problems, p => p.Code.StartsWith("tls"));
         Assert.Empty(t.Sent);   // lookups use GET (GetAsync), never a write
 
-        // a new Ingress arrives through the watch, and goes away again
+        // a new Ingress arrives through the watch, and goes away again (once the six watches are open: an event sent before is lost, as on a real server)
+        Assert.True(await Until(() => t.ActiveWatches >= 6));
         var ing = t.Make("Ingress", "new", "shop", apiVersion: "networking.k8s.io/v1");
         ing["spec"] = new JsonObject
         {

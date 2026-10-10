@@ -44,7 +44,8 @@ public class RbacStoreTests
         Assert.Contains(store.Graph.Bindings, b => b.Name == "devs-edit");
         Assert.False(store.Graph.Explain(new RbacSubject("User", "newbie"), RbacRequest.Parse("get", "pods", "staging")).Allowed);
 
-        // a new RoleBinding arrives through the watch
+        // a new RoleBinding arrives through the watch (once the four watches are open: an event sent before is lost, as on a real server)
+        Assert.True(await Until(() => t.ActiveWatches >= 4));
         var binding = t.Make("RoleBinding", "newbie-view", "staging", apiVersion: "rbac.authorization.k8s.io/v1");
         binding["roleRef"] = new JsonObject { ["kind"] = "ClusterRole", ["name"] = "view" };
         binding["subjects"] = new JsonArray(new JsonObject { ["kind"] = "User", ["name"] = "newbie" });
