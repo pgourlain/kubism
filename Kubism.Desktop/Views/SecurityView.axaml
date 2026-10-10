@@ -64,7 +64,7 @@
           <StackPanel Grid.Row="2" Spacing="4" Margin="0,8,0,0">
             <TextBlock Text="WHO CAN DO WHAT" Classes="sectionTitle" />
             <Grid ColumnDefinitions="*,Auto">
-              <AutoCompleteBox Text="{Binding SubjectQuery, Mode=TwoWay}" ItemsSource="{Binding KnownSubjects}" FilterMode="Contains" Watermark="ServiceAccount ns/name · User name · Group name" AutomationProperties.Name="Subject" />
+              <AutoCompleteBox Text="{Binding SubjectQuery, Mode=TwoWay}" ItemsSource="{Binding KnownSubjects}" FilterMode="Contains" PlaceholderText="ServiceAccount ns/name · User name · Group name" AutomationProperties.Name="Subject" />
               <Button Grid.Column="1" Content="Show rules" Command="{Binding LookupCommand}" Margin="6,0,0,0" />
             </Grid>
           </StackPanel>

@@ -29,7 +29,7 @@
             <ComboBox ItemsSource="{Binding NamespaceChoices}" SelectedItem="{Binding SelectedNamespace, Mode=TwoWay}" MinWidth="170" Margin="0,0,8,4" AutomationProperties.Name="Namespace filter" />
             <ComboBox ItemsSource="{Binding KindChoices}" SelectedItem="{Binding SelectedKind, Mode=TwoWay}" MinWidth="150" Margin="0,0,8,4" AutomationProperties.Name="Subject kind filter" />
             <CheckBox Content="Risky only" IsChecked="{Binding RiskyOnly}" Margin="0,0,8,4" />
-            <TextBox Text="{Binding SubjectSearch}" Watermark="Search a subject" MinWidth="200" Margin="0,0,8,4" AutomationProperties.Name="Subject search" />
+            <TextBox Text="{Binding SubjectSearch}" PlaceholderText="Search a subject" MinWidth="200" Margin="0,0,8,4" AutomationProperties.Name="Subject search" />
           </WrapPanel>
           <WrapPanel Grid.Row="1">
             <TextBlock Text="{Binding ChainSummary}" Classes="muted" Margin="0,0,16,0" />
@@ -56,7 +56,7 @@
       <TabItem Header="Subject: what can X do?">
         <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,*" Margin="0,8,0,0" RowSpacing="6">
           <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-            <AutoCompleteBox Text="{Binding SubjectText, Mode=TwoWay}" ItemsSource="{Binding KnownSubjects}" FilterMode="Contains" Watermark="ServiceAccount ns/name · User name · Group name" AutomationProperties.Name="Subject" />
+            <AutoCompleteBox Text="{Binding SubjectText, Mode=TwoWay}" ItemsSource="{Binding KnownSubjects}" FilterMode="Contains" PlaceholderText="ServiceAccount ns/name · User name · Group name" AutomationProperties.Name="Subject" />
             <Button Grid.Column="1" Content="Show" Command="{Binding ShowSubjectCommand}" Margin="6,0,0,0" />
             <Button Grid.Column="2" Content="Me" Command="{Binding UseMeCommand}" Margin="6,0,0,0" ToolTip.Tip="The identity the API server sees for you (SelfSubjectReview), with your groups" />
             <ComboBox Grid.Column="3" ItemsSource="{Binding SubjectNamespaces}" SelectedItem="{Binding SelectedSubjectNamespace, Mode=TwoWay}" MinWidth="170" Margin="6,0,0,0" AutomationProperties.Name="Matrix namespace" />
@@ -112,10 +112,10 @@
       <TabItem Header="Resource: who can?">
         <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,*" Margin="0,8,0,0" RowSpacing="6">
           <Grid ColumnDefinitions="140,*,190,160,Auto">
-            <AutoCompleteBox Text="{Binding Verb, Mode=TwoWay}" ItemsSource="{Binding Verbs}" MinimumPrefixLength="0" Watermark="verb" AutomationProperties.Name="Verb" />
-            <TextBox Grid.Column="1" Text="{Binding ResourceText}" Watermark="resource: secrets · pods/exec · deployments.apps · /metrics" Margin="6,0,0,0" AutomationProperties.Name="Resource" />
+            <AutoCompleteBox Text="{Binding Verb, Mode=TwoWay}" ItemsSource="{Binding Verbs}" MinimumPrefixLength="0" PlaceholderText="verb" AutomationProperties.Name="Verb" />
+            <TextBox Grid.Column="1" Text="{Binding ResourceText}" PlaceholderText="resource: secrets · pods/exec · deployments.apps · /metrics" Margin="6,0,0,0" AutomationProperties.Name="Resource" />
             <ComboBox Grid.Column="2" ItemsSource="{Binding ResourceNamespaces}" SelectedItem="{Binding ResourceNamespace, Mode=TwoWay}" Margin="6,0,0,0" HorizontalAlignment="Stretch" AutomationProperties.Name="Namespace" />
-            <TextBox Grid.Column="3" Text="{Binding ResourceName}" Watermark="object name (optional)" Margin="6,0,0,0" AutomationProperties.Name="Object name" />
+            <TextBox Grid.Column="3" Text="{Binding ResourceName}" PlaceholderText="object name (optional)" Margin="6,0,0,0" AutomationProperties.Name="Object name" />
             <Button Grid.Column="4" Content="Search" Command="{Binding SearchCommand}" Classes="primary" Margin="6,0,0,0" />
           </Grid>
           <TextBlock Grid.Row="1" Text="{Binding WhoSummary}" TextWrapping="Wrap" />
