@@ -40,10 +40,17 @@ case "$RID" in
 PLIST
     cp Kubism.Desktop/Assets/Kubism.icns "$APP/Contents/Resources/Kubism.icns"
     chmod +x "$APP/Contents/MacOS/Kubism"
+    # hdiutil is flaky on CI runners ("resource busy"): retry, then fall back to a zip made with ditto (keeps the bundle intact).
+    made=0
     if command -v hdiutil >/dev/null; then
-      hdiutil create -quiet -volname Kubism -srcfolder "$APP" -ov -format UDZO "$OUT/Kubism-$VERSION-$RID.dmg"
-    else
-      (cd "$OUT" && zip -qr "Kubism-$VERSION-$RID.zip" Kubism.app)
+      for try in 1 2 3; do
+        if hdiutil create -quiet -volname Kubism -srcfolder "$APP" -ov -format UDZO "$OUT/Kubism-$VERSION-$RID.dmg"; then made=1; break; fi
+        sleep 5
+      done
+    fi
+    if [[ "$made" == "0" ]]; then
+      echo "dmg creation failed; shipping a zip instead"
+      ditto -c -k --keepParent "$APP" "$OUT/Kubism-$VERSION-$RID.zip"
     fi
     ;;
   linux-*)
