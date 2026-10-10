@@ -354,6 +354,30 @@ When the API answers 403, Kubism explains why in plain terms and proposes a mini
 - [ ] (manual) A Kyverno or Gatekeeper denial on kind is classified as a policy engine.
 - [ ] (manual) On kind, the generated fix applied by an admin removes the 403 (`kubectl auth can-i` agrees).
 
+## Phase 11d — Network graph (exposure)
+
+Read-only (no `ClusterActions`). One page, under Network in the sidebar, that shows how traffic reaches the pods: from what is exposed outside the cluster, through Ingresses and Services, to endpoints and pods, with the ports on every hop. "Public" means reachable from outside the cluster, derived from the cluster's own objects (no IP-range or annotation guessing). First batch: Ingress + Service + EndpointSlice + Pod. Gateway API and NetworkPolicy are a second batch.
+
+- [ ] `NetworkGraph` (`Core/Network`, pure): built from Ingresses, IngressClasses, Services, EndpointSlices, Pods (owner chain to the workload, reusing the existing owner resolution) and the *existence* of TLS Secrets (never their data; certificate expiry through the existing `CertificateScan`). Kept current from `CacheChange` through `ResourceCache`, like `RbacStore`; a kind that cannot be listed is reported, not silently left out.
+- [ ] Exposure classification from objects: **in-cluster only** (ClusterIP/headless, nothing routes to it); **outside the cluster** (Service `LoadBalancer`, `NodePort` or `externalIPs`; an Ingress whose controller Service is itself exposed; pods with `hostPort`/`hostNetwork`). An Ingress whose controller is only `ClusterIP` is in-cluster, and the graph says so. The Ingress → controller link goes through `IngressClass.spec.controller` and the controller's Service (selector or the usual labels), configurable when it cannot be found. Internal-load-balancer annotations only add a note ("outside the cluster, private network"); they are not a level.
+- [ ] Ports on every edge: Ingress backend `port` → Service port → `targetPort` (number or name resolved against the container ports) → pod container port. Hosts, paths, path types, TLS hosts and the default backend are shown.
+- [ ] Problems flagged: Service with no ready endpoint; `targetPort` that matches no container port; Ingress backend to a missing Service or a missing port; TLS Secret missing or certificate expired/expiring; Ingress with no class or a class with no controller; Service `LoadBalancer`/`NodePort` exposed with no Ingress ("exposed directly"); selector that matches no pod.
+- [ ] **Namespace filter.** Choose one or several namespaces (default: the workspace's selection). A chain is drawn when its Ingress, Service or pods are in the chosen namespaces. The ingress controller's Service and Ingress classes in *other* namespaces are drawn as context nodes (marked with their namespace, not filtered out), so the exposure path is never cut. Test with an Ingress in `app` whose controller is in `ingress-nginx`.
+- [ ] Other filters: exposure level ("outside the cluster only"), "problems only", search by host, path, service or workload. A cap on drawn chains with a "narrow the filters" notice (as the RBAC chain).
+- [ ] Layout computed in Core (columns Exposure → Ingress → Service → Pods/workload, barycentre ordering; the same column layout code as `RbacChain`, extracted rather than copied); rendering in Desktop.
+- [ ] Desktop: "Network graph" under Network; graph control drawn from the Core layout (colour by exposure level, ports on edges, problem markers); click a node → the object in the standard details panel; click a Service or pod group → its pods list. Hosts and ports are copyable.
+- [ ] Tests: fixture `Kubism.Testing/Data/network.yaml` (public ingress through a LoadBalancer controller in another namespace, an internal-only ingress, a NodePort service, a service with no endpoints, a named `targetPort`, a missing backend, a missing TLS secret); table-driven Core tests for classification, port resolution and the namespace filter; headless UI test with a screenshot per filter state.
+- [ ] MCP read tool `network_exposure` (namespace, optional exposure filter): chains with hosts, paths, ports, exposure level and problems; test in `Kubism.Mcp.Tests`; `docs/mcp.md` updated.
+- [ ] ADR `docs/adr/000X-network-graph.md`: how exposure is derived, what is not visible (DNS, firewall, WAF, service mesh, cloud load balancer rules), controller discovery.
+- [ ] Second batch: Gateway API (`Gateway`, `HTTPRoute`) as another source of chains; NetworkPolicy overlay (isolated pods, allowed ingress per pod).
+
+**Validation**
+- [ ] (automated) Classification, port-resolution and namespace-filter tests green on the 3 OSes.
+- [ ] (automated) Headless UI test renders the page unfiltered, filtered by namespace and "outside the cluster only"; MCP tool answers over stdio.
+- [ ] (manual) On AKS with ingress-nginx or AGIC: every Ingress and its exposure level match what `kubectl get ingress,svc -A` and the cloud load balancers show; an internal ingress is not reported as exposed.
+- [ ] (manual) Filtering by an application namespace keeps the controller in its own namespace in the chain.
+- [ ] (manual) A service with no ready endpoint and a wrong `targetPort` are flagged on a real cluster.
+
 ## Phase 12 — MCP server
 
 - [x] `Kubism.Mcp` with the read tools from CLAUDE.md, resources `kubism://clusters`, `kubism://clusters/{id}/kinds`; secrets redacted at the tool layer and tested.
