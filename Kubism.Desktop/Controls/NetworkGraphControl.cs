@@ -19,7 +19,7 @@ public sealed class NetworkGraphControl : Control
     public static readonly StyledProperty<PlacedNode?> SelectedNodeProperty = AvaloniaProperty.Register<NetworkGraphControl, PlacedNode?>(nameof(SelectedNode));
     public static readonly StyledProperty<ICommand?> NodeCommandProperty = AvaloniaProperty.Register<NetworkGraphControl, ICommand?>(nameof(NodeCommand));
 
-    public const double BoxW = 220, BoxH = 54, GapX = 96, GapY = 12, Pad = 14, HeaderH = 22;
+    public const double BoxW = 250, BoxH = 66, GapX = 96, GapY = 12, Pad = 14, HeaderH = 22;
     private static readonly Typeface Face = new("Inter, Segoe UI, Helvetica Neue, sans-serif");
     private static readonly string[] Headers = ["Exposure", "Ingresses", "Services", "Workloads"];
 
@@ -79,7 +79,8 @@ public sealed class NetworkGraphControl : Control
             if (e.Label.Length > 0)
             {
                 var ft = new FormattedText(Trim(e.Label, 44), culture, FlowDirection.LeftToRight, Face, 9, brush) { MaxTextWidth = GapX + 60, MaxLineCount = 2, Trimming = TextTrimming.CharacterEllipsis };
-                var mid = new Point((p1.X + p2.X) / 2 - ft.Width / 2, (p1.Y + p2.Y) / 2 - ft.Height - 3);
+                // Nearer the target than the source: edges fan out from one node and their labels would pile up at the middle.
+                var mid = new Point(p1.X + (p2.X - p1.X) * 0.66 - ft.Width / 2, p1.Y + (p2.Y - p1.Y) * 0.66 - ft.Height - 3);
                 ctx.DrawRectangle(panel, null, new Rect(mid.X - 2, mid.Y, ft.Width + 4, ft.Height), 2);
                 ctx.DrawText(ft, mid);
             }
@@ -102,7 +103,8 @@ public sealed class NetworkGraphControl : Control
                 var name = new FormattedText(node.Missing ? $"{node.Label} (missing)" : node.Label, culture, FlowDirection.LeftToRight, new Typeface(Face.FontFamily, FontStyle.Normal, FontWeight.SemiBold), 12, text)
                 { MaxTextWidth = BoxW - 16, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
                 ctx.DrawText(name, new Point(r.X + 10, r.Y + 19));
-                var detail = new FormattedText(node.Detail, culture, FlowDirection.LeftToRight, Face, 9.5, muted) { MaxTextWidth = BoxW - 16, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
+                // Two lines: an Ingress with several hosts needs them readable on the node.
+                var detail = new FormattedText(node.Detail, culture, FlowDirection.LeftToRight, Face, 9.5, muted) { MaxTextWidth = BoxW - 16, MaxLineCount = 2, Trimming = TextTrimming.CharacterEllipsis };
                 ctx.DrawText(detail, new Point(r.X + 10, r.Y + 36));
             }
         }

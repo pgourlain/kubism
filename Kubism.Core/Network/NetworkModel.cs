@@ -28,6 +28,18 @@ public sealed record NetworkEdge(string From, string To, string Label, bool Prob
 /// <summary>What is known about a TLS secret named by an Ingress. Only existence and the public certificate's expiry are read; nothing of the secret is kept.</summary>
 public sealed record TlsSecretStatus(bool? Exists, DateTimeOffset? NotAfter, string? Detail = null);
 
+/// <summary>One URL an Ingress serves: host + path to a backend Service port. <see cref="Host"/> is "*" for a rule with no host (any host).</summary>
+public sealed record NetworkRoute(string IngressId, string Namespace, string Ingress, string? Class, string Host, string Path, string PathType, string Service, string ServicePort,
+    string ServiceId, bool DefaultBackend, bool TlsCovered, bool BackendMissing);
+
+/// <summary>A route joined with what serves it, for the "which URL goes through which Ingress" table.</summary>
+public sealed record NetworkRouteRow(NetworkRoute Route, string Url, ExposureLevel Exposure, string Via, string Backend, string Target, string Problems, FindingSeverity? Worst)
+{
+    public string Ingress => $"{Route.Namespace}/{Route.Ingress}";
+    public string IngressId => Route.IngressId;
+    public string ExposureText => Exposure switch { ExposureLevel.Outside => "outside the cluster", ExposureLevel.Unknown => "unknown", _ => "in-cluster only" };
+}
+
 public enum ExposureFilter { Any, OutsideOnly, InClusterOnly }
 
 /// <summary>Which part of the graph to draw.</summary>
@@ -57,6 +69,8 @@ public sealed class NetworkView
     public int MaxRows { get; init; }
     public bool Truncated { get; init; }
     public int Chains { get; init; }
+    /// <summary>Every URL the shown Ingresses serve, sorted by host then path.</summary>
+    public IReadOnlyList<NetworkRouteRow> Routes { get; init; } = [];
     public int OutsideChains { get; init; }
     public int ProblemChains { get; init; }
     public string? Warning { get; init; }

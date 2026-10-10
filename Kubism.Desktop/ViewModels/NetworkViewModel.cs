@@ -6,6 +6,21 @@ using Kubism.Core.Views;
 
 namespace Kubism.Desktop.ViewModels;
 
+/// <summary>One URL of the Routes table: where it comes in, which Ingress, which backend, which pods, what is wrong.</summary>
+public sealed record RouteRowVm(NetworkRouteRow Row)
+{
+    public string Url => Row.Url;
+    public string Exposure => Row.ExposureText;
+    public Severity ExposureSeverity => Row.Exposure switch { ExposureLevel.Outside => Severity.Warning, ExposureLevel.Unknown => Severity.Neutral, _ => Severity.Ok };
+    public string Ingress => Row.Ingress;
+    public string Class => Row.Route.Class ?? "(none)";
+    public string Via => Row.Via;
+    public string Backend => Row.Backend;
+    public string Target => Row.Target;
+    public string Problems => Row.Problems;
+    public Severity ProblemSeverity => Row.Worst switch { Core.Security.FindingSeverity.High => Severity.Error, Core.Security.FindingSeverity.Medium => Severity.Warning, _ => Severity.Neutral };
+}
+
 /// <summary>
 /// The Network graph page: how traffic reaches the pods, from what is exposed outside the cluster through Ingresses and Services to workloads, with the
 /// ports of every hop and what does not line up. Read-only. Follows the cluster live (<see cref="NetworkStore"/>) and uses the workspace's namespace
@@ -31,6 +46,10 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
     public WorkspaceViewModel Workspace => _ws;
     public IReadOnlyList<string> ExposureChoices { get; } = ["Any exposure", "Outside the cluster only", "In-cluster only"];
     public ObservableCollection<string> NodeLines { get; } = [];
+    public ObservableCollection<RouteRowVm> Routes { get; } = [];
+    public const int GraphTab = 0, RoutesTab = 1;
+    [ObservableProperty] private int _tab;
+    [ObservableProperty] private RouteRowVm? _selectedRoute;
 
     [ObservableProperty] private bool _isLoading = true;
     [ObservableProperty] private string? _error;
@@ -92,6 +111,19 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
         ViewSummary = v.Nodes.Count == 0
             ? "Nothing to show with these filters (Services nothing routes to are hidden unless you tick 'Show internal services')."
             : $"{v.Chains} chain(s) · {v.OutsideChains} outside the cluster · {v.ProblemChains} with problems" + (v.Truncated ? " · first chains only, narrow the filters" : "");
+        Routes.Clear();
+        foreach (var r in v.Routes) Routes.Add(new RouteRowVm(r));
+        SelectedRoute = Routes.FirstOrDefault(r => r.Row.IngressId == SelectedRoute?.Row.IngressId && r.Url == SelectedRoute?.Url);
+        ShowNode();
+    }
+
+    /// <summary>Selecting a URL selects its Ingress node: the details below show the whole Ingress (all its rules, class, TLS, problems).</summary>
+    partial void OnSelectedRouteChanged(RouteRowVm? value)
+    {
+        if (value is null || View is null) return;
+        var ingress = View.Nodes.FirstOrDefault(n => n.Id == value.Row.IngressId);
+        if (ingress is null) return;
+        SelectedNode = ingress;
         ShowNode();
     }
 
@@ -125,6 +157,9 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
     [RelayCommand]
     private Task CopyDetails()
     {
+        // On the Routes tab the table is what is copied (tab-separated: it pastes into a sheet or a ticket).
+        if (Tab == RoutesTab)
+            return _ws.Clipboard.SetTextAsync(string.Join("\n", Routes.Select(r => string.Join("\t", r.Url, r.Exposure, r.Ingress, r.Class, r.Via, r.Backend, r.Target, r.Problems))));
         var text = NodeLines.Count > 0 ? string.Join("\n", NodeLines)
             : string.Join("\n", View?.Nodes.Where(p => p.Node.Kind == NetworkNodeKind.Ingress).SelectMany(p => p.Node.Lines.Where(l => !l.StartsWith("class:") && !l.StartsWith("TLS")).Select(l => $"{p.Node.Namespace}/{p.Node.Label}: {l}")) ?? []);
         return _ws.Clipboard.SetTextAsync(text);

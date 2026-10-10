@@ -37,9 +37,40 @@
         <TextBlock Text="┅ missing" Foreground="{DynamicResource KubismErrorBrush}" />
       </WrapPanel>
     </StackPanel>
-    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-      <c:NetworkGraphControl ViewData="{Binding View}" SelectedNode="{Binding SelectedNode}" NodeCommand="{Binding NodeClickedCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="Network graph" />
-    </ScrollViewer>
+    <TabControl Grid.Row="3" SelectedIndex="{Binding Tab, Mode=TwoWay}">
+      <TabItem Header="Graph">
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <c:NetworkGraphControl ViewData="{Binding View}" SelectedNode="{Binding SelectedNode}" NodeCommand="{Binding NodeClickedCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="Network graph" />
+        </ScrollViewer>
+      </TabItem>
+      <!-- One row per URL: which host and path go through which Ingress, to which Service port and pods. -->
+      <TabItem Header="Routes (URL → Ingress → pods)">
+        <DataGrid ItemsSource="{Binding Routes}" SelectedItem="{Binding SelectedRoute}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" CanUserSortColumns="True" CanUserResizeColumns="True" HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Routes">
+          <DataGrid.Columns>
+            <DataGridTextColumn Header="URL" Binding="{Binding Url}" x:DataType="vm:RouteRowVm" Width="330" />
+            <DataGridTemplateColumn Header="Exposure" Width="160">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:RouteRowVm">
+                  <TextBlock Text="{Binding Exposure}" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" Foreground="{Binding ExposureSeverity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+            <DataGridTextColumn Header="Ingress" Binding="{Binding Ingress}" x:DataType="vm:RouteRowVm" Width="220" />
+            <DataGridTextColumn Header="Class" Binding="{Binding Class}" x:DataType="vm:RouteRowVm" Width="150" />
+            <DataGridTextColumn Header="Comes in through" Binding="{Binding Via}" x:DataType="vm:RouteRowVm" Width="360" />
+            <DataGridTextColumn Header="Service:port" Binding="{Binding Backend}" x:DataType="vm:RouteRowVm" Width="200" />
+            <DataGridTextColumn Header="Pods (port mapping)" Binding="{Binding Target}" x:DataType="vm:RouteRowVm" Width="420" />
+            <DataGridTemplateColumn Header="Problems" Width="420">
+              <DataGridTemplateColumn.CellTemplate>
+                <DataTemplate x:DataType="vm:RouteRowVm">
+                  <TextBlock Text="{Binding Problems}" VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Problems}" Foreground="{Binding ProblemSeverity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                </DataTemplate>
+              </DataGridTemplateColumn.CellTemplate>
+            </DataGridTemplateColumn>
+          </DataGrid.Columns>
+        </DataGrid>
+      </TabItem>
+    </TabControl>
     <Grid Grid.Row="4" ColumnDefinitions="*,Auto">
       <!-- The details scroll and wrap: a controller or an Ingress can hold many lines. -->
       <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Selected node details">

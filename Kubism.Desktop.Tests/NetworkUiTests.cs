@@ -89,6 +89,37 @@ public class NetworkUiTests
     }
 
     [AvaloniaFact]
+    public async Task Routes_tab_lists_each_url_with_its_ingress_backend_and_pods_and_follows_the_filters()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        vm.Tab = NetworkViewModel.RoutesTab;
+        UiHarness.Pump();
+        var api = vm.Routes.Single(r => r.Url == "https://shop.example.com/api");
+        Assert.Equal(("shop/shop", "api:80", "outside the cluster"), (api.Ingress, api.Backend, api.Exposure));
+        Assert.Contains("Deployment api", api.Target);
+        Assert.Contains("ingress-nginx/ingress-nginx-controller · LoadBalancer 20.1.2.3", api.Via);
+        Assert.Equal(vm.Routes.Select(r => r.Url).Count(), vm.View!.Routes.Count);
+        h.Screenshot("68-network-routes");
+
+        // selecting a URL selects its Ingress and shows the whole Ingress below
+        vm.SelectedRoute = api;
+        Assert.Equal("i:shop/shop", vm.SelectedNode!.Id);
+        Assert.Contains(vm.NodeLines, l => l.Contains("shop.example.com/ → web:80"));
+
+        // the table follows the namespace picker and the filters
+        ws.Namespaces.Select("tools");
+        await UiHarness.WaitFor(() => vm.Routes.Count > 0 && vm.Routes.All(r => r.Ingress.StartsWith("tools/")), what: "routes of tools");
+        vm.Search = "wiki.internal";
+        Assert.Contains(vm.Routes, r => r.Ingress == "tools/intranet" && r.Exposure == "in-cluster only");
+
+        // Copy gives the table, tab-separated
+        await vm.CopyDetailsCommand.ExecuteAsync(null);
+        Assert.Contains("wiki.internal", h.Clipboard.Text);
+        Assert.Contains("\t", h.Clipboard.Text);
+    }
+
+    [AvaloniaFact]
     public async Task An_unreadable_kind_shows_a_warning_instead_of_a_silent_partial_graph()
     {
         await using var h = await UiHarness.StartAsync();

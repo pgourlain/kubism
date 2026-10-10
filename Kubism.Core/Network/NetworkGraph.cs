@@ -23,11 +23,13 @@ public sealed partial class NetworkGraph
 
     private readonly List<NetworkNode> _nodes = [];
     private readonly List<NetworkEdge> _edges = [];
+    private readonly List<NetworkRoute> _routes = [];
 
     private NetworkGraph(IReadOnlyList<RbacKindStatus> availability) => Availability = availability;
 
     public IReadOnlyList<NetworkNode> Nodes => _nodes;
     public IReadOnlyList<NetworkEdge> Edges => _edges;
+    public IReadOnlyList<NetworkRoute> Routes => _routes;
     public IReadOnlyList<RbacKindStatus> Availability { get; }
     public bool IsComplete => Availability.All(a => a.Loaded);
     public IReadOnlyList<string> MissingKinds => Availability.Where(a => !a.Loaded).Select(a => a.Kind).ToList();
@@ -82,6 +84,7 @@ public sealed partial class NetworkGraph
         private readonly Dictionary<string, List<NetworkProblem>> _problems = [];
         private readonly Dictionary<string, List<string>> _lines = [];
         private readonly HashSet<string> _workloadsBuilt = [];
+        private readonly List<NetworkRoute> _routeList = [];
 
         public void Run()
         {
@@ -92,6 +95,7 @@ public sealed partial class NetworkGraph
             Propagate();
             foreach (var n in _nodes.Values) g._nodes.Add(n with { Problems = Problems(n.Id), Lines = Lines(n.Id) });
             foreach (var ((from, to), (labels, problem)) in _edges) g._edges.Add(new NetworkEdge(from, to, Join(labels), problem));
+            g._routes.AddRange(_routeList);
         }
 
         private List<NetworkProblem> Problems(string id) => _problems.TryGetValue(id, out var p) ? p.DistinctBy(x => x.Code + x.Description).ToList() : [];
@@ -202,14 +206,19 @@ public sealed partial class NetworkGraph
             }
             var hosts = new List<string>();
             var ruleLines = new List<string>();
-            foreach (var rule in (ing.At("spec", "rules") as JsonArray ?? []).OfType<JsonObject>())
+            var ruleObjs = (ing.At("spec", "rules") as JsonArray ?? []).OfType<JsonObject>().ToList();
+            // With one host, the host is on the node and the edges carry only the path; with several, the edges carry host + path.
+            var singleHost = ruleObjs.Select(r => KubeObject.Str(r, "host") ?? "*").Distinct().Count() <= 1;
+            var tlsEntries = (ing.At("spec", "tls") as JsonArray ?? []).OfType<JsonObject>().ToList();
+            bool TlsCovers(string host) => tlsEntries.Any(t => RbacJson.Strings(t["hosts"]) is { Count: > 0 } th ? th.Contains(host) : true);
+            foreach (var rule in ruleObjs)
             {
                 var host = KubeObject.Str(rule, "host") ?? "*";
                 if (!hosts.Contains(host)) hosts.Add(host);
                 foreach (var path in (rule["http"]?["paths"] as JsonArray ?? []).OfType<JsonObject>())
-                    Backend(ing, id, ns, $"{host}{KubeObject.Str(path, "path") ?? "/"}", path["backend"]?["service"] as JsonObject, ruleLines);
+                    Backend(ing, id, ns, host, KubeObject.Str(path, "path") ?? "/", KubeObject.Str(path, "pathType") ?? "", className, singleHost, TlsCovers(host), path["backend"]?["service"] as JsonObject, ruleLines);
             }
-            if (ing.At("spec", "defaultBackend", "service") is JsonObject db) Backend(ing, id, ns, "default backend", db, ruleLines);
+            if (ing.At("spec", "defaultBackend", "service") is JsonObject db) Backend(ing, id, ns, "*", "", "", className, singleHost, false, db, ruleLines, isDefault: true);
 
             Node(new NetworkNode(id, NetworkNodeKind.Ingress, ing.Name, ns, hosts.Count == 0 ? "no host" : string.Join(", ", hosts.Take(3)) + (hosts.Count > 3 ? $" +{hosts.Count - 3}" : ""), ExposureLevel.InCluster, [], [], ing));
             Line(id, $"class: {className ?? "(none)"}");
@@ -291,21 +300,26 @@ public sealed partial class NetworkGraph
 
         private static string PortsText(ServiceInfo s) => string.Join(", ", s.Ports.Select(p => $"{p.Number}{(p.Protocol == "TCP" ? "" : "/" + p.Protocol)}{(p.NodePort is { } np ? $" (nodePort {np})" : "")}"));
 
-        private void Backend(KubeObject ing, string ingId, string ns, string where, JsonObject? backend, List<string> lines)
+        private void Backend(KubeObject ing, string ingId, string ns, string host, string path, string pathType, string? className, bool singleHost, bool tlsCovered, JsonObject? backend,
+            List<string> lines, bool isDefault = false)
         {
             if (backend is null) return;
+            var where = isDefault ? "default backend" : $"{(host == "*" ? "" : host)}{path}";
+            var edgeWhere = isDefault ? "default backend" : singleHost ? (path.Length == 0 ? "/" : path) : where;
             var name = KubeObject.Str(backend, "name") ?? "";
             var portNode = backend["port"] as JsonObject;
             var portName = portNode is null ? null : KubeObject.Str(portNode, "name");
             var portNumber = portNode?["number"] is JsonValue pv && pv.TryGetValue<int>(out var n) ? n : (int?)null;
             var sid = $"s:{ns}/{name}";
             var portText = portName ?? portNumber?.ToString() ?? "?";
+            void Route(string servicePort, bool missing) => _routeList.Add(new NetworkRoute(ingId, ns, ing.Name, className, host, path, pathType, name, servicePort, sid, isDefault, tlsCovered, missing));
             if (!_svc.TryGetValue(sid, out var svc))
             {
                 Node(new NetworkNode(sid, NetworkNodeKind.Service, name, ns, "does not exist", ExposureLevel.InCluster, [], [], null, Missing: true));
                 Problem(sid, "missing-service", $"Ingress {ing.Name} routes to Service {name}, which does not exist.", FindingSeverity.High);
                 Problem(ingId, "missing-service", $"Backend Service {name} does not exist.", FindingSeverity.High);
-                Edge(ingId, sid, $"{where} → :{portText}", true);
+                Edge(ingId, sid, $"{edgeWhere} → :{portText}", true);
+                Route(portText, true);
                 lines.Add($"{where} → {name}:{portText}  (Service MISSING)");
                 return;
             }
@@ -314,11 +328,13 @@ public sealed partial class NetworkGraph
             {
                 // The fault is the Ingress's: the Service is fine and may serve other Ingresses correctly, so only the Ingress and the hop are flagged.
                 Problem(ingId, "missing-service-port", $"Service {name} has no port {portText} (it has {PortsText(svc)}).", FindingSeverity.High);
-                Edge(ingId, sid, $"{where} → :{portText}", true);
+                Edge(ingId, sid, $"{edgeWhere} → :{portText}", true);
+                Route(portText, false);
                 lines.Add($"{where} → {name}:{portText}  (port NOT on the Service)");
                 return;
             }
-            Edge(ingId, sid, $"{where} → :{port.Number}");
+            Edge(ingId, sid, $"{edgeWhere} → :{port.Number}");
+            Route(port.Number.ToString(), false);
             lines.Add($"{where} → {name}:{port.Number}");
         }
 

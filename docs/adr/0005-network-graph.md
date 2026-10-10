@@ -18,6 +18,8 @@ The level flows from the exposure nodes along the edges (the highest wins), so a
 
 **Ports.** Ingress backend port (number or name) → Service port → `targetPort` (a name is resolved against the selected pods' container ports) → container port. Workloads come from the pods' owner chain; a Deployment is recognised from its ReplicaSet's `pod-template-hash`, a CronJob from its Job's name, without reading ReplicaSets or Jobs.
 
+**Routes.** Every host + path an Ingress serves is also a row (`NetworkRouteRow`): `https` when a `spec.tls` entry covers the host, the controller and address it comes in through, the backend Service port, the workloads behind it with the port mapping, and the problems of the Ingress and the Service. This is the answer to "which URL goes through which Ingress"; the graph is the picture of the same data.
+
 **Problems** are put where the fault is: a missing backend Service or port on the Ingress and the hop (not on a Service that serves other Ingresses fine); an unresolved named `targetPort` on the Service and the hop; no ready endpoint / selector matching no pod on the Service; pods not ready on the workload; missing or expiring TLS secret on the Ingress; no ingress class or no controller found on the Ingress; a Service exposed directly (not through an Ingress) and host ports.
 
 **TLS secrets** are looked up one by one (`GET`, cached 5 minutes): only existence and the public certificate's expiry are read, and nothing of the secret is kept (rule 4). A secret that cannot be read (403) is "not checked", never "missing".

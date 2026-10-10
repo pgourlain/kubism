@@ -99,13 +99,42 @@ public class NetworkGraphTests
     [Fact]
     public void Ports_are_shown_on_every_hop_with_named_target_ports_resolved()
     {
-        Assert.Contains("shop.example.com/ → :80", E("i:shop/shop", "s:shop/web").Label);
-        Assert.Contains("shop.example.com/api → :80", E("i:shop/shop", "s:shop/api").Label);
+        // one host: it is on the Ingress node and the edges carry only the path
+        Assert.Equal("/ → :80", E("i:shop/shop", "s:shop/web").Label);
+        Assert.Equal("/api → :80", E("i:shop/shop", "s:shop/api").Label);
         Assert.Equal("80 → http (8080)", E("s:shop/web", "w:shop/Deployment/web").Label);         // named targetPort resolved against the containers
         Assert.Equal("80 → 3000", E("s:shop/api", "w:shop/Deployment/api").Label);                   // numeric
         Assert.DoesNotContain("port-not-declared", Codes("w:shop/Deployment/api"));
         // an Ingress backend by port name resolves to the Service's port number
-        Assert.Contains("admin.example.com/ → :80", E("i:shop/admin", "s:shop/web").Label);
+        Assert.Equal("/ → :80", E("i:shop/admin", "s:shop/web").Label);
+        Assert.Equal("shop.example.com", N("i:shop/shop").Detail);
+    }
+
+    [Fact]
+    public void Routes_answer_which_url_goes_through_which_ingress_to_which_pods()
+    {
+        var routes = Graph.View().Routes;
+        var api = routes.Single(r => r.Url == "https://shop.example.com/api");                      // TLS covers the host: https
+        Assert.Equal(("shop/shop", "nginx", "api:80"), (api.Ingress, api.Route.Class, api.Backend));
+        Assert.Equal("outside the cluster", api.ExposureText);
+        Assert.Contains("ingress-nginx/ingress-nginx-controller · LoadBalancer 20.1.2.3", api.Via);
+        Assert.Contains("Deployment api", api.Target); Assert.Contains("80 → 3000", api.Target); Assert.Contains("1/1 pods ready", api.Target);
+        Assert.Equal("https://shop.example.com/", routes.Single(r => r.Ingress == "shop/shop" && r.Route.Path == "/").Url);
+
+        var docs = routes.Single(r => r.Ingress == "shop/docs");
+        Assert.Equal(("http://docs.example.com/", "docs-svc:80", "Service missing"), (docs.Url, docs.Backend, docs.Target));
+        Assert.Contains("does not exist", docs.Problems);
+        Assert.Equal(FindingSeverity.High, docs.Worst);
+
+        Assert.Equal(ExposureLevel.InCluster, routes.Single(r => r.Ingress == "tools/intranet").Exposure);
+        Assert.Contains("private network", routes.Single(r => r.Ingress == "shop/admin").Via);
+        Assert.Contains("Application Gateway", routes.Single(r => r.Ingress == "shop/agw").Via);
+
+        // sorted by host, then path
+        Assert.Equal(routes.OrderBy(r => r.Route.Host, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Route.Path, StringComparer.Ordinal).Select(r => r.Url), routes.Select(r => r.Url));
+        // the routes follow the filters: only the chosen namespace's ingresses
+        Assert.All(Graph.View(new NetworkFilter { Namespaces = new HashSet<string> { "tools" } }).Routes, r => Assert.Equal("tools", r.Route.Namespace));
+        Assert.Contains(Graph.View(new NetworkFilter { Search = "grafana.example.com" }).Routes, r => r.Ingress == "tools/grafana");
     }
 
     [Fact]

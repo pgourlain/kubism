@@ -311,6 +311,11 @@ public class McpNetworkTests
         Assert.Contains(Node(r, "i:shop/admin")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "tls-secret-missing");     // looked up by GET
         Assert.Contains(Node(r, "s:shop/docs-svc")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "missing-service");
         Assert.True(Node(r, "s:shop/docs-svc")["missing"]!.GetValue<bool>());
+        // one row per URL: which host and path go through which Ingress to which pods
+        var route = r["routes"]!.AsArray().Select(x => x!.AsObject()).Single(x => x["url"]!.ToString() == "https://shop.example.com/api");
+        Assert.Equal(("shop/shop", "api:80", "outside the cluster"), (route["ingress"]!.ToString(), route["backend"]!.ToString(), route["exposure"]!.ToString()));
+        Assert.Contains("Deployment api", route["pods"]!.ToString());
+        Assert.Contains("ingress-nginx/ingress-nginx-controller", route["comesInThrough"]!.ToString());
     }
 
     [Fact]

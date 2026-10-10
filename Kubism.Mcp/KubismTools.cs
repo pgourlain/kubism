@@ -289,6 +289,11 @@ public sealed class KubismReadTools(McpContext ctx)
                     ["lines"] = new JsonArray(p.Node.Lines.Select(l => (JsonNode?)JsonValue.Create(l)).ToArray()),
                     ["problems"] = new JsonArray(p.Node.Problems.Select(x => (JsonNode?)new JsonObject { ["code"] = x.Code, ["severity"] = x.Severity.ToString(), ["description"] = x.Description }).ToArray()),
                 }).ToArray()),
+                ["routes"] = new JsonArray(view.Routes.Take(300).Select(r => (JsonNode?)new JsonObject
+                {
+                    ["url"] = r.Url, ["ingress"] = r.Ingress, ["class"] = r.Route.Class, ["exposure"] = r.ExposureText, ["comesInThrough"] = r.Via,
+                    ["backend"] = r.Backend, ["pods"] = r.Target, ["problems"] = r.Problems,
+                }).ToArray()),
                 ["edges"] = new JsonArray(view.Edges.Select(e => (JsonNode?)new JsonObject { ["from"] = e.From, ["to"] = e.To, ["ports"] = e.Label, ["problem"] = e.Problem }).ToArray()),
             };
             return Json(o);
