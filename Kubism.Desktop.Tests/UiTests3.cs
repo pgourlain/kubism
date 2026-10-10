@@ -283,3 +283,30 @@ public class UiDetailsResizeTests
         Assert.True(col.Width.Value > 500, "the resized width is remembered");
     }
 }
+
+public class UiForwardNavigationBugTests
+{
+    [AvaloniaFact]
+    public async Task Port_forwards_tab_keeps_working_after_navigating_elsewhere()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync();
+        var web = new KubeObject(h.Demo.Server.Get(Gvr.Services, "default", "web")!);
+        await ws.ActionsFor(ws.Session.Discovery.FindByName("services")!, web).First(a => a.Header.StartsWith("Forward")).ExecuteAsync();
+        var dock = ws.Dock.Find<PortForwardsViewModel>()!;
+        await UiHarness.WaitFor(() => dock.Items.Count == 1);
+        // Left panel: "Port forwards", then "Endpoints" (the sequence from the bug report).
+        ws.Navigate(ws.FindNav(NavTarget.PortForwards)!);
+        ws.OpenKind(ws.Session.Discovery.FindByName("endpoints")!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Kind.Kind == "Endpoints");
+        Assert.Same(dock, ws.Dock.Find<PortForwardsViewModel>());
+        // Stop from the bottom panel: the row disappears.
+        await dock.Items[0].StopCommand.ExecuteAsync(null);
+        await UiHarness.WaitFor(() => dock.Items.Count == 0, what: "forward removed from the dock");
+        Assert.Empty(ws.Session.PortForwards.Forwards);
+        // And a new forward shows up again.
+        await ws.StartForwardAsync(new ForwardTarget(ForwardTargetKind.Service, "default", "web", 80));
+        await UiHarness.WaitFor(() => dock.Items.Count == 1, what: "new forward listed");
+        Assert.Single(ws.Session.PortForwards.Forwards);
+    }
+}

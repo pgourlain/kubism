@@ -183,6 +183,13 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
 
     private async Task SwapContentAsync(NavNode node)
     {
+        if (node.Target == NavTarget.PortForwards)
+        {
+            // Port forwards live in the bottom dock: show/focus that tab and leave the centre view alone.
+            // (Making the dock item the centre content got it disposed when navigating away: it stopped updating.)
+            EnsurePortForwards();
+            return;
+        }
         var old = CurrentContent;
         Details.Close();
         CurrentContent = node.Target switch
@@ -193,10 +200,10 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Helm => new HelmViewModel(this),
             NavTarget.Activity => new ActivityViewModel(this),
             NavTarget.CreateYaml => new CreateYamlViewModel(this),
-            NavTarget.PortForwards => EnsurePortForwards(),
             _ => null,
         };
-        if (old is IClosable c && !ReferenceEquals(old, CurrentContent)) await c.DisposeAsync();
+        // Dock items own their lifetime (the dock closes them); never dispose one from here.
+        if (old is IClosable c and not DockItemViewModel && !ReferenceEquals(old, CurrentContent)) await c.DisposeAsync();
     }
 
     private ResourceListViewModel NewList(ResourceKind kind)
