@@ -14,14 +14,16 @@ Goal: a Lens-like Kubernetes desktop app, multi-cluster, running natively on **m
 
 Implemented by an agent on **macOS arm64 only**; nothing here has run on Linux, Windows or GitHub Actions yet.
 
-* Verified locally: `dotnet build Kubism.slnx` (Core/Kube warnings-as-errors clean) and the five test projects, 238 tests (Core 148, Kube 18, Desktop headless 62, MCP 10; Integration skipped without `KUBISM_IT_KUBECONFIG`).
+* Verified locally: `dotnet build Kubism.slnx` (Core/Kube warnings-as-errors clean) and the five test projects, 286 tests pass (Core 164, Kube 18, Desktop headless 94, MCP 10; 4 integration tests skipped without `KUBISM_IT_KUBECONFIG`).
 * Real clusters were **not** touched: everything runs against `FakeApiServer` / `FakePrometheus`, and `dotnet run --project Kubism.Desktop -- --demo` starts the app on them.
 * Left open on purpose, listed under their tasks as **Open**: AOT spike result on 3 OSes, terminal-engine evaluation (ADR 0002), node shell and ephemeral debug container (optional), `IMetricsSource`, signed packages.
 * Every **Validation** item stays unticked: *automated* ones need the CI matrix, *manual* ones need a human on real machines and real clusters (kind, AKS with Entra, 5 000 pods).
 
+* Reported by the maintainer: the app was run on **Omarchy (Arch Linux)** and works. Which validation items that covered is not recorded, so none is ticked below.
+
 Test environments for manual validation:
 - [ ] macOS (Apple Silicon)
-- [ ] Linux (Ubuntu 24.04 x64, X11 and Wayland/XWayland)
+- [ ] Linux (Ubuntu 24.04 x64, X11 and Wayland/XWayland); Omarchy (Arch) run once by the maintainer, see above
 - [ ] Windows 11 x64
 
 Clusters for manual validation: a local **kind** cluster, an **AKS** cluster with Entra ID auth (`kubelogin`), and a cluster with **many objects** (≥ 5 000 pods, or a kind cluster loaded by `scripts/load-test.sh`).
@@ -322,6 +324,31 @@ See "Right-sizing" in CLAUDE.md. Depends on Phase 9.
 
 **Validation**
 - [ ] (manual) Fresh machine of each OS: download, start, add a kubeconfig, connect, list pods, open a shell.
+
+## Phase 14 — Understand and compare (first batch of the "what to add" list)
+
+- [x] **Relation graph** (`Related`'s big sibling): `RelationGraph` in Core builds the neighbourhood of any object from objects already loaded (owners and owned, Service → Pod by selector, Ingress → Service, workload → ConfigMap/Secret/PVC/ServiceAccount from the pod template, PVC → PV, Pod → Node, HPA → target) with a top-to-bottom layered layout and per-node health. Shared config is a leaf (never expanded) unless it is the root; scaled-down ReplicaSets are skipped; bounded to 40 nodes / 5 hops, with a "more not shown" flag. Desktop: `RelationGraphControl` (custom-drawn, click to open, tooltip) in a new **Graph** tab of the details panel, loaded only when the tab is shown, panel widens to fit. Secret `data` is dropped from the list response before anything is built.
+  - Done. Tests: `ExplorationTests` (Core), `UiExplorationTests` (headless, screenshot `30-relation-graph`).
+- [x] **Helm in the graph**: a `HelmRelease` node (synthetic, from `HelmReleaseInfo`: latest revision and status read from the release secrets' labels, no decoding) sits above the objects carrying `meta.helm.sh/release-name` (or the managed-by/instance labels) that no controller in the graph owns; shown but not expanded when reached from an object, expanded when it is the root. Graph tab on the Helm page for the selected release; clicking a release box opens the Helm page on it. Shared `GraphLoader`; release payloads are never downloaded for the graph's generic secrets (`type!=helm.sh/release.v1`), only the labelled ones, with `data` dropped. `--demo` gains an `api` release.
+  - Done. `HelmGraphTests` (Core), two UI tests, screenshots `33-graph-helm`, `34-helm-release-graph`.
+- [x] **Compare clusters**: `ClusterCompare` + `LineDiff` in Core (server noise stripped: uid, resourceVersion, managedFields, status, clusterIP…; Secret values never in the diff, differing keys marked `•••• A` / `•••• B`), `CompareViewModel`/`CompareView` (sidebar entry *Compare*, plus **Compare…** on every object), two namespaces may differ (matched by name). `--demo` now adds a third, drifted cluster (`demo-dev`).
+  - Done. Same tests; screenshot `31-compare-clusters`.
+- [x] **Global search v2**: `SearchQuery` (`text`, `key=value`, `image:`, `ns:`, `kind:`, combined with AND), hits show the matching image.
+  - Done. Screenshot `32-search-by-image`.
+- [x] README with features and screenshots (`docs/screenshots/`, rendered by `DocsScreenshotTests`), install instructions in the release notes (`packaging/release-notes.md`, used by `release.yml` as CinnabarSharp does).
+  - Done.
+- [ ] Event timeline per workload: events, rollouts, restarts and OOM kills on one time axis.
+- [ ] Ephemeral debug: `kubectl debug` natively (ephemeral container, node shell, pod copy) through `ClusterActions` (see Phase 7's open items).
+- [ ] Security: RBAC explorer (who can do what, `can-i` for a ServiceAccount, wildcard and cluster-admin findings); pod audit (privileged, hostPath, root, no securityContext, `:latest`); Trivy Operator reports (CRDs) shown per workload; certificate expiry (TLS secrets, cert-manager `Certificate`, kubeconfig certs).
+- [ ] Ecosystem views over CRDs: Argo CD (sync, health, diff; sync button through `ClusterActions`), Flux, cert-manager, Gateway API / Istio, KEDA, Karpenter, Crossplane / Azure Service Operator resource trees.
+- [ ] Capacity and cost: node requests vs allocatable and fragmentation, unschedulable pods with the reason, cost per namespace or label with a trend, "what if I apply the recommendations" simulator.
+- [ ] Workflow: saved views (filters, columns, namespaces per cluster), favourites and history in the command palette, playbooks (drain + upgrade + uncordon, with dry-run), OS notifications (CrashLoop, NotReady, stuck rollout), diagnostic bundle (describe + events + logs, secrets masked) as a zip.
+- [ ] AI: "explain this error" panel (pod + events + logs, secrets masked) on top of the existing MCP read tools.
+- [ ] AKS: node pool and upgrade info, Azure Monitor / Container Insights links, Workload Identity check (ServiceAccount annotation vs federated credential).
+
+**Validation**
+- [ ] (automated) `ExplorationTests` and `UiExplorationTests` green on the 3 OSes.
+- [ ] (manual) On kind and AKS: the graph of a deployment shows its ingress, service, pods and config; opening a node from the graph works; comparing two real clusters (a namespace in staging and production) lists the expected drift and no Secret value.
 
 ## Criteria for 1.0
 

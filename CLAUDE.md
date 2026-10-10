@@ -147,6 +147,13 @@ API errors become `KubeApiException` (status code, `Status.reason`, `message`) s
 
 **RBAC awareness:** before showing a mutating button, the view model asks `AccessReview` (`SelfSubjectAccessReview`, cached per session for 5 min) and disables the button with a tooltip ("forbidden: you cannot delete pods in namespace x") instead of failing on click. Kinds the user cannot `list` are hidden from the sidebar (or shown dimmed, setting).
 
+### Graph, compare, search
+
+All three are pure Core logic over objects already loaded, unit-tested without a UI (`ExplorationTests`):
+- `RelationGraph` (`Core/Views`): the neighbourhood of one object (owners/owned, Service → Pod by selector, Ingress → Service, workload → ConfigMap/Secret/PVC/ServiceAccount, PVC → PV, Pod → Node, HPA → target) with a layered layout and per-node health. Config kinds are leaves (not expanded) unless they are the root; Secret `data` is stripped before the graph is built. Drawn by `RelationGraphControl` in the details panel's Graph tab.
+- `ClusterCompare` + `LineDiff`: compares the same kind between two clusters or namespaces after dropping server-generated fields; **Secret values never reach a diff** (a key is masked, and marked `A`/`B` when it differs).
+- `SearchQuery`: global search syntax (`text`, `key=value`, `image:`, `ns:`, `kind:`, AND).
+
 ### Logs, exec, port-forward
 
 - **Logs** (`LogSession`): `GET …/pods/{name}/log?follow=true&timestamps=true&container=…&tailLines=…&previous=…&sinceSeconds=…`, streamed into a bounded ring buffer (default 50 000 lines, setting) so memory is capped. Multi-pod logs for a workload (deployment/statefulset/job) = one stream per pod, merged by timestamp, with a pod/container prefix. Search, wrap, timestamps on/off, pause (buffering continues), download to a file.
@@ -188,7 +195,7 @@ Like CinnabarSharp: state changes call `IClusterEventsService.Push(...)` with ty
 
 ### UI (`Kubism.Desktop`)
 
-- Layout: **cluster catalog** on the far left (hotbar of icons/colors, like Lens), then for the active cluster a **sidebar** (Overview, Nodes, Workloads [Pods, Deployments, DaemonSets, StatefulSets, ReplicaSets, Jobs, CronJobs], Config [ConfigMaps, Secrets, ResourceQuotas, LimitRanges, HPA, PDB], Network [Services, Endpoints/EndpointSlices, Ingresses, IngressClasses, NetworkPolicies], Storage [PVC, PV, StorageClasses], Namespaces, Events, Helm, Access Control [ServiceAccounts, Roles, ClusterRoles, Bindings], Custom Resources [grouped by API group], plus a "All kinds" entry from discovery), a **resource list** (virtualized grid, namespace multi-select, text filter, sortable columns, multi-select for bulk delete), a **details panel** (slides in from the right: Overview, YAML, Events, Related/owners), and a **bottom dock** with tabs for logs, terminals and port-forwards.
+- Layout: **cluster catalog** on the far left (hotbar of icons/colors, like Lens), then for the active cluster a **sidebar** (Overview, Nodes, Workloads [Pods, Deployments, DaemonSets, StatefulSets, ReplicaSets, Jobs, CronJobs], Config [ConfigMaps, Secrets, ResourceQuotas, LimitRanges, HPA, PDB], Network [Services, Endpoints/EndpointSlices, Ingresses, IngressClasses, NetworkPolicies], Storage [PVC, PV, StorageClasses], Namespaces, Events, Helm, Access Control [ServiceAccounts, Roles, ClusterRoles, Bindings], Custom Resources [grouped by API group], plus a "All kinds" entry from discovery), a **resource list** (virtualized grid, namespace multi-select, text filter, sortable columns, multi-select for bulk delete), a **details panel** (slides in from the right: Overview, YAML, Events, Related/owners, Graph), a **Compare** page (same kind in two clusters or namespaces), and a **bottom dock** with tabs for logs, terminals and port-forwards.
 - Each connected cluster is a top-level **workspace tab**, so two clusters can be side by side; the window title and a colored strip show the active cluster and its safety mode (red strip for *production*).
 - Grid: Avalonia `DataGrid` or `TreeDataGrid` with virtualization; rows are view models updated in place from `CacheChange` batches (`ObservableCollection` diffing, never a full reset except on `Resynced`).
 - YAML editor: [AvaloniaEdit](https://github.com/AvaloniaUI/AvaloniaEdit) with `AvaloniaEdit.TextMate` (YAML grammar), read-only view and edit mode, server-side `managedFields` hidden by default, diff view on conflict.
