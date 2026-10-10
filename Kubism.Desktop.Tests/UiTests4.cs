@@ -87,6 +87,40 @@ public class UiRightSizingAndHelmTests
     }
 
     [AvaloniaFact]
+    public async Task Details_follow_the_clicked_container_including_one_without_a_recommendation()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        var web = vm.Rows.Single(r => r.Workload == "Deployment/web");
+        vm.Selected = web;
+        Assert.Contains("Deployment/web", vm.PatchPreview);
+        Assert.Contains("requests.cpu", vm.PatchPreview);
+
+        // another container: the preview is its own, not the previous one's
+        // picked from the "Misconfigured" list, the grid on screen (a row it does not list would clear the shared selection)
+        var other = vm.Problems.First(r => r != web && r.Report.Recommended is not null);
+        vm.Selected = other;
+        Assert.Contains($"{other.Report.WorkloadKind}/{other.Report.WorkloadName}", vm.PatchPreview);
+        Assert.DoesNotContain("Deployment/web", vm.PatchPreview);
+
+        // a container with no recommendation says so
+        var none = vm.Problems.FirstOrDefault(r => r.Report.Recommended is null);
+        if (none is not null)
+        {
+            vm.Selected = none;
+            Assert.Contains("No recommendation", vm.PatchPreview);
+            Assert.Contains(none.Report.WorkloadName, vm.PatchPreview);
+        }
+
+        // ticked containers take over the preview
+        web.IsSelected = true;
+        Assert.Contains("Deployment/web", vm.PatchPreview);
+        vm.Selected = null;
+        web.IsSelected = false;
+        Assert.Equal("", vm.PatchPreview);
+    }
+
+    [AvaloniaFact]
     public async Task Apply_patches_the_workload_after_confirmation_and_triggers_reload()
     {
         var (h, ws, vm) = await OpenAsync();

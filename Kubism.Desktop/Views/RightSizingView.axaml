@@ -165,6 +165,7 @@
           <TextBlock Classes="h2" TextWrapping="Wrap"><Run Text="{Binding Selected.Workload}" /><Run Text=" / " /><Run Text="{Binding Selected.Container}" /></TextBlock>
           <TextBlock Text="CPU over the window (request orange)" FontSize="11" Classes="muted" />
           <c:Sparkline Height="64" Values="{Binding CpuSeries}" Request="{Binding Selected.CpuRequestV}" Limit="{Binding Selected.CpuLimitV}" />
+          <TextBlock Text="{Binding SeriesNote}" FontSize="11" Classes="muted" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Column="1" Spacing="4">
           <TextBlock FontSize="11" Classes="muted" TextWrapping="Wrap"><Run Text="OOMKills " /><Run Text="{Binding Selected.Report.OomKills}" /><Run Text="  restarts " /><Run Text="{Binding Selected.Report.Restarts}" /><Run Text="  throttled " /><Run Text="{Binding Selected.Report.ThrottledRatio, StringFormat='{}{0:P0}'}" /></TextBlock>

@@ -139,6 +139,7 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
     [ObservableProperty] private int _underCount, _noRequestCount;
     [ObservableProperty] private string _connectionResult = "";
     [ObservableProperty] private IReadOnlyList<double> _cpuSeries = [];
+    [ObservableProperty] private string _seriesNote = "";
     [ObservableProperty] private IReadOnlyList<double> _memorySeries = [];
     public int SelectedCount => Rows.Count(r => r.IsSelected);
 
@@ -231,11 +232,28 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
 
     partial void OnSelectedChanged(ContainerRowViewModel? value)
     {
-        if (value is null || _history is null) { CpuSeries = []; MemorySeries = []; return; }
+        UpdatePreview();
+        if (value is null || _history is null) { CpuSeries = []; MemorySeries = []; SeriesNote = value is null ? "" : "No usage history for this container."; return; }
         var pts = _history.Series.Where(s => s.Key.Namespace == value.Report.Namespace && s.Key.Container == value.Report.Container
                                               && s.Key.Pod.StartsWith(value.Report.WorkloadName)).SelectMany(s => s.Points).GroupBy(p => p.Time).OrderBy(g => g.Key).ToList();
         CpuSeries = pts.Select(g => g.Average(p => p.CpuCores)).ToList();
         MemorySeries = pts.Select(g => g.Average(p => p.MemoryBytes)).ToList();
+        SeriesNote = pts.Count < 2 ? "No usage history for this container in the window." : "";
+    }
+
+    /// <summary>
+    /// The preview follows what the user is looking at: the ticked containers when there are some, else the clicked one. A clicked container
+    /// with no recommendation (not enough data) says so instead of leaving the previous container's patch on screen.
+    /// </summary>
+    private void UpdatePreview()
+    {
+        var ticked = SelectedReports();
+        if (ticked.Count > 0) { PatchPreview = string.Join("\n", ticked.Select(c => $"{c.Namespace}/{c.WorkloadKind}/{c.WorkloadName}\n{Snippets.Diff(c)}")); return; }
+        if (Selected is not { } s) { PatchPreview = ""; return; }
+        var c = s.Report;
+        PatchPreview = c.Recommended is null
+            ? $"{c.Namespace}/{c.WorkloadKind}/{c.WorkloadName}\n  container: {c.Container}\n  No recommendation: {s.Verdict.ToLowerInvariant()} (data coverage {c.Coverage:P0}, {c.DataHours:0.#} h)."
+            : $"{c.Namespace}/{c.WorkloadKind}/{c.WorkloadName}\n{Snippets.Diff(c)}";
     }
 
     private List<ContainerReport> SelectedReports() => Rows.Where(r => r.IsSelected && r.Report.Recommended is not null).Select(r => r.Report).ToList();
@@ -243,8 +261,8 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
     private void UpdateSelection()
     {
         OnPropertyChanged(nameof(SelectedCount));
+        UpdatePreview();
         var sel = SelectedReports();
-        PatchPreview = string.Join("\n", sel.Select(c => $"{c.Namespace}/{c.WorkloadKind}/{c.WorkloadName}\n{Snippets.Diff(c)}"));
         ApplyBlockedReason = null;
         if (sel.Count == 0) { ApplyBlockedReason = "Select containers to apply"; return; }
         var managed = sel.FirstOrDefault(c => c.GitOpsManager is not null);
