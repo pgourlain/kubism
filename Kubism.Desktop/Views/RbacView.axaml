@@ -41,7 +41,14 @@
           <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
             <c:RbacGraphControl Chain="{Binding Chain}" SelectedNode="{Binding SelectedNode}" NodeCommand="{Binding NodeClickedCommand}" HorizontalAlignment="Left" VerticalAlignment="Top" AutomationProperties.Name="RBAC chain graph" />
           </ScrollViewer>
-          <ItemsControl Grid.Row="3" ItemsSource="{Binding NodeLines}" MaxHeight="130" />
+          <!-- A role can hold dozens of rules: the details scroll instead of being cut off. -->
+          <ScrollViewer Grid.Row="3" MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Selected node details">
+            <ItemsControl ItemsSource="{Binding NodeLines}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="x:String"><TextBlock Text="{Binding}" TextWrapping="Wrap" /></DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
         </Grid>
       </TabItem>
 
