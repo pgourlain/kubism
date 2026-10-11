@@ -301,6 +301,49 @@ public class UiExplorationTests
     }
 
     [AvaloniaFact]
+    public async Task Back_from_an_object_restores_the_usage_page_as_it_was()
+    {
+        await using var h = await UiHarness.StartAsync();
+        h.Demo.Server.SeedYaml("""
+            {"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"back-secret-1","namespace":"usage-demo"}}
+            ---
+            {"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"back-secret-2","namespace":"usage-demo"}}
+            """);
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.SetSelection(["usage-demo", "default"]);
+        ws.Navigate(ws.FindNav(NavTarget.ConfigUsage)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v && v.Rows.Count > 0, what: "usage");
+        var vm = (UsageViewModel)ws.CurrentContent!;
+        vm.SelectSectionCommand.Execute(1);
+        vm.Filter = "back-secret";
+        vm.UnusedOnly = true;
+        await UiHarness.WaitFor(() => vm.Rows.Count == 2, what: "filtered");
+        vm.Selected = vm.Rows.Single(r => r.Row.Name == "back-secret-2");
+
+        vm.OpenSelectedCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Kind.Kind == "Secret", what: "secret list");
+        Assert.NotNull(ws.BackTarget);
+        Assert.Equal(["usage-demo"], ws.Namespaces.Selected);   // the jump narrowed the namespaces
+
+        ws.GoBackCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v2 && !ReferenceEquals(v2, vm) && v2.Rows.Count == 2, what: "usage again");
+        var back = (UsageViewModel)ws.CurrentContent!;
+        Assert.Equal(1, back.Section);
+        Assert.Equal("back-secret", back.Filter);
+        Assert.True(back.UnusedOnly);
+        Assert.Equal("back-secret-2", back.Selected?.Row.Name);
+        Assert.Equal(["default", "usage-demo"], ws.Namespaces.Selected.OrderBy(x => x).ToList());
+        Assert.Null(ws.BackTarget);
+        h.Screenshot("45-usage-back");
+
+        // Any other navigation drops the way back.
+        back.OpenSelectedCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.BackTarget is not null, what: "back target");
+        ws.Navigate(ws.FindNav(NavTarget.Overview)!);
+        Assert.Null(ws.BackTarget);
+    }
+
+    [AvaloniaFact]
     public async Task Security_page_audits_workloads_rbac_and_certificates()
     {
         await using var h = await UiHarness.StartAsync();

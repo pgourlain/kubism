@@ -108,6 +108,16 @@ public sealed partial class NamespaceSelectorViewModel : ViewModelBase, IAsyncDi
         OnChoiceToggled();
     }
 
+    /// <summary>Restores an earlier selection exactly (several namespaces, or none = all).</summary>
+    public void SetSelection(IReadOnlyList<string> names)
+    {
+        _suppress = true;
+        foreach (var n in names) Add(n);
+        foreach (var c in Choices) c.IsSelected = names.Contains(c.Name);
+        _suppress = false;
+        OnChoiceToggled();
+    }
+
     /// <summary>When listing namespaces is forbidden the user types namespaces; they're stored per cluster.</summary>
     [CommunityToolkit.Mvvm.Input.RelayCommand]
     private void AddManual() => AddManual(ManualText);

@@ -9,6 +9,9 @@ namespace Kubism.Desktop.ViewModels;
 
 public enum UsageMode { Config, Storage, Access, Network }
 
+/// <summary>Everything needed to put a Usage page back as the user left it.</summary>
+public sealed record UsageState(int Section, string Filter, bool UnusedOnly, string? SelectedKey, IReadOnlyList<string> Namespaces);
+
 public sealed record UsageRowViewModel(UsageRow Row)
 {
     public string Kind => Row.Kind;
@@ -57,8 +60,12 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     private readonly WorkspaceViewModel _ws;
     private readonly CancellationTokenSource _cts = new();
     private ResourceUsage? _usage;
+    private string? _restoreKey;
 
-    public UsageViewModel(WorkspaceViewModel ws, UsageMode mode)
+    /// <summary>Raised with the row to bring into view after a restore, so the grid scrolls back to where the user was.</summary>
+    public event Action<object>? RevealRequested;
+
+    public UsageViewModel(WorkspaceViewModel ws, UsageMode mode, UsageState? restore = null)
     {
         _ws = ws; Mode = mode;
         Sections = mode switch
@@ -69,6 +76,12 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
             _ => ["Ingress classes", "Broken references"],
         };
         for (var i = 0; i < Sections.Count; i++) Tabs.Add(new SectionTab(Sections[i], i) { IsActive = i == 0 });
+        if (restore is not null)
+        {
+            _restoreKey = restore.SelectedKey;
+            Filter = restore.Filter; UnusedOnly = restore.UnusedOnly;
+            if (restore.Section >= 0 && restore.Section < Sections.Count) Section = restore.Section;
+        }
         _ = LoadAsync();
     }
 
@@ -171,6 +184,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
                 var deadKeys = rows.Sum(r => r.DeadKeys.Count);
                 Summary = $"{rows.Count(r => r.Status == UsageStatus.Used)} used · {rows.Count(r => r.Status == UsageStatus.Unused)} not referenced · {rows.Count(r => r.Status == UsageStatus.External)} managed by the cluster · {usage.Broken.Count(b => BrokenKinds().Contains(b.TargetKind))} broken reference(s){(Mode == UsageMode.Config ? $" · {deadKeys} key(s) nobody reads · {usage.Dangling.Count} HPA/PDB problem(s)" : "")}. Selected namespaces only.";
                 ShowResults();
+                RestoreSelection();
             });
         }
         catch (OperationCanceledException) { }
@@ -222,19 +236,45 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
         foreach (var r in _usage.Rows.Where(r => kinds.Contains(r.Kind) && (!UnusedOnly || r.Status == UsageStatus.Unused) && (Match(r.Display) || Match(r.UsedBy)))) Rows.Add(new UsageRowViewModel(r));
     }
 
+    private string? SelectionKey() =>
+        ShowBroken ? SelectedBroken is { } b ? $"{b.Consumer}|{b.Target}" : null
+        : ShowDangling ? SelectedDangling?.Display
+        : ShowDeadKeys ? SelectedDeadKey is { } d ? $"{d.ConfigMap}|{d.Key}" : null
+        : Selected is { } r ? $"{r.Kind}|{r.Display}" : null;
+
+    private void RestoreSelection()
+    {
+        var key = _restoreKey;
+        _restoreKey = null;
+        if (key is null) return;
+        object? found = null;
+        if (ShowBroken) { var x = BrokenRows.FirstOrDefault(b => $"{b.Consumer}|{b.Target}" == key); SelectedBroken = x; found = x; }
+        else if (ShowDangling) { var x = DanglingRows.FirstOrDefault(d => d.Display == key); SelectedDangling = x; found = x; }
+        else if (ShowDeadKeys) { var x = DeadKeyRows.FirstOrDefault(d => $"{d.ConfigMap}|{d.Key}" == key); SelectedDeadKey = x; found = x; }
+        else { var x = Rows.FirstOrDefault(r => $"{r.Kind}|{r.Display}" == key); Selected = x; found = x; }
+        if (found is not null) RevealRequested?.Invoke(found);
+    }
+
     [RelayCommand]
     private void OpenSelected()
     {
-        if (ShowBroken && SelectedBroken?.Ref.Consumer is { } c) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
-        else if (ShowDangling && SelectedDangling?.Finding is { } d) _ws.OpenGraphNode(new GraphNode(d.Display, d.Kind, d.Namespace, d.Name));
-        else if (ShowDeadKeys && SelectedDeadKey?.Map is { } m) _ws.OpenGraphNode(new GraphNode(m.Display, m.Kind, m.Namespace, m.Name));
-        else if (Selected?.Row is { } r) _ws.OpenGraphNode(new GraphNode(r.Display, r.Kind, r.Namespace, r.Name));
+        GraphNode? target = null;
+        if (ShowBroken && SelectedBroken?.Ref.Consumer is { } c) target = new GraphNode(c.Display, c.Kind, c.Namespace, c.Name);
+        else if (ShowDangling && SelectedDangling?.Finding is { } d) target = new GraphNode(d.Display, d.Kind, d.Namespace, d.Name);
+        else if (ShowDeadKeys && SelectedDeadKey?.Map is { } m) target = new GraphNode(m.Display, m.Kind, m.Namespace, m.Name);
+        else if (Selected?.Row is { } r) target = new GraphNode(r.Display, r.Kind, r.Namespace, r.Name);
+        if (target is null) return;
+        // Captured before the jump (it changes the namespace selection): "Back" puts this page back exactly as it is now.
+        var state = new UsageState(Section, Filter, UnusedOnly, SelectionKey(), [.. _ws.Namespaces.Selected]);
+        _ws.OpenGraphNode(target, new WorkspaceViewModel.ReturnPoint($"Back to {Title}", () => _ws.RestoreUsage(Mode, state)));
     }
 
     [RelayCommand]
     private void OpenConsumer(Consumer? c)
     {
-        if (c is not null) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
+        if (c is null) return;
+        var state = new UsageState(Section, Filter, UnusedOnly, SelectionKey(), [.. _ws.Namespaces.Selected]);
+        _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name), new WorkspaceViewModel.ReturnPoint($"Back to {Title}", () => _ws.RestoreUsage(Mode, state)));
     }
 
     public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }

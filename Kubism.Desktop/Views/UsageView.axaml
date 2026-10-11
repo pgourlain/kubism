@@ -6,6 +6,13 @@
              xmlns:c="using:Kubism.Desktop.Controls"
              x:Class="Kubism.Desktop.Views.UsageView"
              x:DataType="vm:UsageViewModel">
+  <UserControl.Styles>
+    <!-- A cell's text is cut with an ellipsis when it does not fit: the full text is the tooltip. -->
+    <Style Selector="DataGridCell TextBlock">
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="ToolTip.Tip" Value="{Binding $self.Text}" />
+    </Style>
+  </UserControl.Styles>
   <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="16" RowSpacing="6">
     <Grid ColumnDefinitions="*,Auto">
       <StackPanel>
@@ -37,7 +44,7 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
     <Grid Grid.Row="4" RowDefinitions="*,Auto" RowSpacing="6">
-      <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowRows}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" CanUserSortColumns="True" AutomationProperties.Name="Usage">
+      <DataGrid x:Name="RowsGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowRows}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Usage">
                     <DataGrid.Columns>
                       <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="StatusText">
                         <DataGridTemplateColumn.CellTemplate>
@@ -54,20 +61,20 @@
                       <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:UsageRowViewModel" Width="2*" />
                     </DataGrid.Columns>
                   </DataGrid>
-                  <DataGrid ItemsSource="{Binding DeadKeyRows}" SelectedItem="{Binding SelectedDeadKey}" IsVisible="{Binding ShowDeadKeys}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Unread keys">
+                  <DataGrid x:Name="DeadGrid" ItemsSource="{Binding DeadKeyRows}" SelectedItem="{Binding SelectedDeadKey}" IsVisible="{Binding ShowDeadKeys}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Unread keys">
         <DataGrid.Columns>
           <DataGridTextColumn Header="ConfigMap" Binding="{Binding ConfigMap}" x:DataType="vm:DeadKeyRow" Width="2*" />
           <DataGridTextColumn Header="Key nobody reads" Binding="{Binding Key}" x:DataType="vm:DeadKeyRow" Width="2*" />
           <DataGridTextColumn Header="Read by" Binding="{Binding ReadBy}" x:DataType="vm:DeadKeyRow" Width="3*" />
         </DataGrid.Columns>
       </DataGrid>
-      <DataGrid ItemsSource="{Binding DanglingRows}" SelectedItem="{Binding SelectedDangling}" IsVisible="{Binding ShowDangling}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Autoscalers and disruption budgets">
+      <DataGrid x:Name="DanglingGrid" ItemsSource="{Binding DanglingRows}" SelectedItem="{Binding SelectedDangling}" IsVisible="{Binding ShowDangling}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Autoscalers and disruption budgets">
         <DataGrid.Columns>
           <DataGridTextColumn Header="Object" Binding="{Binding Display}" x:DataType="vm:DanglingRow" Width="2*" />
           <DataGridTextColumn Header="Problem" Binding="{Binding Problem}" x:DataType="vm:DanglingRow" Width="5*" />
         </DataGrid.Columns>
       </DataGrid>
-      <DataGrid ItemsSource="{Binding BrokenRows}" SelectedItem="{Binding SelectedBroken}" IsVisible="{Binding ShowBroken}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Broken references">
+      <DataGrid x:Name="BrokenGrid" ItemsSource="{Binding BrokenRows}" SelectedItem="{Binding SelectedBroken}" IsVisible="{Binding ShowBroken}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Broken references">
                     <DataGrid.Columns>
                       <DataGridTextColumn Header="Held by" Binding="{Binding Consumer}" x:DataType="vm:BrokenRow" Width="2*" />
                       <DataGridTextColumn Header="Through" Binding="{Binding How}" x:DataType="vm:BrokenRow" Width="*" />

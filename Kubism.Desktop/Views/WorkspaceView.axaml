@@ -55,7 +55,12 @@
 
       <!-- Content + dock -->
       <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto" ClipToBounds="True">
-        <ContentControl Grid.Row="0" Content="{Binding CurrentContent}" />
+        <Grid Grid.Row="0" RowDefinitions="Auto,*">
+          <Border Grid.Row="0" IsVisible="{Binding HasBack}" Padding="12,6" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="0,0,0,1">
+            <Button Content="{Binding BackLabel}" Command="{Binding GoBackCommand}" HorizontalAlignment="Left" ToolTip.Tip="Return to the page you came from, as you left it" AutomationProperties.Name="Back" />
+          </Border>
+          <ContentControl Grid.Row="1" Content="{Binding CurrentContent}" />
+        </Grid>
         <Border Name="DockHandle" Grid.Row="1" Height="6" Cursor="SizeNorthSouth" IsVisible="{Binding Dock.IsOpen}" Background="{DynamicResource KubismBorderBrush}" AutomationProperties.Name="Resize bottom panel" />
         <v:DockView Grid.Row="2" DataContext="{Binding Dock}" IsVisible="{Binding IsOpen}" Height="{Binding Height, Mode=TwoWay}" />
       </Grid>

@@ -173,9 +173,42 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         catch (Exception) { /* dimming is cosmetic */ }
     }
 
+    /// <summary>Where "Back" leads after a page sent the user to an object: <see cref="Restore"/> puts the page back as it was.</summary>
+    public sealed record ReturnPoint(string Label, Action Restore);
+
+    [ObservableProperty] private ReturnPoint? _backTarget;
+    public bool HasBack => BackTarget is not null;
+    public string BackLabel => BackTarget is null ? "" : "← " + BackTarget.Label;
+    partial void OnBackTargetChanged(ReturnPoint? value) { OnPropertyChanged(nameof(HasBack)); OnPropertyChanged(nameof(BackLabel)); }
+
+    [CommunityToolkit.Mvvm.Input.RelayCommand]
+    private void GoBack()
+    {
+        var back = BackTarget;
+        BackTarget = null;
+        back?.Restore();
+    }
+
+    private UsageState? _pendingUsage;
+    private UsageState? TakeUsageState() { var s = _pendingUsage; _pendingUsage = null; return s; }
+
+    /// <summary>Comes back to a Usage page with its section, filter, selection and the namespaces it was showing.</summary>
+    public void RestoreUsage(UsageMode mode, UsageState state)
+    {
+        var node = FindNav(mode switch { UsageMode.Config => NavTarget.ConfigUsage, UsageMode.Storage => NavTarget.StorageUsage, UsageMode.Access => NavTarget.AccessUsage, _ => NavTarget.NetworkUsage });
+        if (node is null) return;
+        Details.Close();
+        Namespaces.SetSelection(state.Namespaces);
+        _pendingUsage = state;
+        if (SelectedNav == node) CurrentContent = NewUsage(mode); else SelectedNav = node;
+    }
+
+    private UsageViewModel NewUsage(UsageMode mode) => new(this, mode, TakeUsageState());
+
     partial void OnSelectedNavChanged(NavNode? value)
     {
         if (value is null || value.Target == NavTarget.Group) return;
+        BackTarget = null;   // any navigation drops the way back; OpenGraphNode sets it again after it navigated
         if (CurrentContent is ResourceListViewModel cur && value.Kind is not null && cur.Kind == value.Kind) return;
         _ = SwapContentAsync(value);
     }
@@ -215,10 +248,10 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Compare => new CompareViewModel(this),
             NavTarget.Security => new SecurityViewModel(this),
             NavTarget.Rbac => new RbacViewModel(this),
-            NavTarget.ConfigUsage => new UsageViewModel(this, UsageMode.Config),
-            NavTarget.StorageUsage => new UsageViewModel(this, UsageMode.Storage),
-            NavTarget.AccessUsage => new UsageViewModel(this, UsageMode.Access),
-            NavTarget.NetworkUsage => new UsageViewModel(this, UsageMode.Network),
+            NavTarget.ConfigUsage => NewUsage(UsageMode.Config),
+            NavTarget.StorageUsage => NewUsage(UsageMode.Storage),
+            NavTarget.AccessUsage => NewUsage(UsageMode.Access),
+            NavTarget.NetworkUsage => NewUsage(UsageMode.Network),
             NavTarget.NetworkGraph => new NetworkViewModel(this),
             NavTarget.GitOps => new GitOpsViewModel(this),
             NavTarget.Capacity => new CapacityViewModel(this),
@@ -379,7 +412,13 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
 
     /// <summary>Opens Compare on this object's kind and namespace, against another connected cluster (or another namespace of this one when it is the only cluster).</summary>
     /// <summary>Opens the object a graph box stands for: its list filtered on its name, or the Helm page for a release.</summary>
-    public void OpenGraphNode(Core.Views.GraphNode node)
+    public void OpenGraphNode(Core.Views.GraphNode node, ReturnPoint? back = null)
+    {
+        OpenGraphNodeCore(node);
+        BackTarget = back;
+    }
+
+    private void OpenGraphNodeCore(Core.Views.GraphNode node)
     {
         if (node.Kind == Core.Helm.HelmReleaseInfo.Kind && node.Namespace is { } hns)
         {
