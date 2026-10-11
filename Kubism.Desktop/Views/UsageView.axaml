@@ -43,7 +43,7 @@
                         </DataGridTemplateColumn.CellTemplate>
                       </DataGridTemplateColumn>
                       <DataGridTextColumn Header="Name" Binding="{Binding Display}" x:DataType="vm:UsageRowViewModel" Width="1.5*" />
-                      <DataGridTextColumn Header="Used by" Binding="{Binding Count}" x:DataType="vm:UsageRowViewModel" Width="80" />
+                      <DataGridTextColumn Header="Used by" Binding="{Binding Count}" x:DataType="vm:UsageRowViewModel" Width="100" />
                       <DataGridTextColumn Header="Consumers" Binding="{Binding UsedBy}" x:DataType="vm:UsageRowViewModel" Width="3*" />
                       <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:UsageRowViewModel" Width="2*" />
                     </DataGrid.Columns>
