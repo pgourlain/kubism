@@ -29,6 +29,11 @@ public static class MenuSpecs
             MenuSpec.Sep(),
             new("Quit".T(), () => window.Close(), new KeyGesture(Key.Q, Cmd)),
         ]),
+        new("Go".T(), Children:
+        [
+            new("Back".T(), () => vm.SelectedWorkspace?.GoBack(), new KeyGesture(Key.OemOpenBrackets, Cmd)),
+            new("Forward".T(), () => vm.SelectedWorkspace?.GoForward(), new KeyGesture(Key.OemCloseBrackets, Cmd)),
+        ]),
         new("View".T(), Children:
         [
             new("Command palette".T(), () => vm.OpenPaletteCommand.Execute(null), new KeyGesture(Key.K, Cmd)),

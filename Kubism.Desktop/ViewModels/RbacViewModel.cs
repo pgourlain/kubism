@@ -38,7 +38,10 @@ public sealed record WhoCanRow(WhoCanEntry Entry)
 /// binding + role + rule behind each answer. Read-only: nothing here writes to the cluster. The graph follows the RBAC objects live
 /// (<see cref="RbacStore"/>) and says so when some kinds could not be read.
 /// </summary>
-public sealed partial class RbacViewModel : ViewModelBase, IClosable
+/// <summary>What the RBAC graph page showed when the user left it (the graph tab and its filters; a subject view returns to the graph).</summary>
+public sealed record RbacState(string Namespace, string Kind, bool RiskyOnly, string SubjectSearch, string? SelectedNodeId);
+
+public sealed partial class RbacViewModel : ViewModelBase, IClosable, Navigation.INavigablePage
 {
     public const int ChainTab = 0, SubjectTab = 1, ResourceTab = 2;
     private const string AllNamespaces = "All namespaces", ClusterWide = "(cluster-wide)";
@@ -53,9 +56,18 @@ public sealed partial class RbacViewModel : ViewModelBase, IClosable
     private IReadOnlyList<string> _extraGroups = [];
     private bool _suppress;
 
-    public RbacViewModel(WorkspaceViewModel ws)
+    private string? _restoreNodeId;
+
+    public object? CaptureState() => new RbacState(SelectedNamespace, SelectedKind, RiskyOnly, SubjectSearch, SelectedNode?.Id);
+
+    public RbacViewModel(WorkspaceViewModel ws, RbacState? restore = null)
     {
         _ws = ws;
+        if (restore is not null)
+        {
+            _selectedNamespace = restore.Namespace; _selectedKind = restore.Kind; _riskyOnly = restore.RiskyOnly; _subjectSearch = restore.SubjectSearch;
+            _restoreNodeId = restore.SelectedNodeId;
+        }
         _verifier = new RbacVerifier(ws.Session.Transport, ws.Session.Access);
         try { _store = new RbacStore(ws.Session.Cache); }
         catch (Exception ex) { Error = ex.Message; return; }
@@ -173,7 +185,8 @@ public sealed partial class RbacViewModel : ViewModelBase, IClosable
             SubjectQuery = string.IsNullOrWhiteSpace(SubjectSearch) ? null : SubjectSearch,
         };
         var chain = RbacChain.Build(_graph, filter);
-        var keep = SelectedNode?.Id;
+        var keep = SelectedNode?.Id ?? _restoreNodeId;
+        _restoreNodeId = null;
         Chain = chain;
         SelectedNode = chain.Nodes.FirstOrDefault(n => n.Id == keep);
         var bindings = chain.Nodes.Count(n => n.Kind == RbacNodeKind.Binding);

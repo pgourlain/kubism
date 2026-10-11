@@ -26,16 +26,28 @@ public sealed record RouteRowVm(NetworkRouteRow Row)
 /// ports of every hop and what does not line up. Read-only. Follows the cluster live (<see cref="NetworkStore"/>) and uses the workspace's namespace
 /// selection (the same picker as the lists); the controller of another namespace stays drawn as context so a path is never cut.
 /// </summary>
-public sealed partial class NetworkViewModel : ViewModelBase, IClosable
+/// <summary>What the Network graph page showed when the user left it.</summary>
+public sealed record NetworkState(int Tab, string Exposure, bool ProblemsOnly, bool IncludeInternal, bool ShowNodes, string Search, string? SelectedNodeId);
+
+public sealed partial class NetworkViewModel : ViewModelBase, IClosable, Navigation.INavigablePage
 {
     private readonly WorkspaceViewModel _ws;
     private readonly CancellationTokenSource _cts = new();
     private readonly NetworkStore? _store;
     private NetworkGraph _graph = NetworkGraph.Build([], [], [], [], []);
 
-    public NetworkViewModel(WorkspaceViewModel ws)
+    private string? _restoreNodeId;
+
+    public object? CaptureState() => new NetworkState(Tab, SelectedExposure, ProblemsOnly, IncludeInternal, ShowNodes, Search, SelectedNode?.Id);
+
+    public NetworkViewModel(WorkspaceViewModel ws, NetworkState? restore = null)
     {
         _ws = ws;
+        if (restore is not null)
+        {
+            _tab = restore.Tab; _selectedExposure = restore.Exposure; _problemsOnly = restore.ProblemsOnly; _includeInternal = restore.IncludeInternal; _showNodes = restore.ShowNodes; _search = restore.Search;
+            _restoreNodeId = restore.SelectedNodeId;
+        }
         try { _store = new NetworkStore(ws.Session.Cache, ws.Session.Transport); }
         catch (Exception ex) { Error = ex.Message; IsLoading = false; return; }
         _store.Changed += g => _ws.Ui.Post(() => Apply(g));
@@ -107,7 +119,8 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable
             ProblemsOnly = ProblemsOnly, IncludeInternalServices = IncludeInternal, ShowNodes = ShowNodes, Search = string.IsNullOrWhiteSpace(Search) ? null : Search,
         };
         var v = _graph.View(filter);
-        var keep = SelectedNode?.Id;
+        var keep = SelectedNode?.Id ?? _restoreNodeId;
+        _restoreNodeId = null;
         View = v;
         SelectedNode = v.Nodes.FirstOrDefault(n => n.Id == keep);
         ViewSummary = v.Nodes.Count == 0

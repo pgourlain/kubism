@@ -56,8 +56,32 @@
       <!-- Content + dock -->
       <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto" ClipToBounds="True">
         <Grid Grid.Row="0" RowDefinitions="Auto,*">
-          <Border Grid.Row="0" IsVisible="{Binding HasBack}" Padding="12,6" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="0,0,0,1">
-            <Button Content="{Binding BackLabel}" Command="{Binding GoBackCommand}" HorizontalAlignment="Left" ToolTip.Tip="Return to the page you came from, as you left it" AutomationProperties.Name="Back" />
+          <!-- Navigation: back / forward / history, and where the user is -->
+          <Border Grid.Row="0" Padding="8,4" BorderBrush="{DynamicResource KubismBorderBrush}" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*" ColumnSpacing="4">
+              <Button Grid.Column="0" Padding="9,4" Command="{Binding GoBackCommand}" IsEnabled="{Binding CanGoBack}" ToolTip.Tip="{Binding BackTip}" AutomationProperties.Name="Back">
+                <Path Width="14" Height="14" Stretch="Uniform" Stroke="{DynamicResource KubismMutedBrush}" StrokeThickness="2" StrokeLineCap="Round" StrokeJoin="Round" Data="M15,5 L8,12 L15,19" />
+              </Button>
+              <Button Grid.Column="1" Padding="9,4" Command="{Binding GoForwardCommand}" IsEnabled="{Binding CanGoForward}" ToolTip.Tip="{Binding ForwardTip}" AutomationProperties.Name="Forward">
+                <Path Width="14" Height="14" Stretch="Uniform" Stroke="{DynamicResource KubismMutedBrush}" StrokeThickness="2" StrokeLineCap="Round" StrokeJoin="Round" Data="M9,5 L16,12 L9,19" />
+              </Button>
+              <Button x:Name="HistoryButton" Grid.Column="2" Padding="7,4" ToolTip.Tip="History" AutomationProperties.Name="History">
+                <Path Width="12" Height="12" Stretch="Uniform" Stroke="{DynamicResource KubismMutedBrush}" StrokeThickness="2" StrokeLineCap="Round" StrokeJoin="Round" Data="M6,9 L12,15 L18,9" />
+                <Button.Flyout>
+                  <Flyout Placement="BottomEdgeAlignedLeft">
+                    <ItemsControl x:Name="HistoryList" ItemsSource="{Binding HistoryItems}" MinWidth="220">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:HistoryItem">
+                          <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0" Content="{Binding Title}" FontWeight="{Binding IsCurrent, Converter={x:Static app:Converters.BoolToBold}}"
+                                  Command="{Binding $parent[ItemsControl].((vm:WorkspaceViewModel)DataContext).GoToHistoryItemCommand}" CommandParameter="{Binding}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+              <TextBlock Grid.Column="3" Text="{Binding Crumbs}" Classes="muted" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis" AutomationProperties.Name="Location" />
+            </Grid>
           </Border>
           <ContentControl Grid.Row="1" Content="{Binding CurrentContent}" />
         </Grid>

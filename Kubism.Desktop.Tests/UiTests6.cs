@@ -33,7 +33,13 @@ public class UiExplorationTests
 
         d.OpenGraphNodeCommand.Execute(g.Nodes.First(n => n.Kind == "Deployment"));
         await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l2 && l2.Kind.Kind == "Deployment", what: "deployments list");
-        Assert.Equal("web", ((ResourceListViewModel)ws.CurrentContent!).Filter);
+        var deployments = (ResourceListViewModel)ws.CurrentContent!;
+        Assert.Equal("", deployments.Filter);   // the object is opened, the list is not filtered on its name
+        await UiHarness.WaitFor(() => deployments.SelectedRow?.Name == "web", what: "deployment selected");
+
+        // A click in the graph is history: Back returns to the pod that was open.
+        ws.GoBackCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l3 && l3.Kind.Kind == "Pod" && l3.SelectedRow?.Name.StartsWith("web-") == true, what: "back on the pod");
     }
 
     [AvaloniaFact]
@@ -319,11 +325,16 @@ public class UiExplorationTests
         vm.UnusedOnly = true;
         await UiHarness.WaitFor(() => vm.Rows.Count == 2, what: "filtered");
         vm.Selected = vm.Rows.Single(r => r.Row.Name == "back-secret-2");
+        Assert.False(ws.CanGoForward);
 
         vm.OpenSelectedCommand.Execute(null);
         await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Kind.Kind == "Secret", what: "secret list");
-        Assert.NotNull(ws.BackTarget);
+        var list = (ResourceListViewModel)ws.CurrentContent!;
+        Assert.True(ws.CanGoBack);
         Assert.Equal(["usage-demo"], ws.Namespaces.Selected);   // the jump narrowed the namespaces
+        Assert.Equal("", list.Filter);                           // the object is selected, the list is not filtered on its name
+        await UiHarness.WaitFor(() => list.SelectedRow?.Name == "back-secret-2" && ws.Details.IsOpen, what: "object open in the details panel " + list.SelectedRow?.Name + " rows=" + list.Rows.Count + " live=" + list.IsLive + " details=" + ws.Details.IsOpen + " cur=" + (ReferenceEquals(ws.CurrentContent, list)));
+        Assert.Contains("back-secret-2", ws.Crumbs);
 
         ws.GoBackCommand.Execute(null);
         await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v2 && !ReferenceEquals(v2, vm) && v2.Rows.Count == 2, what: "usage again");
@@ -333,14 +344,47 @@ public class UiExplorationTests
         Assert.True(back.UnusedOnly);
         Assert.Equal("back-secret-2", back.Selected?.Row.Name);
         Assert.Equal(["default", "usage-demo"], ws.Namespaces.Selected.OrderBy(x => x).ToList());
-        Assert.Null(ws.BackTarget);
+        Assert.False(ws.Details.IsOpen);
+        Assert.True(ws.CanGoForward);
         h.Screenshot("45-usage-back");
 
-        // Any other navigation drops the way back.
-        back.OpenSelectedCommand.Execute(null);
-        await UiHarness.WaitFor(() => ws.BackTarget is not null, what: "back target");
+        // Forward goes to the object again, with it open.
+        ws.GoForwardCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l2 && l2.Kind.Kind == "Secret" && l2.SelectedRow?.Name == "back-secret-2" && ws.Details.IsOpen, what: "forward to the object");
+        Assert.Equal(["usage-demo"], ws.Namespaces.Selected);
+        Assert.False(ws.CanGoForward);
+        h.Screenshot("46-history-toolbar");
+
+        // Going somewhere new while behind drops what was ahead.
+        ws.GoBackCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel, what: "usage third time");
         ws.Navigate(ws.FindNav(NavTarget.Overview)!);
-        Assert.Null(ws.BackTarget);
+        Assert.False(ws.CanGoForward);
+    }
+
+    [AvaloniaFact]
+    public async Task Sidebar_clicks_are_history_and_a_filter_is_restored_on_a_list()
+    {
+        await using var h = await UiHarness.StartAsync();
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.SelectAll();
+        ws.Navigate(ws.FindNav(NavTarget.Overview)!);
+        var pods = ws.NavRoots.SelectMany(n => WorkspaceViewModel.Flatten([n])).First(n => n.Kind?.Kind == "Pod");
+        ws.Navigate(pods);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Rows.Count > 0, what: "pods");
+        var list = (ResourceListViewModel)ws.CurrentContent!;
+        list.Filter = "web";
+        list.SortColumn = 0; list.SortDescending = true;
+        ws.Navigate(ws.FindNav(NavTarget.Capacity)!);
+        Assert.Equal(["Overview", "Pods", "Capacity"], ws.History.Entries.Select(e => e.Location.Title));
+
+        ws.GoBackCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l2 && !ReferenceEquals(l2, list) && l2.Rows.Count > 0, what: "pods again");
+        var again = (ResourceListViewModel)ws.CurrentContent!;
+        Assert.Equal("web", again.Filter);
+        Assert.Equal(0, again.SortColumn);
+        Assert.True(again.SortDescending);
+        Assert.All(again.Rows, r => Assert.Contains("web", r.Name));
     }
 
     [AvaloniaFact]

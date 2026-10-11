@@ -25,6 +25,7 @@ public static class Converters
     }));
 
     public static readonly IValueConverter SafetyBrush = new FuncConverter<bool, IBrush?>(isProd => Brush(isProd ? "KubismProductionBrush" : "KubismReadOnlyBrush"));
+    public static readonly IValueConverter BoolToBold = new FuncConverter<bool, Avalonia.Media.FontWeight>(b => b ? Avalonia.Media.FontWeight.Bold : Avalonia.Media.FontWeight.Normal);
     public static readonly IValueConverter BoolToOpacityDim = new FuncConverter<bool, double>(dim => dim ? 0.45 : 1.0);
     public static readonly IValueConverter NotNull = new FuncConverter<object?, bool>(o => o is not null);
     public static readonly IValueConverter IsNull = new FuncConverter<object?, bool>(o => o is null);

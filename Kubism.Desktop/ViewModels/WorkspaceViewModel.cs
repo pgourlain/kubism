@@ -11,6 +11,7 @@ using Kubism.Core.Forward;
 using Kubism.Core.Logs;
 using Kubism.Core.RightSizing;
 using Kubism.Core.Sessions;
+using Kubism.Desktop.Navigation;
 using Kubism.Desktop.Services;
 
 namespace Kubism.Desktop.ViewModels;
@@ -25,6 +26,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
     public WorkspaceViewModel(MainViewModel main, ClusterSession session)
     {
         Main = main; Session = session;
+        History = new NavigationHistory(CaptureLeave);
+        History.Changed += RefreshHistory;
         Namespaces = new NamespaceSelectorViewModel(session, main.Settings, main.Ui);
         Details = new DetailsViewModel(this);
         Dock = new DockViewModel();
@@ -173,43 +176,103 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         catch (Exception) { /* dimming is cosmetic */ }
     }
 
-    /// <summary>Where "Back" leads after a page sent the user to an object: <see cref="Restore"/> puts the page back as it was.</summary>
-    public sealed record ReturnPoint(string Label, Action Restore);
+    // ---------- history (back / forward) ----------
 
-    [ObservableProperty] private ReturnPoint? _backTarget;
-    public bool HasBack => BackTarget is not null;
-    public string BackLabel => BackTarget is null ? "" : "← " + BackTarget.Label;
-    partial void OnBackTargetChanged(ReturnPoint? value) { OnPropertyChanged(nameof(HasBack)); OnPropertyChanged(nameof(BackLabel)); }
+    public NavigationHistory History { get; }
+    public ObservableCollection<HistoryItem> HistoryItems { get; } = [];
+    private bool _applying;
+    private object? _pendingState;
+    private ObjectRef? _pendingObject;
 
-    [CommunityToolkit.Mvvm.Input.RelayCommand]
-    private void GoBack()
+    public bool CanGoBack => History.CanBack;
+    public bool CanGoForward => History.CanForward;
+    public string BackTip => History.BackEntry is { } b ? $"Back to {b.Location.Title}" : "Back";
+    public string ForwardTip => History.ForwardEntry is { } f ? $"Forward to {f.Location.Title}" : "Forward";
+    public string Crumbs => History.Current?.Location.Crumbs ?? "";
+
+    private LeaveSnapshot CaptureLeave() => new((CurrentContent as INavigablePage)?.CaptureState(), [.. Namespaces.Selected]);
+
+    private void RefreshHistory()
     {
-        var back = BackTarget;
-        BackTarget = null;
-        back?.Restore();
+        HistoryItems.Clear();
+        for (var i = History.Entries.Count - 1; i >= 0 && HistoryItems.Count < 15; i--)
+            HistoryItems.Add(new HistoryItem(History.Entries[i], History.Entries[i].Location.Title, i == History.Index));
+        foreach (var p in new[] { nameof(CanGoBack), nameof(CanGoForward), nameof(BackTip), nameof(ForwardTip), nameof(Crumbs) }) OnPropertyChanged(p);
     }
 
-    private UsageState? _pendingUsage;
-    private UsageState? TakeUsageState() { var s = _pendingUsage; _pendingUsage = null; return s; }
+    private static string KindKey(ResourceKind k) => $"{k.Group}|{k.Resource}";
 
-    /// <summary>Comes back to a Usage page with its section, filter, selection and the namespaces it was showing.</summary>
-    public void RestoreUsage(UsageMode mode, UsageState state)
+    private static List<NavNode>? PathTo(IEnumerable<NavNode> nodes, NavNode target)
     {
-        var node = FindNav(mode switch { UsageMode.Config => NavTarget.ConfigUsage, UsageMode.Storage => NavTarget.StorageUsage, UsageMode.Access => NavTarget.AccessUsage, _ => NavTarget.NetworkUsage });
-        if (node is null) return;
-        Details.Close();
-        Namespaces.SetSelection(state.Namespaces);
-        _pendingUsage = state;
-        if (SelectedNav == node) CurrentContent = NewUsage(mode); else SelectedNav = node;
+        foreach (var n in nodes)
+        {
+            if (ReferenceEquals(n, target) || (n.Target == target.Target && n.Title == target.Title && n.Target != NavTarget.Group && Equals(n.Kind, target.Kind))) return [n];
+            if (PathTo(n.Children, target) is { } inner) { inner.Insert(0, n); return inner; }
+        }
+        return null;
     }
 
-    private UsageViewModel NewUsage(UsageMode mode) => new(this, mode, TakeUsageState());
+    private NavLocation LocationFor(NavNode node)
+    {
+        var crumbs = string.Join(" › ", (PathTo(NavRoots, node) ?? [node]).Select(n => n.Title));
+        var obj = _pendingObject;
+        return new NavLocation(node.Target, node.Kind is { } k ? KindKey(k) : null, [.. Namespaces.Selected], obj,
+            obj is null ? node.Title : $"{node.Title}: {obj.Name}", obj is null ? crumbs : $"{crumbs} › {obj.Name}");
+    }
+
+    private void RecordLocation(NavNode node)
+    {
+        if (!_applying) History.Record(LocationFor(node));
+    }
+
+    private NavNode? NodeFor(NavLocation loc)
+    {
+        if (loc.Target != NavTarget.Kind) return FindNav(loc.Target);
+        var kind = Session.Discovery.Kinds.FirstOrDefault(k => KindKey(k) == loc.KindKey && k.CanList);
+        if (kind is null) return null;
+        return Flatten(NavRoots).FirstOrDefault(n => n.Kind == kind && n.Target == NavTarget.Kind) ?? new NavNode(kind.Kind, NavTarget.Kind, kind);
+    }
+
+    /// <summary>Shows an entry again: its namespaces, its page as the user left it, and the object that was open.</summary>
+    private void ApplyEntry(NavEntry entry)
+    {
+        var loc = entry.Location;
+        var node = NodeFor(loc);
+        if (node is null) { Main.StatusText = $"{loc.Title} is not available any more"; return; }
+        _applying = true;
+        try
+        {
+            Details.Close();
+            Namespaces.SetSelection(loc.Namespaces);
+            _pendingState = entry.State;
+            if (ReferenceEquals(SelectedNav, node)) _ = SwapContentAsync(node); else SelectedNav = node;
+            if (loc.Object is { } o) SelectObject(o);
+        }
+        finally { _pendingState = null; _applying = false; }
+    }
+
+    private void SelectObject(ObjectRef o)
+    {
+        if (o.KindKey == "helm") { if (CurrentContent is HelmViewModel h && o.Namespace is { } ns) h.SelectWhenLoaded(ns, o.Name); }
+        else if (CurrentContent is ResourceListViewModel l) l.SelectWhenLoaded(o.Namespace, o.Name);
+    }
+
+    private T? TakeState<T>() where T : class { var s = _pendingState as T; _pendingState = null; return s; }
+
+    [RelayCommand] public void GoBack() { if (History.Back() is { } e) ApplyEntry(e); }
+    [RelayCommand] public void GoForward() { if (History.Forward() is { } e) ApplyEntry(e); }
+    [RelayCommand] private void GoToHistoryItem(HistoryItem? item)
+    {
+        if (item is null) return;
+        var i = History.Entries.ToList().IndexOf(item.Entry);
+        if (History.GoTo(i) is { } e) ApplyEntry(e);
+    }
 
     partial void OnSelectedNavChanged(NavNode? value)
     {
         if (value is null || value.Target == NavTarget.Group) return;
-        BackTarget = null;   // any navigation drops the way back; OpenGraphNode sets it again after it navigated
-        if (CurrentContent is ResourceListViewModel cur && value.Kind is not null && cur.Kind == value.Kind) return;
+        RecordLocation(value);   // before the swap: the page being left is still the current one when the history captures it
+        if (!_applying && CurrentContent is ResourceListViewModel cur && value.Kind is not null && cur.Kind == value.Kind) return;
         _ = SwapContentAsync(value);
     }
 
@@ -240,19 +303,19 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         CurrentContent = node.Target switch
         {
             NavTarget.Overview => new OverviewViewModel(this),
-            NavTarget.Kind when node.Kind is not null => NewList(node.Kind),
+            NavTarget.Kind when node.Kind is not null => NewList(node.Kind, TakeState<ListState>()),
             NavTarget.RightSizing => new RightSizingViewModel(this),
             NavTarget.Helm => new HelmViewModel(this),
             NavTarget.Activity => new ActivityViewModel(this),
             NavTarget.CreateYaml => new CreateYamlViewModel(this),
             NavTarget.Compare => new CompareViewModel(this),
-            NavTarget.Security => new SecurityViewModel(this),
-            NavTarget.Rbac => new RbacViewModel(this),
-            NavTarget.ConfigUsage => NewUsage(UsageMode.Config),
-            NavTarget.StorageUsage => NewUsage(UsageMode.Storage),
-            NavTarget.AccessUsage => NewUsage(UsageMode.Access),
-            NavTarget.NetworkUsage => NewUsage(UsageMode.Network),
-            NavTarget.NetworkGraph => new NetworkViewModel(this),
+            NavTarget.Security => new SecurityViewModel(this, TakeState<SecurityState>()),
+            NavTarget.Rbac => new RbacViewModel(this, TakeState<RbacState>()),
+            NavTarget.ConfigUsage => new UsageViewModel(this, UsageMode.Config, TakeState<UsageState>()),
+            NavTarget.StorageUsage => new UsageViewModel(this, UsageMode.Storage, TakeState<UsageState>()),
+            NavTarget.AccessUsage => new UsageViewModel(this, UsageMode.Access, TakeState<UsageState>()),
+            NavTarget.NetworkUsage => new UsageViewModel(this, UsageMode.Network, TakeState<UsageState>()),
+            NavTarget.NetworkGraph => new NetworkViewModel(this, TakeState<NetworkState>()),
             NavTarget.GitOps => new GitOpsViewModel(this),
             NavTarget.Capacity => new CapacityViewModel(this),
             _ => null,
@@ -261,9 +324,9 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (old is IClosable c and not DockItemViewModel && !ReferenceEquals(old, CurrentContent)) await c.DisposeAsync();
     }
 
-    private ResourceListViewModel NewList(ResourceKind kind)
+    private ResourceListViewModel NewList(ResourceKind kind, ListState? state = null)
     {
-        var list = new ResourceListViewModel(this, kind);
+        var list = new ResourceListViewModel(this, kind, state);
         list.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(ResourceListViewModel.SelectedRow))
@@ -412,10 +475,12 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
 
     /// <summary>Opens Compare on this object's kind and namespace, against another connected cluster (or another namespace of this one when it is the only cluster).</summary>
     /// <summary>Opens the object a graph box stands for: its list filtered on its name, or the Helm page for a release.</summary>
-    public void OpenGraphNode(Core.Views.GraphNode node, ReturnPoint? back = null)
+    public void OpenGraphNode(Core.Views.GraphNode node)
     {
-        OpenGraphNodeCore(node);
-        BackTarget = back;
+        // The page being left is captured first: opening an object narrows the namespaces, which the capture reads.
+        History.BeginNavigation();
+        try { OpenGraphNodeCore(node); }
+        finally { History.EndNavigation(); _pendingObject = null; }
     }
 
     private void OpenGraphNodeCore(Core.Views.GraphNode node)
@@ -424,17 +489,22 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         {
             var helm = FindNav(NavTarget.Helm);
             if (helm is null) return;
+            _pendingObject = new ObjectRef("helm", hns, node.Name);
             Details.Close();
             Namespaces.Select(hns);
-            if (SelectedNav != helm) SelectedNav = helm;
-            if (CurrentContent is HelmViewModel h) h.SelectWhenLoaded(hns, node.Name);
+            if (SelectedNav != helm) SelectedNav = helm; else RecordLocation(helm);
+            SelectObject(_pendingObject);
             return;
         }
         var kind = Session.Discovery.Kinds.Where(k => k.Kind == node.Kind && k.CanList).OrderBy(k => k.Group.Length == 0 ? 0 : 1).FirstOrDefault();
         if (kind is null) return;
+        // The object is part of the place: Back comes to "this list, this object open", not to a list filtered on its name.
+        _pendingObject = new ObjectRef(KindKey(kind), node.Namespace, node.Name);
         if (node.Namespace is not null) Namespaces.Select(node.Namespace);
+        var before = SelectedNav;
         OpenKind(kind);
-        if (CurrentContent is ResourceListViewModel list) list.Filter = node.Name;
+        if (ReferenceEquals(before, SelectedNav) && SelectedNav is not null) RecordLocation(SelectedNav);   // already on that page: no change event fired
+        SelectObject(_pendingObject);
     }
 
     private async Task CompareObjectAsync(ResourceKind kind, KubeObject o)
@@ -452,7 +522,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (node is null) return;
         Details.Close();
         if (SelectedNav != node) SelectedNav = node;
-        else CurrentContent = new CompareViewModel(this);
+        else { RecordLocation(node); CurrentContent = new CompareViewModel(this); }
         if (CurrentContent is CompareViewModel cmp) await cmp.PrefillAsync(kind, o.Namespace, o.Name, target);
     }
 
@@ -600,6 +670,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
     {
         if (_disposed) return;
         _disposed = true;
+        History.Clear();
         _ageTimer.Dispose();
         if (_sampler is not null) await _sampler.DisposeAsync();
         await Dock.CloseAllAsync();

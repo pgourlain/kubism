@@ -31,7 +31,10 @@ public sealed record CertificateRow(CertificateInfo Info)
 /// (risky bindings and roles, plus the rules a user, group or service account ends up with) and the expiry of TLS certificates.
 /// Each tab loads when first shown.
 /// </summary>
-public sealed partial class SecurityViewModel : ViewModelBase, IClosable
+/// <summary>What the Security page showed when the user left it.</summary>
+public sealed record SecurityState(int Tab, bool HighOnly, string SubjectQuery, string? SelectedKey);
+
+public sealed partial class SecurityViewModel : ViewModelBase, IClosable, Navigation.INavigablePage
 {
     public const int WorkloadsTab = 0, AccessTab = 1, CertificatesTab = 2;
     private static readonly string[] AuditKinds = ["pods", "deployments", "statefulsets", "daemonsets", "jobs", "cronjobs"];
@@ -41,7 +44,23 @@ public sealed partial class SecurityViewModel : ViewModelBase, IClosable
     private List<Finding> _audit = [];
     private RbacAnalysis? _rbac;
 
-    public SecurityViewModel(WorkspaceViewModel ws) { _ws = ws; _ = EnsureLoadedAsync(WorkloadsTab); }
+    private string? _restoreKey;
+
+    public SecurityViewModel(WorkspaceViewModel ws, SecurityState? restore = null)
+    {
+        _ws = ws;
+        if (restore is not null) { _tab = restore.Tab; _highOnly = restore.HighOnly; _subjectQuery = restore.SubjectQuery; _restoreKey = restore.SelectedKey; }
+        _ = EnsureLoadedAsync(Tab);
+    }
+
+    public object? CaptureState() => new SecurityState(Tab, HighOnly, SubjectQuery, Selected is { } f ? $"{f.Finding.Rule}|{f.Display}" : null);
+
+    private void RestoreSelection(IEnumerable<FindingRow> rows)
+    {
+        if (_restoreKey is null) return;
+        var key = _restoreKey; _restoreKey = null;
+        Selected = rows.FirstOrDefault(r => $"{r.Finding.Rule}|{r.Display}" == key);
+    }
 
     public ObservableCollection<FindingRow> AuditRows { get; } = [];
     public ObservableCollection<FindingRow> AccessRows { get; } = [];
@@ -117,6 +136,7 @@ public sealed partial class SecurityViewModel : ViewModelBase, IClosable
     {
         AuditRows.Clear();
         foreach (var f in _audit.Where(f => !HighOnly || f.Severity == FindingSeverity.High)) AuditRows.Add(new FindingRow(f));
+        if (Tab == WorkloadsTab) RestoreSelection(AuditRows);
     }
 
     // ---------- access ----------
@@ -142,6 +162,7 @@ public sealed partial class SecurityViewModel : ViewModelBase, IClosable
     {
         AccessRows.Clear();
         foreach (var f in _access.Where(f => !HighOnly || f.Severity == FindingSeverity.High)) AccessRows.Add(new FindingRow(f));
+        if (Tab == AccessTab) RestoreSelection(AccessRows);
     }
 
     /// <summary>"ServiceAccount ns/name", "User name" or "Group name"; a bare "ns/name" is taken as a service account.</summary>

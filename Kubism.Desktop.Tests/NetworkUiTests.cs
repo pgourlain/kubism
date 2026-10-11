@@ -94,6 +94,25 @@ public class NetworkUiTests
     }
 
     [AvaloniaFact]
+    public async Task Clicking_a_graph_node_is_history_and_Back_restores_the_graph_with_its_filters_and_selection()
+    {
+        var (h, ws, vm) = await OpenAsync();
+        await using var _ = h;
+        vm.Search = "shop.example.com";
+        var ingress = vm.View!.Nodes.Single(p => p.Id == "i:shop/shop");
+        vm.NodeClickedCommand.Execute(ingress);   // selects the node, then opens the Ingress
+        await UiHarness.WaitFor(() => ws.CurrentContent is ResourceListViewModel l && l.Kind.Kind == "Ingress" && l.SelectedRow?.Name == "shop", what: "ingress opened");
+        Assert.True(ws.CanGoBack);
+
+        ws.GoBackCommand.Execute(null);
+        await UiHarness.WaitFor(() => ws.CurrentContent is NetworkViewModel v2 && !ReferenceEquals(v2, vm) && !v2.IsLoading && v2.View is { Nodes.Count: > 0 }, what: "graph again");
+        var back = (NetworkViewModel)ws.CurrentContent!;
+        Assert.Equal("shop.example.com", back.Search);
+        Assert.Equal("i:shop/shop", back.SelectedNode?.Id);
+        Assert.Contains(back.NodeLines, l => l.Contains("shop.example.com/api → api:80"));
+    }
+
+    [AvaloniaFact]
     public async Task Routes_tab_lists_each_url_with_its_ingress_backend_and_pods_and_follows_the_filters()
     {
         var (h, ws, vm) = await OpenAsync();

@@ -5,12 +5,16 @@ using Kubism.Core.Cache;
 using Kubism.Core.Discovery;
 using Kubism.Core.Table;
 using Kubism.Core.Views;
+using Kubism.Desktop.Navigation;
 using Kubism.Desktop.Services;
 
 namespace Kubism.Desktop.ViewModels;
 
+/// <summary>What a list showed when the user left it.</summary>
+public sealed record ListState(string Filter, int SortColumn, bool SortDescending, bool ShowAllColumns, string? SelectedNamespace, string? SelectedName);
+
 /// <summary>Live list of one kind. Rows are updated in place from informer batches; sorting and filtering are client-side.</summary>
-public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
+public sealed partial class ResourceListViewModel : ViewModelBase, IClosable, INavigablePage
 {
     private const int CpuColumn = -10, MemoryColumn = -11;
     private readonly WorkspaceViewModel _ws;
@@ -22,10 +26,33 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
     private bool _closed;
     private int _refreshQueued;
     private IReadOnlyList<ColumnDef> _allColumns = [];
+    private (string? ns, string name)? _pendingSelect;
+    private bool _hasApplied;
 
-    public ResourceListViewModel(WorkspaceViewModel ws, ResourceKind kind)
+    /// <summary>Raised with the row to scroll to after it was selected by code (Back, or a link from another page).</summary>
+    public event Action<ResourceRowViewModel>? RevealRequested;
+
+    public object? CaptureState() => new ListState(Filter, SortColumn, SortDescending, ShowAllColumns, SelectedRow?.Namespace, SelectedRow?.Name);
+
+    /// <summary>Selects (and opens in the details panel) an object as soon as the list has it.</summary>
+    public void SelectWhenLoaded(string? ns, string name) { _pendingSelect = (ns, name); TryApplyPendingSelect(); }
+
+    private void TryApplyPendingSelect()
+    {
+        if (_pendingSelect is not { } p) return;
+        var row = Rows.FirstOrDefault(r => r.Name == p.name && r.Namespace == p.ns);
+        if (row is not null) { _pendingSelect = null; SelectedRow = row; RevealRequested?.Invoke(row); }
+        else if (_hasApplied && IsLive && Rows.Count == _rows.Count) _pendingSelect = null;   // data arrived, and the object is not in it (deleted since)
+    }
+
+    public ResourceListViewModel(WorkspaceViewModel ws, ResourceKind kind, ListState? state = null)
     {
         _ws = ws; _ui = ws.Ui; Kind = kind;
+        if (state is not null)
+        {
+            _filter = state.Filter; _sortColumn = state.SortColumn; _sortDescending = state.SortDescending; _showAllColumns = state.ShowAllColumns;
+            if (state.SelectedName is not null) _pendingSelect = (state.SelectedNamespace, state.SelectedName);
+        }
         ws.Namespaces.Changed += OnNamespacesChanged;
         Subscribe();
         if (kind.Kind is "Pod" or "Node")
@@ -127,6 +154,7 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
             // Relist diff: drop rows of this informer that are gone, but only those (other namespaces keep theirs).
             foreach (var d in change.Deleted) _rows.Remove(d.Object.Uid);
         }
+        _hasApplied = true;
         EnsureColumns(source);
         foreach (var item in change.Added.Concat(change.Modified))
             Upsert(item, highlight: !change.Resynced);
@@ -287,6 +315,7 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable
         else
             sorted = q.OrderBy(r => r.Namespace, StringComparer.Ordinal).ThenBy(r => r.Name, StringComparer.Ordinal).ToList();
         Rows.SyncTo(sorted);
+        TryApplyPendingSelect();
         CountText = Filter.Length > 0 ? $"{sorted.Count} of {_rows.Count}" : $"{_rows.Count}";
     }
 

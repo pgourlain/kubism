@@ -15,6 +15,14 @@ public partial class MainWindow : Window
         InitializeComponent();
         try { Icon = new WindowIcon(Avalonia.Platform.AssetLoader.Open(new Uri("avares://Kubism/Assets/kubism.png"))); } catch (Exception) { }
         KeyDown += OnKeyDown;
+        // The mouse's back and forward buttons.
+        AddHandler(PointerPressedEvent, (_, e) =>
+        {
+            var props = e.GetCurrentPoint(this).Properties;
+            if (Vm?.SelectedWorkspace is not { } nav) return;
+            if (props.IsXButton1Pressed) { nav.GoBack(); e.Handled = true; }
+            else if (props.IsXButton2Pressed) { nav.GoForward(); e.Handled = true; }
+        }, RoutingStrategies.Tunnel);
         DataContextChanged += (_, _) => { BuildMenus(); if (Vm is { } v) v.SettingsApplied += BuildMenus; };
         CatalogList.DoubleTapped += (_, _) => { if (DataContext is MainViewModel vm && vm.SelectedCluster is { } c) _ = vm.ConnectAsync(c); };
         Opened += (_, _) => { FitToScreen(); BuildMenus(); };
@@ -63,6 +71,11 @@ public partial class MainWindow : Window
                 case Key.Enter: _ = vm.Palette.ExecuteAsync(); e.Handled = true; break;
             }
             return;
+        }
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Alt) && e.Key is Key.Left or Key.Right && vm.SelectedWorkspace is { } nav)
+        {
+            if (e.Key == Key.Left) nav.GoBack(); else nav.GoForward();
+            e.Handled = true; return;
         }
         if (cmd && e.Key is >= Key.D1 and <= Key.D9) { vm.SelectWorkspaceByIndex(e.Key - Key.D1); e.Handled = true; }
     }

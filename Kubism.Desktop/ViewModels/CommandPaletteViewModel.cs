@@ -31,6 +31,8 @@ public sealed partial class CommandPaletteViewModel : ViewModelBase
         var ws = _main.SelectedWorkspace;
         if (ws is not null)
         {
+            if (ws.CanGoBack) items.Add(new PaletteItem("Go back", ws.BackTip, "Navigation", () => { ws.GoBack(); return Task.CompletedTask; }));
+            if (ws.CanGoForward) items.Add(new PaletteItem("Go forward", ws.ForwardTip, "Navigation", () => { ws.GoForward(); return Task.CompletedTask; }));
             foreach (var k in ws.Session.Discovery.Kinds.Where(k => k.CanList).OrderBy(k => k.Kind))
             {
                 var kind = k;

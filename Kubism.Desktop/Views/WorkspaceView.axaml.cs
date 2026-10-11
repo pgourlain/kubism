@@ -35,6 +35,8 @@ public partial class WorkspaceView : UserControl
     public WorkspaceView()
     {
         InitializeComponent();
+        // A flyout is a popup: it does not inherit the view's data context, so the history list gets it when it opens.
+        if (HistoryButton.Flyout is Flyout history) history.Opening += (_, _) => { if (history.Content is Control c) c.DataContext = DataContext; };
         DataContextChanged += (_, _) =>
         {
             if (DataContext is not WorkspaceViewModel w) return;

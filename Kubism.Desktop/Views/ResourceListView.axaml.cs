@@ -80,12 +80,23 @@ public partial class ResourceListView : UserControl
 
     private void Attach()
     {
-        if (_vm is not null) _vm.ColumnsChanged -= BuildColumns;
+        if (_vm is not null) { _vm.ColumnsChanged -= BuildColumns; _vm.PropertyChanged -= OnVmChanged; _vm.RevealRequested -= Reveal; }
         _vm = DataContext as ResourceListViewModel;
         if (_vm is null) return;
         _vm.ColumnsChanged += BuildColumns;
+        _vm.PropertyChanged += OnVmChanged;
+        _vm.RevealRequested += Reveal;
         BuildColumns();
     }
+
+    /// <summary>A row selected by code (Back, a link from a graph) is selected in the grid too, so it is highlighted.</summary>
+    private void OnVmChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ResourceListViewModel.SelectedRow) && _vm?.SelectedRow is { } row && !ReferenceEquals(Grid.SelectedItem, row) && _vm.Rows.Contains(row))
+            Grid.SelectedItem = row;
+    }
+
+    private void Reveal(ResourceRowViewModel row) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (Grid.SelectedItem == row) Grid.ScrollIntoView(row, Grid.Columns.FirstOrDefault()); }, Avalonia.Threading.DispatcherPriority.Loaded);
 
     private void BuildColumns()
     {

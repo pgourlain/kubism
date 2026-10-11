@@ -4,13 +4,14 @@ using CommunityToolkit.Mvvm.Input;
 using Kubism.Core.Api;
 using Kubism.Core.Usage;
 using Kubism.Core.Views;
+using Kubism.Desktop.Navigation;
 
 namespace Kubism.Desktop.ViewModels;
 
 public enum UsageMode { Config, Storage, Access, Network }
 
 /// <summary>Everything needed to put a Usage page back as the user left it.</summary>
-public sealed record UsageState(int Section, string Filter, bool UnusedOnly, string? SelectedKey, IReadOnlyList<string> Namespaces);
+public sealed record UsageState(int Section, string Filter, bool UnusedOnly, string? SelectedKey);
 
 public sealed record UsageRowViewModel(UsageRow Row)
 {
@@ -54,7 +55,7 @@ public sealed record BrokenRow(BrokenReference Ref)
 /// Which ConfigMaps and Secrets (Config mode) or claims, volumes and storage classes (Storage mode) anything refers to, who refers to them, and
 /// which references point at nothing. Read-only; Secret values are dropped as soon as the list arrives.
 /// </summary>
-public sealed partial class UsageViewModel : ViewModelBase, IClosable
+public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigablePage
 {
     private const int ListCap = 5000;
     private readonly WorkspaceViewModel _ws;
@@ -255,26 +256,21 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
         if (found is not null) RevealRequested?.Invoke(found);
     }
 
+    public object? CaptureState() => new UsageState(Section, Filter, UnusedOnly, SelectionKey());
+
     [RelayCommand]
     private void OpenSelected()
     {
-        GraphNode? target = null;
-        if (ShowBroken && SelectedBroken?.Ref.Consumer is { } c) target = new GraphNode(c.Display, c.Kind, c.Namespace, c.Name);
-        else if (ShowDangling && SelectedDangling?.Finding is { } d) target = new GraphNode(d.Display, d.Kind, d.Namespace, d.Name);
-        else if (ShowDeadKeys && SelectedDeadKey?.Map is { } m) target = new GraphNode(m.Display, m.Kind, m.Namespace, m.Name);
-        else if (Selected?.Row is { } r) target = new GraphNode(r.Display, r.Kind, r.Namespace, r.Name);
-        if (target is null) return;
-        // Captured before the jump (it changes the namespace selection): "Back" puts this page back exactly as it is now.
-        var state = new UsageState(Section, Filter, UnusedOnly, SelectionKey(), [.. _ws.Namespaces.Selected]);
-        _ws.OpenGraphNode(target, new WorkspaceViewModel.ReturnPoint($"Back to {Title}", () => _ws.RestoreUsage(Mode, state)));
+        if (ShowBroken && SelectedBroken?.Ref.Consumer is { } c) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
+        else if (ShowDangling && SelectedDangling?.Finding is { } d) _ws.OpenGraphNode(new GraphNode(d.Display, d.Kind, d.Namespace, d.Name));
+        else if (ShowDeadKeys && SelectedDeadKey?.Map is { } m) _ws.OpenGraphNode(new GraphNode(m.Display, m.Kind, m.Namespace, m.Name));
+        else if (Selected?.Row is { } r) _ws.OpenGraphNode(new GraphNode(r.Display, r.Kind, r.Namespace, r.Name));
     }
 
     [RelayCommand]
     private void OpenConsumer(Consumer? c)
     {
-        if (c is null) return;
-        var state = new UsageState(Section, Filter, UnusedOnly, SelectionKey(), [.. _ws.Namespaces.Selected]);
-        _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name), new WorkspaceViewModel.ReturnPoint($"Back to {Title}", () => _ws.RestoreUsage(Mode, state)));
+        if (c is not null) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
     }
 
     public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }
