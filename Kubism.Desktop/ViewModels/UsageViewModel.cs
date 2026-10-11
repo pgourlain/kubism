@@ -20,10 +20,24 @@ public sealed record UsageRowViewModel(UsageRow Row)
     public string Note => Row.Note;
 }
 
+/// <summary>One section button. Its state is pushed by the view model (one way), so a reused view can never carry a stale section over.</summary>
+public sealed partial class SectionTab(string name, int index) : ObservableObject
+{
+    public string Name { get; } = name;
+    public int Index { get; } = index;
+    [ObservableProperty] private bool _isActive;
+}
+
 public sealed record DeadKeyRow(UsageRow Map, string Key)
 {
     public string ConfigMap => Map.Display;
     public string ReadBy => Map.UsedBy;
+}
+
+public sealed record DanglingRow(DanglingFinding Finding)
+{
+    public string Display => Finding.Display;
+    public string Problem => Finding.Problem;
 }
 
 public sealed record BrokenRow(BrokenReference Ref)
@@ -49,20 +63,23 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
         _ws = ws; Mode = mode;
         Sections = mode switch
         {
-            UsageMode.Config => ["ConfigMaps", "Secrets", "Unread keys", "Broken references"],
+            UsageMode.Config => ["ConfigMaps", "Secrets", "Unread keys", "HPA & PDB", "Broken references"],
             UsageMode.Storage => ["Claims", "Volumes", "Storage classes", "Broken references"],
             UsageMode.Access => ["Service accounts", "Broken references"],
             _ => ["Ingress classes", "Broken references"],
         };
+        for (var i = 0; i < Sections.Count; i++) Tabs.Add(new SectionTab(Sections[i], i) { IsActive = i == 0 });
         _ = LoadAsync();
     }
 
     public UsageMode Mode { get; }
     public IReadOnlyList<string> Sections { get; }
     public string Title => Mode switch { UsageMode.Config => "Config usage", UsageMode.Storage => "Storage usage", UsageMode.Access => "Service account usage", _ => "Network usage" };
+    public ObservableCollection<SectionTab> Tabs { get; } = [];
     public ObservableCollection<UsageRowViewModel> Rows { get; } = [];
     public ObservableCollection<BrokenRow> BrokenRows { get; } = [];
     public ObservableCollection<DeadKeyRow> DeadKeyRows { get; } = [];
+    public ObservableCollection<DanglingRow> DanglingRows { get; } = [];
     public ObservableCollection<Consumer> Consumers { get; } = [];
     [ObservableProperty] private int _section;
     [ObservableProperty] private bool _isLoading;
@@ -74,13 +91,15 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     [ObservableProperty] private UsageRowViewModel? _selected;
     [ObservableProperty] private BrokenRow? _selectedBroken;
     [ObservableProperty] private DeadKeyRow? _selectedDeadKey;
+    [ObservableProperty] private DanglingRow? _selectedDangling;
 
     public bool ShowBroken => Section == Sections.Count - 1;
     public bool ShowDeadKeys => Mode == UsageMode.Config && Section == 2;
-    public bool ShowRows => !ShowBroken && !ShowDeadKeys;
+    public bool ShowDangling => Mode == UsageMode.Config && Section == 3;
+    public bool ShowRows => !ShowBroken && !ShowDeadKeys && !ShowDangling;
     public bool HasWarning => Warning.Length > 0;
 
-    partial void OnSectionChanged(int value) { OnPropertyChanged(nameof(ShowBroken)); OnPropertyChanged(nameof(ShowDeadKeys)); OnPropertyChanged(nameof(ShowRows)); ShowResults(); }
+    partial void OnSectionChanged(int value) { foreach (var t in Tabs) t.IsActive = t.Index == value; OnPropertyChanged(nameof(ShowBroken)); OnPropertyChanged(nameof(ShowDeadKeys)); OnPropertyChanged(nameof(ShowDangling)); OnPropertyChanged(nameof(ShowRows)); ShowResults(); }
     partial void OnFilterChanged(string value) => ShowResults();
     partial void OnUnusedOnlyChanged(bool value) => ShowResults();
     partial void OnWarningChanged(string value) => OnPropertyChanged(nameof(HasWarning));
@@ -90,6 +109,9 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
         Consumers.Clear();
         if (value is not null) foreach (var c in value.Row.Consumers) Consumers.Add(c);
     }
+
+    [RelayCommand]
+    private void SelectSection(int index) { if (index >= 0 && index < Sections.Count) Section = index; }
 
     [RelayCommand]
     private Task Refresh() => LoadAsync();
@@ -105,7 +127,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
             string[] targets, consumers;
             switch (Mode)
             {
-                case UsageMode.Config: targets = ["configmaps", "secrets"]; consumers = [.. workloads, "ingresses", "serviceaccounts"]; break;
+                case UsageMode.Config: targets = ["configmaps", "secrets"]; consumers = [.. workloads, "ingresses", "serviceaccounts", "horizontalpodautoscalers", "poddisruptionbudgets"]; break;
                 case UsageMode.Storage: targets = ["persistentvolumeclaims", "persistentvolumes", "storageclasses"]; consumers = workloads; break;
                 case UsageMode.Access: targets = ["serviceaccounts"]; consumers = [.. workloads, "rolebindings", "clusterrolebindings"]; break;
                 default: targets = ["ingressclasses", "services"]; consumers = ["ingresses"]; break;
@@ -114,23 +136,27 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
             var notRead = new List<string>();
             var truncated = new List<string>();
             var objects = new List<KubeObject>();
+            var gate = new object();   // the reads run in parallel and share the lists above
 
             async Task ReadAsync(string resource, bool isTarget)
             {
                 var kind = _ws.Session.Discovery.FindByName(resource);
-                if (kind is null || !kind.CanList) { if (!isTarget || kind is not null) notRead.Add(resource); return; }
+                if (kind is null || !kind.CanList) { if (!isTarget || kind is not null) lock (gate) notRead.Add(resource); return; }
                 var found = new List<KubeObject>();
                 try
                 {
                     foreach (var ns in kind.Namespaced ? Namespaces() : [null])
                         found.AddRange(await CompareViewModel.ListAllAsync(_ws, kind, ns, _cts.Token));
                 }
-                catch (Exception ex) when (ex is not OperationCanceledException) { notRead.Add(resource); return; }
+                catch (Exception ex) when (ex is not OperationCanceledException) { lock (gate) notRead.Add(resource); return; }
                 // Secret values are never kept. ConfigMap keys are what the unread-keys check needs; their values are not shown.
                 if (kind.Kind == "Secret") foreach (var o in found) { o.Json.Remove("data"); o.Json.Remove("stringData"); o.Json.Remove("binaryData"); }
-                if (found.Count >= ListCap) truncated.Add(resource);
-                if (isTarget) listed.Add(kind.Kind);
-                objects.AddRange(found);
+                lock (gate)
+                {
+                    if (found.Count >= ListCap) truncated.Add(resource);
+                    listed.Add(kind.Kind);
+                    objects.AddRange(found);
+                }
             }
 
             await Task.WhenAll(targets.Select(t => ReadAsync(t, true)).Concat(consumers.Select(c => ReadAsync(c, false))));
@@ -143,7 +169,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
                     : $"{(notRead.Count > 0 ? $"Could not read {string.Join(", ", notRead)}. " : "")}{(truncated.Count > 0 ? $"{string.Join(", ", truncated)} truncated at {ListCap}. " : "")}\"Not referenced\" may be wrong for what those hold.";
                 var rows = usage.Rows.Where(r => kinds.Contains(r.Kind)).ToList();
                 var deadKeys = rows.Sum(r => r.DeadKeys.Count);
-                Summary = $"{rows.Count(r => r.Status == UsageStatus.Used)} used · {rows.Count(r => r.Status == UsageStatus.Unused)} not referenced · {rows.Count(r => r.Status == UsageStatus.External)} managed by the cluster · {usage.Broken.Count(b => BrokenKinds().Contains(b.TargetKind))} broken reference(s){(Mode == UsageMode.Config ? $" · {deadKeys} key(s) nobody reads" : "")}. Selected namespaces only.";
+                Summary = $"{rows.Count(r => r.Status == UsageStatus.Used)} used · {rows.Count(r => r.Status == UsageStatus.Unused)} not referenced · {rows.Count(r => r.Status == UsageStatus.External)} managed by the cluster · {usage.Broken.Count(b => BrokenKinds().Contains(b.TargetKind))} broken reference(s){(Mode == UsageMode.Config ? $" · {deadKeys} key(s) nobody reads · {usage.Dangling.Count} HPA/PDB problem(s)" : "")}. Selected namespaces only.";
                 ShowResults();
             });
         }
@@ -174,12 +200,17 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     {
         if (_usage is null) return;
         var kinds = SectionKinds();
-        Rows.Clear(); BrokenRows.Clear(); DeadKeyRows.Clear();
+        Rows.Clear(); BrokenRows.Clear(); DeadKeyRows.Clear(); DanglingRows.Clear();
         var needle = Filter.Trim();
         bool Match(string text) => needle.Length == 0 || text.Contains(needle, StringComparison.OrdinalIgnoreCase);
         if (ShowBroken)
         {
             foreach (var b in _usage.Broken.Where(b => BrokenKinds().Contains(b.TargetKind) && (Match(b.Consumer.Display) || Match(b.Target)))) BrokenRows.Add(new BrokenRow(b));
+            return;
+        }
+        if (ShowDangling)
+        {
+            foreach (var f in _usage.Dangling.Where(f => Match(f.Display) || Match(f.Problem))) DanglingRows.Add(new DanglingRow(f));
             return;
         }
         if (ShowDeadKeys)
@@ -195,6 +226,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     private void OpenSelected()
     {
         if (ShowBroken && SelectedBroken?.Ref.Consumer is { } c) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
+        else if (ShowDangling && SelectedDangling?.Finding is { } d) _ws.OpenGraphNode(new GraphNode(d.Display, d.Kind, d.Namespace, d.Name));
         else if (ShowDeadKeys && SelectedDeadKey?.Map is { } m) _ws.OpenGraphNode(new GraphNode(m.Display, m.Kind, m.Namespace, m.Name));
         else if (Selected?.Row is { } r) _ws.OpenGraphNode(new GraphNode(r.Display, r.Kind, r.Namespace, r.Name));
     }

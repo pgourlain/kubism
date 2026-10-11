@@ -55,13 +55,15 @@ public sealed class ResourceUsage
     /// <summary>Kinds a reference can point at: the analyzed ones, and Services (an Ingress backend that does not exist is worth reporting).</summary>
     private static readonly string[] TargetKinds = [.. AnalyzedKinds, Service];
     /// <summary>Kinds that hold what refers to the analyzed ones. A missing one means "unused" cannot be trusted.</summary>
-    public static readonly IReadOnlyList<string> ConsumerKinds = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Ingress", "ServiceAccount", "RoleBinding", "ClusterRoleBinding"];
+    public static readonly IReadOnlyList<string> ConsumerKinds = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Ingress", "ServiceAccount", "RoleBinding", "ClusterRoleBinding", "HorizontalPodAutoscaler", "PodDisruptionBudget"];
     private static readonly HashSet<string> ControllerKinds = ["ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController"];
 
-    private ResourceUsage(IReadOnlyList<UsageRow> rows, IReadOnlyList<BrokenReference> broken) { Rows = rows; Broken = broken; }
+    private ResourceUsage(IReadOnlyList<UsageRow> rows, IReadOnlyList<BrokenReference> broken, IReadOnlyList<DanglingFinding> dangling) { Rows = rows; Broken = broken; Dangling = dangling; }
 
     public IReadOnlyList<UsageRow> Rows { get; }
     public IReadOnlyList<BrokenReference> Broken { get; }
+    /// <summary>Autoscalers and disruption budgets attached to nothing or unable to act (see <see cref="DanglingCheck"/>).</summary>
+    public IReadOnlyList<DanglingFinding> Dangling { get; }
 
     /// <param name="listedKinds">Kinds that were really listed (a forbidden list is not an empty one): a reference to a kind that was not listed is never reported as broken.</param>
     public static ResourceUsage Analyze(IEnumerable<KubeObject> objects, IReadOnlySet<string> listedKinds)
@@ -154,7 +156,7 @@ public sealed class ResourceUsage
             }
         rows.Sort((a, b) => string.CompareOrdinal(a.Display, b.Display));
         broken.Sort((a, b) => string.CompareOrdinal(a.Consumer.Display, b.Consumer.Display));
-        return new ResourceUsage(rows, broken);
+        return new ResourceUsage(rows, broken, DanglingCheck.Analyze(all, listedKinds));
     }
 
     /// <param name="Keys">The keys of a ConfigMap this reference reads; null = all of them.</param>

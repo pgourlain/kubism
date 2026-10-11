@@ -27,9 +27,15 @@
       <CheckBox Grid.Column="1" Content="Not referenced only" IsChecked="{Binding UnusedOnly}" IsVisible="{Binding ShowRows}" />
       <Button Grid.Column="2" Content="Open object" Command="{Binding OpenSelectedCommand}" ToolTip.Tip="Open the selected object (or, for a broken reference, the object that holds it)" />
     </Grid>
-    <ListBox Grid.Row="3" ItemsSource="{Binding Sections}" SelectedIndex="{Binding Section, Mode=TwoWay}" AutomationProperties.Name="Section">
-      <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate></ListBox.ItemsPanel>
-    </ListBox>
+    <ItemsControl Grid.Row="3" ItemsSource="{Binding Tabs}" AutomationProperties.Name="Section">
+      <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:SectionTab">
+          <ToggleButton Content="{Binding Name}" IsChecked="{Binding IsActive, Mode=OneWay}" Padding="12,6"
+                        Command="{Binding $parent[UserControl].((vm:UsageViewModel)DataContext).SelectSectionCommand}" CommandParameter="{Binding Index}" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
     <Grid Grid.Row="4" RowDefinitions="*,Auto" RowSpacing="6">
       <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowRows}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" CanUserSortColumns="True" AutomationProperties.Name="Usage">
                     <DataGrid.Columns>
@@ -53,6 +59,12 @@
           <DataGridTextColumn Header="ConfigMap" Binding="{Binding ConfigMap}" x:DataType="vm:DeadKeyRow" Width="2*" />
           <DataGridTextColumn Header="Key nobody reads" Binding="{Binding Key}" x:DataType="vm:DeadKeyRow" Width="2*" />
           <DataGridTextColumn Header="Read by" Binding="{Binding ReadBy}" x:DataType="vm:DeadKeyRow" Width="3*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <DataGrid ItemsSource="{Binding DanglingRows}" SelectedItem="{Binding SelectedDangling}" IsVisible="{Binding ShowDangling}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Autoscalers and disruption budgets">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Object" Binding="{Binding Display}" x:DataType="vm:DanglingRow" Width="2*" />
+          <DataGridTextColumn Header="Problem" Binding="{Binding Problem}" x:DataType="vm:DanglingRow" Width="5*" />
         </DataGrid.Columns>
       </DataGrid>
       <DataGrid ItemsSource="{Binding BrokenRows}" SelectedItem="{Binding SelectedBroken}" IsVisible="{Binding ShowBroken}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Broken references">

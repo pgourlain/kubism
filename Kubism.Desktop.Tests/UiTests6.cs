@@ -217,6 +217,10 @@ public class UiExplorationTests
             ---
             {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"keyed","namespace":"usage-demo","uid":"u-keyed"},"spec":{"replicas":1,"template":{"spec":{"serviceAccountName":"shop-sa","containers":[{"name":"c","image":"x:1","env":[{"name":"R","valueFrom":{"configMapKeyRef":{"name":"keyed-cfg","key":"read"}}}]}]}}}}
             ---
+            {"apiVersion":"autoscaling/v2","kind":"HorizontalPodAutoscaler","metadata":{"name":"ghost-hpa","namespace":"usage-demo"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"vanished"}}}
+            ---
+            {"apiVersion":"policy/v1","kind":"PodDisruptionBudget","metadata":{"name":"empty-pdb","namespace":"usage-demo"},"spec":{"minAvailable":1,"selector":{"matchLabels":{"app":"nobody"}}}}
+            ---
             {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"shop-sa","namespace":"usage-demo"}}
             ---
             {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"idle-sa","namespace":"usage-demo"}}
@@ -262,6 +266,10 @@ public class UiExplorationTests
         Assert.Equal(("usage-demo/keyed-cfg", "never"), (dead.ConfigMap, dead.Key));
         h.Screenshot("42-usage-unread-keys");
         vm.Section = 3;
+        Assert.Contains(vm.DanglingRows, r => r.Display == "HorizontalPodAutoscaler/usage-demo/ghost-hpa" && r.Problem.Contains("does not exist"));
+        Assert.Contains(vm.DanglingRows, r => r.Display == "PodDisruptionBudget/usage-demo/empty-pdb" && r.Problem.Contains("Selects no pod"));
+        h.Screenshot("44-usage-hpa-pdb");
+        vm.Section = 4;
         Assert.Contains(vm.BrokenRows, b => b.Target == "ConfigMap/usage-demo/deleted-cfg" && b.Consumer == "Deployment/usage-demo/shop");
 
         ws.Navigate(ws.FindNav(NavTarget.StorageUsage)!);

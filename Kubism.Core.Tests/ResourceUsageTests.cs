@@ -179,4 +179,37 @@ public class ResourceUsageTests
         Assert.Equal(UsageStatus.Unused, Row(u, "IngressClass", "old").Status);
         Assert.Equal("nope", Assert.Single(u.Broken, b => b.TargetKind == "Service").TargetName);
     }
+
+    private static string Labeled(string name, string app) => """{"kind":"Pod","metadata":{"name":"NAME","namespace":"d","labels":{"app":"APP"}},"status":{"phase":"Running"}}""".Replace("NAME", name).Replace("APP", app);
+
+    [Fact]
+    public void Hpa_with_a_missing_zero_or_shared_target()
+    {
+        var hpa = (string name, string target) => O("""{"kind":"HorizontalPodAutoscaler","metadata":{"name":"NAME","namespace":"d"},"spec":{"scaleTargetRef":{"kind":"Deployment","name":"TARGET"}}}""".Replace("NAME", name).Replace("TARGET", target));
+        var u = ResourceUsage.Analyze(
+        [
+            O("""{"kind":"Deployment","metadata":{"name":"web","namespace":"d"},"spec":{"replicas":2}}"""), O("""{"kind":"Deployment","metadata":{"name":"off","namespace":"d"},"spec":{"replicas":0}}"""),
+            hpa("ok", "web"), hpa("rival", "web"), hpa("ghost", "gone"), hpa("zero", "off"),
+        ], new HashSet<string>(Listed) { "Deployment" });
+        Assert.Contains(u.Dangling, f => f.Name == "ghost" && f.Problem.Contains("does not exist"));
+        Assert.Contains(u.Dangling, f => f.Name == "zero" && f.Problem.Contains("scaled to 0"));
+        Assert.Contains(u.Dangling, f => f.Name == "ok" && f.Problem.Contains("rival"));
+        Assert.DoesNotContain(u.Dangling, f => f.Name == "zero" && f.Problem.Contains("does not exist"));
+    }
+
+    [Fact]
+    public void Pdb_that_selects_nothing_or_forbids_every_eviction()
+    {
+        var pdb = (string name, string app, string rule) => O("""{"kind":"PodDisruptionBudget","metadata":{"name":"NAME","namespace":"d"},"spec":{RULE,"selector":{"matchLabels":{"app":"APP"}}}}""".Replace("NAME", name).Replace("APP", app).Replace("RULE", rule));
+        var u = ResourceUsage.Analyze(
+        [
+            O(Labeled("w1", "web")), O(Labeled("w2", "web")),
+            pdb("fine", "web", "\"minAvailable\":1"), pdb("empty", "api", "\"minAvailable\":1"),
+            pdb("stuck-min", "web", "\"minAvailable\":2"), pdb("stuck-max", "web", "\"maxUnavailable\":0"),
+        ], new HashSet<string>(Listed) { "Pod" });
+        Assert.DoesNotContain(u.Dangling, f => f.Name == "fine");
+        Assert.Contains(u.Dangling, f => f.Name == "empty" && f.Problem.Contains("Selects no pod"));
+        Assert.Contains(u.Dangling, f => f.Name == "stuck-min" && f.Problem.Contains("drain stalls"));
+        Assert.Contains(u.Dangling, f => f.Name == "stuck-max" && f.Problem.Contains("drain stalls"));
+    }
 }
