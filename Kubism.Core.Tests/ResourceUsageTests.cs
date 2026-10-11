@@ -107,4 +107,76 @@ public class ResourceUsageTests
         ], Listed);
         Assert.Equal(UsageStatus.Used, Row(u, "StorageClass", "std").Status);
     }
+
+    private static string Pod(string name, string spec) => $$"""{"kind":"Pod","metadata":{"name":"{{name}}","namespace":"d"},"spec":{{spec}}}""";
+    private const string Map = """{"kind":"ConfigMap","metadata":{"name":"cfg","namespace":"d"},"data":{"a":"1","b":"2","c":"3"}}""";
+
+    [Fact]
+    public void Dead_keys_are_the_keys_no_consumer_reads()
+    {
+        var u = ResourceUsage.Analyze(
+        [
+            O(Map),
+            O(Pod("p1", """{"containers":[{"name":"c","env":[{"name":"A","valueFrom":{"configMapKeyRef":{"name":"cfg","key":"a"}}}]}]}""")),
+            O(Pod("p2", """{"volumes":[{"name":"v","configMap":{"name":"cfg","items":[{"key":"b","path":"b.txt"}]}}],"containers":[{"name":"c"}]}""")),
+        ], Listed);
+        Assert.Equal(["c"], Row(u, "ConfigMap", "cfg").DeadKeys);
+        Assert.Contains("Keys nobody reads: c", Row(u, "ConfigMap", "cfg").Note);
+    }
+
+    [Fact]
+    public void A_consumer_that_takes_the_whole_map_means_no_dead_key()
+    {
+        foreach (var whole in new[]
+        {
+            """{"containers":[{"name":"c","envFrom":[{"configMapRef":{"name":"cfg"}}]}]}""",
+            """{"volumes":[{"name":"v","configMap":{"name":"cfg"}}],"containers":[{"name":"c","volumeMounts":[{"name":"v","mountPath":"/etc/cfg"}]}]}""",
+        })
+        {
+            var u = ResourceUsage.Analyze([O(Map), O(Pod("p", whole)), O(Pod("q", """{"containers":[{"name":"c","env":[{"name":"A","valueFrom":{"configMapKeyRef":{"name":"cfg","key":"a"}}}]}]}"""))], Listed);
+            Assert.Empty(Row(u, "ConfigMap", "cfg").DeadKeys);
+        }
+    }
+
+    [Fact]
+    public void Volume_mounted_only_through_subPath_reads_those_keys()
+    {
+        var spec = """{"volumes":[{"name":"v","configMap":{"name":"cfg"}}],"containers":[{"name":"c","volumeMounts":[{"name":"v","mountPath":"/etc/a","subPath":"a"}]}]}""";
+        var u = ResourceUsage.Analyze([O(Map), O(Pod("p", spec))], Listed);
+        Assert.Equal(["b", "c"], Row(u, "ConfigMap", "cfg").DeadKeys);
+    }
+
+    [Fact]
+    public void Service_accounts_used_unused_default_and_missing()
+    {
+        var u = ResourceUsage.Analyze(
+        [
+            O("""{"kind":"ServiceAccount","metadata":{"name":"app","namespace":"d"}}"""), O("""{"kind":"ServiceAccount","metadata":{"name":"idle","namespace":"d"}}"""),
+            O("""{"kind":"ServiceAccount","metadata":{"name":"bound-only","namespace":"d"}}"""), O("""{"kind":"ServiceAccount","metadata":{"name":"default","namespace":"d"}}"""),
+            O("""{"kind":"RoleBinding","metadata":{"name":"rb","namespace":"d"},"roleRef":{"name":"edit"},"subjects":[{"kind":"ServiceAccount","name":"bound-only"}]}"""),
+            O(Pod("p1", """{"serviceAccountName":"app","containers":[{"name":"c"}]}""")),
+            O(Pod("p2", """{"serviceAccountName":"ghost","containers":[{"name":"c"}]}""")),
+            O(Pod("p3", """{"containers":[{"name":"c"}]}""")),
+        ], Listed);
+        Assert.Equal(UsageStatus.Used, Row(u, "ServiceAccount", "app").Status);
+        Assert.Equal(UsageStatus.Unused, Row(u, "ServiceAccount", "idle").Status);
+        Assert.Equal(UsageStatus.Used, Row(u, "ServiceAccount", "default").Status);   // p3 sets none
+        Assert.Equal(UsageStatus.Unused, Row(u, "ServiceAccount", "bound-only").Status);
+        Assert.Contains("holds permissions through RoleBinding/rb", Row(u, "ServiceAccount", "bound-only").Note);
+        Assert.Equal("ghost", Assert.Single(u.Broken, b => b.TargetKind == "ServiceAccount").TargetName);
+    }
+
+    [Fact]
+    public void Ingress_classes_and_backends()
+    {
+        var u = ResourceUsage.Analyze(
+        [
+            O("""{"kind":"IngressClass","metadata":{"name":"nginx","annotations":{"ingressclass.kubernetes.io/is-default-class":"true"}}}"""), O("""{"kind":"IngressClass","metadata":{"name":"old"}}"""),
+            O("""{"kind":"Service","metadata":{"name":"web","namespace":"d"}}"""),
+            O("""{"kind":"Ingress","metadata":{"name":"i","namespace":"d"},"spec":{"rules":[{"http":{"paths":[{"backend":{"service":{"name":"web"}}},{"backend":{"service":{"name":"nope"}}}]}}]}}"""),
+        ], new HashSet<string>(Listed) { "Service" });
+        Assert.Equal(UsageStatus.Used, Row(u, "IngressClass", "nginx").Status);   // no class set: the default one
+        Assert.Equal(UsageStatus.Unused, Row(u, "IngressClass", "old").Status);
+        Assert.Equal("nope", Assert.Single(u.Broken, b => b.TargetKind == "Service").TargetName);
+    }
 }

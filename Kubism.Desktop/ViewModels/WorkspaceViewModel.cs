@@ -115,6 +115,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             if (section == "Network" && (Find("ingresses") is not null || Find("services") is not null)) g.Children.Add(new NavNode("Network graph".T(), NavTarget.NetworkGraph, null, "network"));
             if (section == "Config" && (Find("configmaps") is not null || Find("secrets") is not null)) g.Children.Add(new NavNode("Usage".T(), NavTarget.ConfigUsage, null, "usage"));
             if (section == "Storage" && Find("persistentvolumeclaims") is not null) g.Children.Add(new NavNode("Usage".T(), NavTarget.StorageUsage, null, "usage"));
+            if (section == "Access Control" && Find("serviceaccounts") is not null) g.Children.Add(new NavNode("Usage".T(), NavTarget.AccessUsage, null, "usage"));
+            if (section == "Network" && Find("ingressclasses") is not null) g.Children.Add(new NavNode("Usage".T(), NavTarget.NetworkUsage, null, "usage"));
             if (g.Children.Count > 0) NavRoots.Add(g);
         }
         if (Find("namespaces") is { } ns) NavRoots.Add(new NavNode("Namespaces".T(), NavTarget.Kind, ns, "namespaces"));
@@ -215,6 +217,8 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.Rbac => new RbacViewModel(this),
             NavTarget.ConfigUsage => new UsageViewModel(this, UsageMode.Config),
             NavTarget.StorageUsage => new UsageViewModel(this, UsageMode.Storage),
+            NavTarget.AccessUsage => new UsageViewModel(this, UsageMode.Access),
+            NavTarget.NetworkUsage => new UsageViewModel(this, UsageMode.Network),
             NavTarget.NetworkGraph => new NetworkViewModel(this),
             NavTarget.GitOps => new GitOpsViewModel(this),
             NavTarget.Capacity => new CapacityViewModel(this),

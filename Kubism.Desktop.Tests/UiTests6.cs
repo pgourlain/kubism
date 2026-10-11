@@ -211,7 +211,19 @@ public class UiExplorationTests
         h.Demo.Server.SeedYaml("""
             {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"shop","namespace":"usage-demo","uid":"u-shop"},"spec":{"replicas":1,"template":{"spec":{"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"shop-data"}},{"name":"x","configMap":{"name":"deleted-cfg"}}],"containers":[{"name":"c","image":"x:1","envFrom":[{"configMapRef":{"name":"shop-cfg"}}],"env":[{"name":"K","valueFrom":{"secretKeyRef":{"name":"shop-secret","key":"k"}}}]}]}}}}
             ---
-            {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"shop-cfg","namespace":"usage-demo"}}
+            {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"shop-cfg","namespace":"usage-demo"},"data":{"a":"1"}}
+            ---
+            {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"keyed-cfg","namespace":"usage-demo"},"data":{"read":"1","never":"2"}}
+            ---
+            {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"keyed","namespace":"usage-demo","uid":"u-keyed"},"spec":{"replicas":1,"template":{"spec":{"serviceAccountName":"shop-sa","containers":[{"name":"c","image":"x:1","env":[{"name":"R","valueFrom":{"configMapKeyRef":{"name":"keyed-cfg","key":"read"}}}]}]}}}}
+            ---
+            {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"shop-sa","namespace":"usage-demo"}}
+            ---
+            {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"idle-sa","namespace":"usage-demo"}}
+            ---
+            {"apiVersion":"networking.k8s.io/v1","kind":"IngressClass","metadata":{"name":"usage-unused-class"}}
+            ---
+            {"apiVersion":"networking.k8s.io/v1","kind":"Ingress","metadata":{"name":"shop","namespace":"usage-demo"},"spec":{"ingressClassName":"usage-missing-class","rules":[{"http":{"paths":[{"backend":{"service":{"name":"usage-no-service"}}}]}}]}}
             ---
             {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"forgotten-cfg","namespace":"usage-demo"}}
             ---
@@ -246,6 +258,10 @@ public class UiExplorationTests
         Assert.Equal(UsageStatus.Unused, vm.Rows.Single(r => r.Row.Name == "forgotten-secret").Row.Status);
         Assert.Equal("Deployment/usage-demo/shop", vm.Rows.Single(r => r.Row.Name == "shop-secret").Row.Consumers.Single().Display);
         vm.Section = 2;
+        var dead = Assert.Single(vm.DeadKeyRows);
+        Assert.Equal(("usage-demo/keyed-cfg", "never"), (dead.ConfigMap, dead.Key));
+        h.Screenshot("42-usage-unread-keys");
+        vm.Section = 3;
         Assert.Contains(vm.BrokenRows, b => b.Target == "ConfigMap/usage-demo/deleted-cfg" && b.Consumer == "Deployment/usage-demo/shop");
 
         ws.Navigate(ws.FindNav(NavTarget.StorageUsage)!);
@@ -259,6 +275,20 @@ public class UiExplorationTests
         st.Section = 2;
         Assert.Equal(UsageStatus.Used, st.Rows.Single(r => r.Row.Name == "usage-fast").Row.Status);
         Assert.Equal(UsageStatus.Unused, st.Rows.Single(r => r.Row.Name == "usage-slow").Row.Status);
+        ws.Navigate(ws.FindNav(NavTarget.AccessUsage)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v && v.Mode == UsageMode.Access && v.Rows.Count > 0, what: "access usage");
+        var ac = (UsageViewModel)ws.CurrentContent!;
+        Assert.Equal(UsageStatus.Used, ac.Rows.Single(r => r.Row.Name == "shop-sa").Row.Status);
+        Assert.Equal(UsageStatus.Unused, ac.Rows.Single(r => r.Row.Name == "idle-sa").Row.Status);
+        h.Screenshot("43-usage-service-accounts");
+
+        ws.Navigate(ws.FindNav(NavTarget.NetworkUsage)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v && v.Mode == UsageMode.Network && v.Rows.Count > 0, what: "network usage");
+        var nw = (UsageViewModel)ws.CurrentContent!;
+        Assert.Equal(UsageStatus.Unused, nw.Rows.Single(r => r.Row.Name == "usage-unused-class").Row.Status);
+        nw.Section = 1;
+        Assert.Contains(nw.BrokenRows, b => b.Target == "IngressClass/usage-missing-class");
+        Assert.Contains(nw.BrokenRows, b => b.Target == "Service/usage-demo/usage-no-service");
         Assert.DoesNotContain("c2VjcmV0LXZhbHVl", string.Join("|", vm.Rows.Select(r => r.UsedBy + r.Note)));
     }
 

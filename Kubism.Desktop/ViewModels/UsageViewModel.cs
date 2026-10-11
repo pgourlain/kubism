@@ -7,7 +7,7 @@ using Kubism.Core.Views;
 
 namespace Kubism.Desktop.ViewModels;
 
-public enum UsageMode { Config, Storage }
+public enum UsageMode { Config, Storage, Access, Network }
 
 public sealed record UsageRowViewModel(UsageRow Row)
 {
@@ -18,6 +18,12 @@ public sealed record UsageRowViewModel(UsageRow Row)
     public string Count => Row.Count == 0 ? "" : Row.Count.ToString();
     public string UsedBy => Row.UsedBy;
     public string Note => Row.Note;
+}
+
+public sealed record DeadKeyRow(UsageRow Map, string Key)
+{
+    public string ConfigMap => Map.Display;
+    public string ReadBy => Map.UsedBy;
 }
 
 public sealed record BrokenRow(BrokenReference Ref)
@@ -41,15 +47,22 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     public UsageViewModel(WorkspaceViewModel ws, UsageMode mode)
     {
         _ws = ws; Mode = mode;
-        Sections = mode == UsageMode.Config ? ["ConfigMaps", "Secrets", "Broken references"] : ["Claims", "Volumes", "Storage classes", "Broken references"];
+        Sections = mode switch
+        {
+            UsageMode.Config => ["ConfigMaps", "Secrets", "Unread keys", "Broken references"],
+            UsageMode.Storage => ["Claims", "Volumes", "Storage classes", "Broken references"],
+            UsageMode.Access => ["Service accounts", "Broken references"],
+            _ => ["Ingress classes", "Broken references"],
+        };
         _ = LoadAsync();
     }
 
     public UsageMode Mode { get; }
     public IReadOnlyList<string> Sections { get; }
-    public string Title => Mode == UsageMode.Config ? "Config usage" : "Storage usage";
+    public string Title => Mode switch { UsageMode.Config => "Config usage", UsageMode.Storage => "Storage usage", UsageMode.Access => "Service account usage", _ => "Network usage" };
     public ObservableCollection<UsageRowViewModel> Rows { get; } = [];
     public ObservableCollection<BrokenRow> BrokenRows { get; } = [];
+    public ObservableCollection<DeadKeyRow> DeadKeyRows { get; } = [];
     public ObservableCollection<Consumer> Consumers { get; } = [];
     [ObservableProperty] private int _section;
     [ObservableProperty] private bool _isLoading;
@@ -60,12 +73,14 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     [ObservableProperty] private bool _unusedOnly;
     [ObservableProperty] private UsageRowViewModel? _selected;
     [ObservableProperty] private BrokenRow? _selectedBroken;
+    [ObservableProperty] private DeadKeyRow? _selectedDeadKey;
 
     public bool ShowBroken => Section == Sections.Count - 1;
-    public bool ShowRows => !ShowBroken;
+    public bool ShowDeadKeys => Mode == UsageMode.Config && Section == 2;
+    public bool ShowRows => !ShowBroken && !ShowDeadKeys;
     public bool HasWarning => Warning.Length > 0;
 
-    partial void OnSectionChanged(int value) { OnPropertyChanged(nameof(ShowBroken)); OnPropertyChanged(nameof(ShowRows)); ShowResults(); }
+    partial void OnSectionChanged(int value) { OnPropertyChanged(nameof(ShowBroken)); OnPropertyChanged(nameof(ShowDeadKeys)); OnPropertyChanged(nameof(ShowRows)); ShowResults(); }
     partial void OnFilterChanged(string value) => ShowResults();
     partial void OnUnusedOnlyChanged(bool value) => ShowResults();
     partial void OnWarningChanged(string value) => OnPropertyChanged(nameof(HasWarning));
@@ -86,10 +101,15 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
         IsLoading = true; Error = null;
         try
         {
-            var targets = Mode == UsageMode.Config ? new[] { "configmaps", "secrets" } : ["persistentvolumeclaims", "persistentvolumes", "storageclasses"];
-            var consumers = Mode == UsageMode.Config
-                ? new[] { "pods", "deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs", "ingresses", "serviceaccounts" }
-                : ["pods", "deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"];
+            string[] workloads = ["pods", "deployments", "statefulsets", "daemonsets", "replicasets", "jobs", "cronjobs"];
+            string[] targets, consumers;
+            switch (Mode)
+            {
+                case UsageMode.Config: targets = ["configmaps", "secrets"]; consumers = [.. workloads, "ingresses", "serviceaccounts"]; break;
+                case UsageMode.Storage: targets = ["persistentvolumeclaims", "persistentvolumes", "storageclasses"]; consumers = workloads; break;
+                case UsageMode.Access: targets = ["serviceaccounts"]; consumers = [.. workloads, "rolebindings", "clusterrolebindings"]; break;
+                default: targets = ["ingressclasses", "services"]; consumers = ["ingresses"]; break;
+            }
             var listed = new HashSet<string>();
             var notRead = new List<string>();
             var truncated = new List<string>();
@@ -106,7 +126,8 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
                         found.AddRange(await CompareViewModel.ListAllAsync(_ws, kind, ns, _cts.Token));
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException) { notRead.Add(resource); return; }
-                foreach (var o in found) { o.Json.Remove("data"); o.Json.Remove("stringData"); o.Json.Remove("binaryData"); }
+                // Secret values are never kept. ConfigMap keys are what the unread-keys check needs; their values are not shown.
+                if (kind.Kind == "Secret") foreach (var o in found) { o.Json.Remove("data"); o.Json.Remove("stringData"); o.Json.Remove("binaryData"); }
                 if (found.Count >= ListCap) truncated.Add(resource);
                 if (isTarget) listed.Add(kind.Kind);
                 objects.AddRange(found);
@@ -114,14 +135,15 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
 
             await Task.WhenAll(targets.Select(t => ReadAsync(t, true)).Concat(consumers.Select(c => ReadAsync(c, false))));
             var usage = ResourceUsage.Analyze(objects, listed);
-            var kinds = Mode == UsageMode.Config ? new[] { "ConfigMap", "Secret" } : ["PersistentVolumeClaim", "PersistentVolume", "StorageClass"];
+            var kinds = ModeKinds();
             _ws.Ui.Post(() =>
             {
                 _usage = usage;
                 Warning = notRead.Count == 0 && truncated.Count == 0 ? ""
                     : $"{(notRead.Count > 0 ? $"Could not read {string.Join(", ", notRead)}. " : "")}{(truncated.Count > 0 ? $"{string.Join(", ", truncated)} truncated at {ListCap}. " : "")}\"Not referenced\" may be wrong for what those hold.";
                 var rows = usage.Rows.Where(r => kinds.Contains(r.Kind)).ToList();
-                Summary = $"{rows.Count(r => r.Status == UsageStatus.Used)} used · {rows.Count(r => r.Status == UsageStatus.Unused)} not referenced · {rows.Count(r => r.Status == UsageStatus.External)} managed by the cluster · {usage.Broken.Count(b => kinds.Contains(b.TargetKind))} broken reference(s). Selected namespaces only.";
+                var deadKeys = rows.Sum(r => r.DeadKeys.Count);
+                Summary = $"{rows.Count(r => r.Status == UsageStatus.Used)} used · {rows.Count(r => r.Status == UsageStatus.Unused)} not referenced · {rows.Count(r => r.Status == UsageStatus.External)} managed by the cluster · {usage.Broken.Count(b => BrokenKinds().Contains(b.TargetKind))} broken reference(s){(Mode == UsageMode.Config ? $" · {deadKeys} key(s) nobody reads" : "")}. Selected namespaces only.";
                 ShowResults();
             });
         }
@@ -130,20 +152,40 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
         finally { IsLoading = false; }
     }
 
-    private string[] SectionKinds() => Mode == UsageMode.Config
-        ? Section switch { 0 => ["ConfigMap"], 1 => ["Secret"], _ => ["ConfigMap", "Secret"] }
-        : Section switch { 0 => ["PersistentVolumeClaim"], 1 => ["PersistentVolume"], 2 => ["StorageClass"], _ => ["PersistentVolumeClaim", "PersistentVolume", "StorageClass"] };
+    private string[] ModeKinds() => Mode switch
+    {
+        UsageMode.Config => ["ConfigMap", "Secret"],
+        UsageMode.Storage => ["PersistentVolumeClaim", "PersistentVolume", "StorageClass"],
+        UsageMode.Access => ["ServiceAccount"],
+        _ => ["IngressClass"],
+    };
+
+    /// <summary>What a reference points at in this mode (Network also reports an ingress backend Service that does not exist).</summary>
+    private string[] BrokenKinds() => Mode == UsageMode.Network ? ["IngressClass", "Service"] : Mode == UsageMode.Access ? ["ServiceAccount"] : ModeKinds();
+
+    private string[] SectionKinds() => Mode switch
+    {
+        UsageMode.Config => Section switch { 0 => ["ConfigMap"], 1 => ["Secret"], _ => ["ConfigMap"] },
+        UsageMode.Storage => Section switch { 0 => ["PersistentVolumeClaim"], 1 => ["PersistentVolume"], _ => ["StorageClass"] },
+        _ => ModeKinds(),
+    };
 
     private void ShowResults()
     {
         if (_usage is null) return;
         var kinds = SectionKinds();
-        Rows.Clear(); BrokenRows.Clear();
+        Rows.Clear(); BrokenRows.Clear(); DeadKeyRows.Clear();
         var needle = Filter.Trim();
         bool Match(string text) => needle.Length == 0 || text.Contains(needle, StringComparison.OrdinalIgnoreCase);
         if (ShowBroken)
         {
-            foreach (var b in _usage.Broken.Where(b => kinds.Contains(b.TargetKind) && (Match(b.Consumer.Display) || Match(b.Target)))) BrokenRows.Add(new BrokenRow(b));
+            foreach (var b in _usage.Broken.Where(b => BrokenKinds().Contains(b.TargetKind) && (Match(b.Consumer.Display) || Match(b.Target)))) BrokenRows.Add(new BrokenRow(b));
+            return;
+        }
+        if (ShowDeadKeys)
+        {
+            foreach (var r in _usage.Rows.Where(r => r.Kind == "ConfigMap" && r.DeadKeys.Count > 0))
+                foreach (var k in r.DeadKeys.Where(k => Match(r.Display) || Match(k))) DeadKeyRows.Add(new DeadKeyRow(r, k));
             return;
         }
         foreach (var r in _usage.Rows.Where(r => kinds.Contains(r.Kind) && (!UnusedOnly || r.Status == UsageStatus.Unused) && (Match(r.Display) || Match(r.UsedBy)))) Rows.Add(new UsageRowViewModel(r));
@@ -153,6 +195,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable
     private void OpenSelected()
     {
         if (ShowBroken && SelectedBroken?.Ref.Consumer is { } c) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
+        else if (ShowDeadKeys && SelectedDeadKey?.Map is { } m) _ws.OpenGraphNode(new GraphNode(m.Display, m.Kind, m.Namespace, m.Name));
         else if (Selected?.Row is { } r) _ws.OpenGraphNode(new GraphNode(r.Display, r.Kind, r.Namespace, r.Name));
     }
 

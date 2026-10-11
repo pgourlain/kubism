@@ -21,6 +21,8 @@ public sealed record UsageRow(string Kind, string? Namespace, string Name, Usage
 {
     public string Display => Namespace is null ? Name : $"{Namespace}/{Name}";
     public int Count => Consumers.Count;
+    /// <summary>ConfigMap keys no consumer reads. Empty when unknown, which includes any consumer that takes the whole map (envFrom, a volume without items).</summary>
+    public IReadOnlyList<string> DeadKeys { get; init; } = [];
 
     /// <summary>"Deployment/web (env), Pod/job-x (volume) and 3 more".</summary>
     public string UsedBy
@@ -47,10 +49,13 @@ public sealed record BrokenReference(Consumer Consumer, string TargetKind, strin
 /// </summary>
 public sealed class ResourceUsage
 {
-    public const string ConfigMap = "ConfigMap", Secret = "Secret", Pvc = "PersistentVolumeClaim", Pv = "PersistentVolume", StorageClass = "StorageClass";
-    public static readonly IReadOnlyList<string> AnalyzedKinds = [ConfigMap, Secret, Pvc, Pv, StorageClass];
+    public const string ConfigMap = "ConfigMap", Secret = "Secret", Pvc = "PersistentVolumeClaim", Pv = "PersistentVolume", StorageClass = "StorageClass",
+        ServiceAccount = "ServiceAccount", IngressClass = "IngressClass", Service = "Service";
+    public static readonly IReadOnlyList<string> AnalyzedKinds = [ConfigMap, Secret, Pvc, Pv, StorageClass, ServiceAccount, IngressClass];
+    /// <summary>Kinds a reference can point at: the analyzed ones, and Services (an Ingress backend that does not exist is worth reporting).</summary>
+    private static readonly string[] TargetKinds = [.. AnalyzedKinds, Service];
     /// <summary>Kinds that hold what refers to the analyzed ones. A missing one means "unused" cannot be trusted.</summary>
-    public static readonly IReadOnlyList<string> ConsumerKinds = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Ingress", "ServiceAccount"];
+    public static readonly IReadOnlyList<string> ConsumerKinds = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Ingress", "ServiceAccount", "RoleBinding", "ClusterRoleBinding"];
     private static readonly HashSet<string> ControllerKinds = ["ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController"];
 
     private ResourceUsage(IReadOnlyList<UsageRow> rows, IReadOnlyList<BrokenReference> broken) { Rows = rows; Broken = broken; }
@@ -66,11 +71,19 @@ public sealed class ResourceUsage
         List<KubeObject> Of(string kind) => byKind.TryGetValue(kind, out var l) ? l : [];
 
         var refs = new List<Ref>();
+        var boundBy = new Dictionary<(string?, string), List<string>>();
+        var defaultIngressClass = Of("IngressClass").FirstOrDefault(c => c.Annotations.TryGetValue("ingressclass.kubernetes.io/is-default-class", out var d) && d == "true")?.Name;
         foreach (var o in all)
         {
-            if (o.Kind == "Ingress")
-                foreach (var tls in o.At("spec", "tls") as JsonArray ?? [])
-                    if (tls?["secretName"]?.ToString() is { Length: > 0 } s) refs.Add(new Ref(Secret, o.Namespace, s, new Consumer(o.Kind, o.Namespace, o.Name, "TLS"), false));
+            if (o.Kind == "Ingress") AddIngressRefs(o, defaultIngressClass, refs);
+            if (o.Kind is "RoleBinding" or "ClusterRoleBinding")
+                foreach (var subject in o.At("subjects") as JsonArray ?? [])
+                    if (subject?["kind"]?.ToString() == "ServiceAccount" && subject["name"]?.ToString() is { Length: > 0 } sa)
+                    {
+                        var ns = subject["namespace"]?.ToString() ?? o.Namespace;
+                        if (!boundBy.TryGetValue((ns, sa), out var list)) boundBy[(ns, sa)] = list = [];
+                        list.Add($"{o.Kind}/{o.Name} -> {o.StringAt("roleRef", "name")}");
+                    }
             if (o.Kind == "ServiceAccount")
             {
                 foreach (var s in o.At("imagePullSecrets") as JsonArray ?? [])
@@ -80,7 +93,7 @@ public sealed class ResourceUsage
             }
             if (!IsConsumer(o) || PodSpecOf(o) is not { } spec) continue;
             var consumer = (string how) => new Consumer(o.Kind, o.Namespace, o.Name, how);
-            foreach (var (kind, name, how, optional) in PodSpecRefs(spec)) refs.Add(new Ref(kind, o.Namespace, name, consumer(how), optional));
+            foreach (var (kind, name, how, optional, keys) in PodSpecRefs(spec)) refs.Add(new Ref(kind, o.Namespace, name, consumer(how), optional, keys));
             if (o.Kind == "StatefulSet") AddClaimTemplates(o, Of(Pvc), refs);
         }
 
@@ -103,14 +116,16 @@ public sealed class ResourceUsage
         }
 
         var exists = new Dictionary<string, HashSet<(string?, string)>>();
-        foreach (var kind in AnalyzedKinds) exists[kind] = Of(kind).Select(o => (o.Namespace, o.Name)).ToHashSet();
+        foreach (var kind in TargetKinds) exists[kind] = Of(kind).Select(o => (o.Namespace, o.Name)).ToHashSet();
 
         var consumers = new Dictionary<(string, string?, string), List<Consumer>>();
+        var readKeys = new Dictionary<(string?, string), HashSet<string>?>();
         var broken = new List<BrokenReference>();
         foreach (var r in refs)
         {
             var key = (r.Kind, r.Namespace, r.Name);
-            if (!exists[r.Kind].Contains((r.Namespace, r.Name)))
+            if (!exists.TryGetValue(r.Kind, out var present)) continue;
+            if (!present.Contains((r.Namespace, r.Name)))
             {
                 if (r.Optional || !listedKinds.Contains(r.Kind)) continue;
                 broken.Add(new BrokenReference(r.Consumer, r.Kind, r.Namespace, r.Name, $"{r.Consumer.Display} refers to {r.Kind} {r.Name} ({r.Consumer.How}) which does not exist"));
@@ -118,6 +133,13 @@ public sealed class ResourceUsage
             }
             if (!consumers.TryGetValue(key, out var list)) consumers[key] = list = [];
             if (!list.Contains(r.Consumer)) list.Add(r.Consumer);
+            if (r.Kind == ConfigMap)
+            {
+                // null = the reference takes every key, so none can be called unread.
+                var mapKey = (r.Namespace, r.Name);
+                if (!readKeys.TryGetValue(mapKey, out var read)) readKeys[mapKey] = read = [];
+                if (read is not null) { if (r.Keys is null) readKeys[mapKey] = null; else read.UnionWith(r.Keys); }
+            }
         }
 
         var rows = new List<UsageRow>();
@@ -125,19 +147,22 @@ public sealed class ResourceUsage
             foreach (var o in Of(kind))
             {
                 var used = consumers.TryGetValue((kind, o.Namespace, o.Name), out var c) ? c : [];
-                var (status, note) = Classify(o, used, defaultClass);
-                rows.Add(new UsageRow(kind, o.Namespace, o.Name, status, used.OrderBy(x => x.Display, StringComparer.Ordinal).ToList(), note));
+                var (status, note) = Classify(o, used, defaultClass, defaultIngressClass, boundBy.GetValueOrDefault((o.Namespace, o.Name)));
+                var dead = kind == ConfigMap && used.Count > 0 ? DeadKeysOf(o, readKeys.GetValueOrDefault((o.Namespace, o.Name))) : [];
+                if (dead.Count > 0) note = $"Keys nobody reads: {string.Join(", ", dead)}";
+                rows.Add(new UsageRow(kind, o.Namespace, o.Name, status, used.OrderBy(x => x.Display, StringComparer.Ordinal).ToList(), note) { DeadKeys = dead });
             }
         rows.Sort((a, b) => string.CompareOrdinal(a.Display, b.Display));
         broken.Sort((a, b) => string.CompareOrdinal(a.Consumer.Display, b.Consumer.Display));
         return new ResourceUsage(rows, broken);
     }
 
-    private sealed record Ref(string Kind, string? Namespace, string Name, Consumer Consumer, bool Optional);
+    /// <param name="Keys">The keys of a ConfigMap this reference reads; null = all of them.</param>
+    private sealed record Ref(string Kind, string? Namespace, string Name, Consumer Consumer, bool Optional, IReadOnlyList<string>? Keys = null);
 
     // ---------- classification ----------
 
-    private static (UsageStatus, string) Classify(KubeObject o, List<Consumer> used, string? defaultClass)
+    private static (UsageStatus, string) Classify(KubeObject o, List<Consumer> used, string? defaultClass, string? defaultIngressClass, List<string>? boundBy)
     {
         switch (o.Kind)
         {
@@ -160,6 +185,13 @@ public sealed class ResourceUsage
             case StorageClass:
                 if (used.Count > 0) return (UsageStatus.Used, o.Name == defaultClass ? "Default class" : "");
                 return (UsageStatus.Unused, o.Name == defaultClass ? "Default class: unused today, but any claim without a class would get it" : "No claim or volume uses it");
+            case ServiceAccount:
+                if (used.Count > 0) return (UsageStatus.Used, boundBy is null ? "No role binding: it can do nothing beyond what everyone can" : "");
+                if (o.Name == "default") return (UsageStatus.External, "Default account of the namespace: used by every pod that names none");
+                return (UsageStatus.Unused, boundBy is null ? "No pod runs as it and no role binding names it" : $"No pod runs as it, but it holds permissions through {string.Join(", ", boundBy.Take(2))}{(boundBy.Count > 2 ? $" and {boundBy.Count - 2} more" : "")}");
+            case IngressClass:
+                if (used.Count > 0) return (UsageStatus.Used, o.Name == defaultIngressClass ? "Default class" : "");
+                return (UsageStatus.Unused, o.Name == defaultIngressClass ? "Default class: unused today, but any ingress without a class would get it" : "No ingress uses it");
             case Secret:
                 if (used.Count > 0) return (UsageStatus.Used, "");
                 var type = o.StringAt("type") ?? "";
@@ -176,6 +208,13 @@ public sealed class ResourceUsage
                 if (Controller(o) is { } own) return (UsageStatus.External, $"Owned by {own}");
                 return (UsageStatus.Unused, "");
         }
+    }
+
+    private static IReadOnlyList<string> DeadKeysOf(KubeObject map, HashSet<string>? read)
+    {
+        if (read is null) return [];
+        var keys = ((map.At("data") as JsonObject)?.Select(kv => kv.Key) ?? []).Concat((map.At("binaryData") as JsonObject)?.Select(kv => kv.Key) ?? []);
+        return keys.Where(k => !read.Contains(k)).Order(StringComparer.Ordinal).ToList();
     }
 
     private static string? Controller(KubeObject o) => o.OwnerReferences.FirstOrDefault(r => r.Controller) is { } r ? $"{r.Kind}/{r.Name}" : null;
@@ -204,36 +243,77 @@ public sealed class ResourceUsage
 
     private static bool OptionalFlag(JsonNode? n) => n?["optional"]?.ToString().Equals("true", StringComparison.OrdinalIgnoreCase) == true;
 
-    private static IEnumerable<(string kind, string name, string how, bool optional)> PodSpecRefs(JsonObject spec)
+    private static IEnumerable<(string kind, string name, string how, bool optional, IReadOnlyList<string>? keys)> PodSpecRefs(JsonObject spec)
     {
+        var containers = new List<JsonObject>();
+        foreach (var field in new[] { "initContainers", "containers", "ephemeralContainers" })
+            foreach (var c in spec[field] as JsonArray ?? []) if (c is JsonObject co) containers.Add(co);
+
+        // The account a pod runs as: unset means "default", which always exists (so it is never reported missing).
+        var sa = spec["serviceAccountName"]?.ToString() ?? spec["serviceAccount"]?.ToString();
+        yield return (ServiceAccount, string.IsNullOrEmpty(sa) ? "default" : sa, "runs as", string.IsNullOrEmpty(sa), null);
+
         foreach (var v in spec["volumes"] as JsonArray ?? [])
         {
-            if (v?["configMap"] is { } cm && cm["name"]?.ToString() is { Length: > 0 } cmn) yield return (ConfigMap, cmn, "volume", OptionalFlag(cm));
-            if (v?["secret"] is { } s && s["secretName"]?.ToString() is { Length: > 0 } sn) yield return (Secret, sn, "volume", OptionalFlag(s));
-            if (v?["persistentVolumeClaim"]?["claimName"]?.ToString() is { Length: > 0 } pvc) yield return (Pvc, pvc, "volume", false);
-            if (v?["csi"]?["nodePublishSecretRef"]?["name"]?.ToString() is { Length: > 0 } csi) yield return (Secret, csi, "csi", false);
+            if (v?["configMap"] is { } cm && cm["name"]?.ToString() is { Length: > 0 } cmn)
+                yield return (ConfigMap, cmn, "volume", OptionalFlag(cm), VolumeKeys(cm, v["name"]?.ToString(), containers));
+            if (v?["secret"] is { } s && s["secretName"]?.ToString() is { Length: > 0 } sn) yield return (Secret, sn, "volume", OptionalFlag(s), null);
+            if (v?["persistentVolumeClaim"]?["claimName"]?.ToString() is { Length: > 0 } pvc) yield return (Pvc, pvc, "volume", false, null);
+            if (v?["csi"]?["nodePublishSecretRef"]?["name"]?.ToString() is { Length: > 0 } csi) yield return (Secret, csi, "csi", false, null);
             foreach (var src in v?["projected"]?["sources"] as JsonArray ?? [])
             {
-                if (src?["configMap"] is { } pcm && pcm["name"]?.ToString() is { Length: > 0 } pcmn) yield return (ConfigMap, pcmn, "projected volume", OptionalFlag(pcm));
-                if (src?["secret"] is { } ps && ps["name"]?.ToString() is { Length: > 0 } psn) yield return (Secret, psn, "projected volume", OptionalFlag(ps));
+                if (src?["configMap"] is { } pcm && pcm["name"]?.ToString() is { Length: > 0 } pcmn) yield return (ConfigMap, pcmn, "projected volume", OptionalFlag(pcm), ItemKeys(pcm));
+                if (src?["secret"] is { } ps && ps["name"]?.ToString() is { Length: > 0 } psn) yield return (Secret, psn, "projected volume", OptionalFlag(ps), null);
             }
         }
         foreach (var s in spec["imagePullSecrets"] as JsonArray ?? [])
-            if (s?["name"]?.ToString() is { Length: > 0 } n) yield return (Secret, n, "imagePullSecrets", false);
-        foreach (var field in new[] { "initContainers", "containers", "ephemeralContainers" })
-            foreach (var c in spec[field] as JsonArray ?? [])
+            if (s?["name"]?.ToString() is { Length: > 0 } n) yield return (Secret, n, "imagePullSecrets", false, null);
+        foreach (var c in containers)
+        {
+            foreach (var from in c["envFrom"] as JsonArray ?? [])
             {
-                foreach (var from in c?["envFrom"] as JsonArray ?? [])
-                {
-                    if (from?["configMapRef"] is { } cm && cm["name"]?.ToString() is { Length: > 0 } cmn) yield return (ConfigMap, cmn, "envFrom", OptionalFlag(cm));
-                    if (from?["secretRef"] is { } s && s["name"]?.ToString() is { Length: > 0 } sn) yield return (Secret, sn, "envFrom", OptionalFlag(s));
-                }
-                foreach (var env in c?["env"] as JsonArray ?? [])
-                {
-                    if (env?["valueFrom"]?["configMapKeyRef"] is { } cm && cm["name"]?.ToString() is { Length: > 0 } cmn) yield return (ConfigMap, cmn, "env", OptionalFlag(cm));
-                    if (env?["valueFrom"]?["secretKeyRef"] is { } s && s["name"]?.ToString() is { Length: > 0 } sn) yield return (Secret, sn, "env", OptionalFlag(s));
-                }
+                if (from?["configMapRef"] is { } cm && cm["name"]?.ToString() is { Length: > 0 } cmn) yield return (ConfigMap, cmn, "envFrom", OptionalFlag(cm), null);
+                if (from?["secretRef"] is { } s && s["name"]?.ToString() is { Length: > 0 } sn) yield return (Secret, sn, "envFrom", OptionalFlag(s), null);
             }
+            foreach (var env in c["env"] as JsonArray ?? [])
+            {
+                if (env?["valueFrom"]?["configMapKeyRef"] is { } cm && cm["name"]?.ToString() is { Length: > 0 } cmn)
+                    yield return (ConfigMap, cmn, "env", OptionalFlag(cm), cm["key"]?.ToString() is { Length: > 0 } k ? [k] : null);
+                if (env?["valueFrom"]?["secretKeyRef"] is { } s && s["name"]?.ToString() is { Length: > 0 } sn) yield return (Secret, sn, "env", OptionalFlag(s), null);
+            }
+        }
+    }
+
+    /// <summary>The keys listed in "items", or null (all of them) when the volume takes the whole map.</summary>
+    private static IReadOnlyList<string>? ItemKeys(JsonNode source) =>
+        source["items"] is JsonArray { Count: > 0 } items ? items.Select(i => i?["key"]?.ToString()).OfType<string>().ToList() : null;
+
+    /// <summary>
+    /// A ConfigMap volume without "items" exposes every key as a file, but a container that mounts it with subPath reads only that file.
+    /// Every mount has to use a plain subPath for the keys to be known; one unrestricted mount (or a nested subPath) means all keys.
+    /// </summary>
+    private static IReadOnlyList<string>? VolumeKeys(JsonNode source, string? volume, List<JsonObject> containers)
+    {
+        if (ItemKeys(source) is { } items) return items;
+        var mounts = containers.SelectMany(c => c["volumeMounts"] as JsonArray ?? []).Where(m => m?["name"]?.ToString() == volume).ToList();
+        if (mounts.Count == 0) return [];
+        var subPaths = mounts.Select(m => m?["subPath"]?.ToString() ?? "").ToList();
+        return subPaths.Any(sp => sp.Length == 0 || sp.Contains('/')) ? null : subPaths;
+    }
+
+    private static void AddIngressRefs(KubeObject ingress, string? defaultClass, List<Ref> refs)
+    {
+        Consumer C(string how) => new(ingress.Kind, ingress.Namespace, ingress.Name, how);
+        foreach (var tls in ingress.At("spec", "tls") as JsonArray ?? [])
+            if (tls?["secretName"]?.ToString() is { Length: > 0 } s) refs.Add(new Ref(Secret, ingress.Namespace, s, C("TLS"), false));
+        var cls = ingress.StringAt("spec", "ingressClassName") ?? (ingress.Annotations.TryGetValue("kubernetes.io/ingress.class", out var a) ? a : null) ?? defaultClass;
+        if (!string.IsNullOrEmpty(cls)) refs.Add(new Ref(IngressClass, null, cls, C("class"), false));
+        var backends = new List<string>();
+        if (ingress.StringAt("spec", "defaultBackend", "service", "name") is { } d) backends.Add(d);
+        foreach (var rule in ingress.At("spec", "rules") as JsonArray ?? [])
+            foreach (var path in rule?["http"]?["paths"] as JsonArray ?? [])
+                if (path?["backend"]?["service"]?["name"]?.ToString() is { Length: > 0 } n) backends.Add(n);
+        foreach (var b in backends.Distinct()) refs.Add(new Ref(Service, ingress.Namespace, b, C("backend"), false));
     }
 
     /// <summary>A StatefulSet's claims are named "{template}-{set}-{ordinal}" and carry no owner reference: they are read from the naming rule.</summary>

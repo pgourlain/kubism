@@ -10,7 +10,7 @@
     <Grid ColumnDefinitions="*,Auto">
       <StackPanel>
         <TextBlock Text="{Binding Title}" Classes="h1" />
-        <TextBlock Text="Read-only. Shows what the cluster's objects refer to; something outside them (an operator, a script, an application calling the API) can still use an object that is not referenced. Secret values are never read." Classes="muted" TextWrapping="Wrap" />
+        <TextBlock Text="Read-only. Shows what the cluster's objects refer to; something outside them (an operator, a script, an application calling the API) can still use an object that is not referenced. Secret values are never read. A key counts as unread only when every consumer names the keys it uses." Classes="muted" TextWrapping="Wrap" />
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
         <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
@@ -48,7 +48,14 @@
                       <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:UsageRowViewModel" Width="2*" />
                     </DataGrid.Columns>
                   </DataGrid>
-                  <DataGrid ItemsSource="{Binding BrokenRows}" SelectedItem="{Binding SelectedBroken}" IsVisible="{Binding ShowBroken}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Broken references">
+                  <DataGrid ItemsSource="{Binding DeadKeyRows}" SelectedItem="{Binding SelectedDeadKey}" IsVisible="{Binding ShowDeadKeys}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Unread keys">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="ConfigMap" Binding="{Binding ConfigMap}" x:DataType="vm:DeadKeyRow" Width="2*" />
+          <DataGridTextColumn Header="Key nobody reads" Binding="{Binding Key}" x:DataType="vm:DeadKeyRow" Width="2*" />
+          <DataGridTextColumn Header="Read by" Binding="{Binding ReadBy}" x:DataType="vm:DeadKeyRow" Width="3*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <DataGrid ItemsSource="{Binding BrokenRows}" SelectedItem="{Binding SelectedBroken}" IsVisible="{Binding ShowBroken}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Broken references">
                     <DataGrid.Columns>
                       <DataGridTextColumn Header="Held by" Binding="{Binding Consumer}" x:DataType="vm:BrokenRow" Width="2*" />
                       <DataGridTextColumn Header="Through" Binding="{Binding How}" x:DataType="vm:BrokenRow" Width="*" />
