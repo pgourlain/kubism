@@ -10,7 +10,7 @@
     <!-- In-window menu (non-macOS); macOS gets a NativeMenu built from the same MenuSpec records. -->
     <Menu Name="MainMenu" Grid.Row="0" />
 
-    <Grid Grid.Row="1" ColumnDefinitions="68,Auto,*">
+    <Grid Grid.Row="1" ColumnDefinitions="68,1,*">
       <!-- Cluster rail: one tile per kubeconfig context -->
       <Grid Grid.Column="0" RowDefinitions="*,Auto" Background="{DynamicResource KubismCatalogBrush}">
         <ListBox Name="CatalogList" ItemsSource="{Binding Clusters}" SelectedItem="{Binding SelectedCluster}" Background="Transparent" Padding="0,10" AutomationProperties.Name="Cluster catalog">
@@ -34,12 +34,16 @@
                     <MenuItem Header="Pin / unpin" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).TogglePinCommand}" CommandParameter="{Binding}" />
                     <MenuItem Header="Move up" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).MoveUpCommand}" CommandParameter="{Binding}" />
                     <MenuItem Header="Move down" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).MoveDownCommand}" CommandParameter="{Binding}" />
+                    <Separator />
+                    <MenuItem Header="Remove from Kubism" Command="{Binding $parent[ListBox].((vm:MainViewModel)DataContext).RemoveClusterCommand}" CommandParameter="{Binding}" />
                   </ContextMenu>
                 </Grid.ContextMenu>
                 <Border Width="40" Height="40" CornerRadius="12" Background="{Binding Color, Converter={x:Static app:Converters.HexBrush}}" HorizontalAlignment="Center" VerticalAlignment="Center">
                   <TextBlock Text="{Binding Letter}" Foreground="White" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
                 </Border>
-                <Ellipse Width="12" Height="12" HorizontalAlignment="Right" VerticalAlignment="Bottom" Stroke="{DynamicResource KubismCatalogBrush}" StrokeThickness="2"
+                <Border Width="4" Height="24" CornerRadius="0,2,2,0" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-12,0,0,0"
+                        IsVisible="{Binding IsConnected}" Background="{DynamicResource KubismOkBrush}" />
+                <Ellipse Width="16" Height="16" Margin="0,0,-4,-4" HorizontalAlignment="Right" VerticalAlignment="Bottom" Stroke="{DynamicResource KubismCatalogBrush}" StrokeThickness="3"
                          Fill="{Binding State, Converter={x:Static app:Converters.StateBrush}}" />
                 <Border IsVisible="{Binding IsProduction}" Background="{DynamicResource KubismProductionBrush}" CornerRadius="3" Padding="3,0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-4,-4,0,0">
                   <TextBlock Text="PROD" Foreground="White" FontSize="8" FontWeight="Bold" />
@@ -60,7 +64,7 @@
           </Button>
         </StackPanel>
       </Grid>
-      <GridSplitter Grid.Column="1" Width="1" Background="{DynamicResource KubismBorderBrush}" />
+      <Border Grid.Column="1" Background="{DynamicResource KubismBorderBrush}" />
 
       <!-- Workspaces -->
       <Grid Grid.Column="2" RowDefinitions="Auto,*">

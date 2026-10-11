@@ -188,6 +188,23 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
     }
 
     [RelayCommand]
+    private async Task RemoveClusterAsync(ClusterItemViewModel? item)
+    {
+        if (item is null) return;
+        if (_sessions.Get(item.Id) is not null) await DisconnectAsync(item);
+        var result = _catalog.Remove(item.Entry);
+        StatusText = result switch
+        {
+            RemoveResult.RemovedFile => $"Removed {item.Entry.FilePath} from the catalog (the file is untouched)",
+            RemoveResult.RemovedFolder => $"Removed folder {Path.GetDirectoryName(item.Entry.FilePath)} from the catalog (files untouched)",
+            _ => $"Hidden {item.Entry.ContextName} (File > Show hidden clusters to bring it back)",
+        };
+    }
+
+    [RelayCommand]
+    private void RestoreHiddenClusters() => _catalog.RestoreHidden();
+
+    [RelayCommand]
     private void ReloadCatalog() => _catalog.Reload();
 
     [RelayCommand]

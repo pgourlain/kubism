@@ -17,8 +17,23 @@ public partial class MainWindow : Window
         KeyDown += OnKeyDown;
         DataContextChanged += (_, _) => { BuildMenus(); if (Vm is { } v) v.SettingsApplied += BuildMenus; };
         CatalogList.DoubleTapped += (_, _) => { if (DataContext is MainViewModel vm && vm.SelectedCluster is { } c) _ = vm.ConnectAsync(c); };
-        Opened += (_, _) => BuildMenus();
+        Opened += (_, _) => { FitToScreen(); BuildMenus(); };
         PropertyChanged += (_, e) => { if (e.Property == IsVisibleProperty) { } };
+    }
+
+    /// <summary>The default size (1440x900) is larger than small or scaled screens: shrink to the work area and center, so the bottom-right corner stays reachable.</summary>
+    private void FitToScreen()
+    {
+        if (WindowState != WindowState.Normal || Screens.ScreenFromWindow(this) is not { } screen) return;
+        var area = screen.WorkingArea;
+        var scale = screen.Scaling;
+        double maxW = area.Width / scale, maxH = area.Height / scale;
+        if (Width <= maxW && Height <= maxH) return;
+        MinWidth = Math.Min(MinWidth, maxW);
+        MinHeight = Math.Min(MinHeight, maxH);
+        Width = Math.Min(Width, maxW);
+        Height = Math.Min(Height, maxH);
+        Position = new PixelPoint(area.X + (int)((area.Width - Width * scale) / 2), area.Y + (int)((area.Height - Height * scale) / 2));
     }
 
     private MainViewModel? Vm => DataContext as MainViewModel;

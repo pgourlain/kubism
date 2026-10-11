@@ -23,6 +23,7 @@ public static class MenuSpecs
         [
             new("Add kubeconfig…".T(), () => vm.AddKubeconfigCommand.Execute(null)),
             new("Add folder…".T(), () => vm.AddFolderCommand.Execute(null)),
+            new("Show hidden clusters", () => vm.RestoreHiddenClustersCommand.Execute(null)),
             new("Reload clusters", () => vm.ReloadCatalogCommand.Execute(null)),
             new("Settings…", () => _ = vm.EditSettingsAsync()),
             MenuSpec.Sep(),

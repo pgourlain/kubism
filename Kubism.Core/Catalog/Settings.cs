@@ -6,6 +6,7 @@ namespace Kubism.Core.Catalog;
 public sealed class AppSettings
 {
     public List<string> ExtraKubeconfigPaths { get; set; } = [];
+    public List<string> HiddenClusterIds { get; set; } = [];
     public Dictionary<string, ClusterMetadata> Clusters { get; set; } = [];
     public Dictionary<string, List<string>> SelectedNamespaces { get; set; } = [];
     public Dictionary<string, Dictionary<string, double>> ColumnWidths { get; set; } = [];

@@ -10,8 +10,14 @@ public interface IKubeconfigCatalog : IDisposable
     ClusterEntry? Find(string id);
     void Reload();
     void AddPath(string path);
+    /// <summary>Takes a cluster out of the catalog without touching any kubeconfig file: drops the added file or folder that provides it, or hides the context when it comes from KUBECONFIG / ~/.kube/config.</summary>
+    RemoveResult Remove(ClusterEntry entry);
+    /// <summary>Shows again the contexts hidden by <see cref="Remove"/>.</summary>
+    void RestoreHidden();
     event Action? CatalogChanged;
 }
+
+public enum RemoveResult { RemovedFile, RemovedFolder, Hidden }
 
 /// <summary>Builds the cluster list from KUBECONFIG, ~/.kube/config and user-added files/folders.</summary>
 public sealed class KubeconfigCatalog : IKubeconfigCatalog
@@ -61,6 +67,44 @@ public sealed class KubeconfigCatalog : IKubeconfigCatalog
         Reload();
     }
 
+    public RemoveResult Remove(ClusterEntry entry)
+    {
+        var extras = _settings.Current.ExtraKubeconfigPaths;
+        var result = RemoveResult.Hidden;
+        if (extras.Remove(entry.FilePath)) result = RemoveResult.RemovedFile;
+        else
+        {
+            var dir = Path.GetDirectoryName(entry.FilePath);
+            var folder = extras.FirstOrDefault(x => Directory.Exists(x) && string.Equals(Path.GetFullPath(x), dir, StringComparison.Ordinal));
+            if (folder is not null) { extras.Remove(folder); result = RemoveResult.RemovedFolder; }
+        }
+        // A file or folder that is also reachable through KUBECONFIG or the default path stays: hide what was asked.
+        if (result == RemoveResult.Hidden || _entries.Any(e => e.Id == entry.Id) && IsImplicit(entry.FilePath))
+        {
+            if (!_settings.Current.HiddenClusterIds.Contains(entry.Id)) _settings.Current.HiddenClusterIds.Add(entry.Id);
+            result = RemoveResult.Hidden;
+        }
+        _settings.Save();
+        Reload();
+        return result;
+    }
+
+    private bool IsImplicit(string file)
+    {
+        file = Path.GetFullPath(file);
+        if (file == Path.GetFullPath(_homeConfig)) return true;
+        var env = _kubeconfigEnv();
+        return !string.IsNullOrEmpty(env) && env.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries).Any(p => Path.GetFullPath(p) == file);
+    }
+
+    public void RestoreHidden()
+    {
+        if (_settings.Current.HiddenClusterIds.Count == 0) return;
+        _settings.Current.HiddenClusterIds.Clear();
+        _settings.Save();
+        Reload();
+    }
+
     public void Reload()
     {
         var files = new List<string>();
@@ -96,7 +140,7 @@ public sealed class KubeconfigCatalog : IKubeconfigCatalog
                 if (file != Path.GetFullPath(_homeConfig)) errors.Add(new KubeconfigError(file, "File not found"));
                 continue;
             }
-            try { entries.AddRange(ParseFile(file)); }
+            try { entries.AddRange(ParseFile(file).Where(e => !_settings.Current.HiddenClusterIds.Contains(e.Id))); }
             catch (Exception ex) { errors.Add(new KubeconfigError(file, ex.Message)); }
         }
 

@@ -85,6 +85,30 @@ public class KubeconfigCatalogTests : IDisposable
     }
 
     [Fact]
+    public void Remove_drops_an_added_file_without_deleting_it()
+    {
+        var f = Write("added", Two);
+        var s = new SettingsStore();
+        using var c = Make(settings: s);
+        c.AddPath(f);
+        Assert.Equal(RemoveResult.RemovedFile, c.Remove(c.Entries[0]));
+        Assert.Empty(c.Entries);
+        Assert.True(File.Exists(f));
+    }
+
+    [Fact]
+    public void Remove_hides_a_context_from_KUBECONFIG_and_restore_brings_it_back()
+    {
+        var f = Write("cfg", Two);
+        var s = new SettingsStore();
+        using var c = Make(f, settings: s);
+        Assert.Equal(RemoveResult.Hidden, c.Remove(c.Entries[0]));
+        Assert.Single(c.Entries);
+        c.RestoreHidden();
+        Assert.Equal(2, c.Entries.Count);
+    }
+
+    [Fact]
     public async Task File_change_raises_CatalogChanged_after_debounce()
     {
         var f = Write("cfg", Two);
