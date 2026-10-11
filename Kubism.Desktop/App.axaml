@@ -99,6 +99,26 @@
       <Setter Property="Background" Value="{DynamicResource KubismAccentSoftBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource KubismAccentBrush}" />
     </Style>
+    <!-- Flat icon button (back / forward / history): no frame until hovered, dimmed when it cannot be used. -->
+    <Style Selector="Button.nav">
+      <Setter Property="Width" Value="30" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.nav:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource KubismAccentSoftBrush}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.nav:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource KubismBorderBrush}" />
+    </Style>
+    <Style Selector="Button.nav:disabled"><Setter Property="Opacity" Value="0.3" /></Style>
+    <Style Selector="Button.nav:disabled /template/ ContentPresenter#PART_ContentPresenter"><Setter Property="Background" Value="Transparent" /></Style>
+    <Style Selector="Button.nav Path"><Setter Property="Stroke" Value="{DynamicResource KubismMutedBrush}" /></Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{DynamicResource KubismAccentBrush}" />
       <Setter Property="Foreground" Value="{DynamicResource KubismOnAccentBrush}" />
