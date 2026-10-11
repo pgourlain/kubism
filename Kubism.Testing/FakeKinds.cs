@@ -75,6 +75,7 @@ public static class FakeKinds
             [new("Last Seen", "string", 0, Age), new("Type", "string", 0, o => S(o, "type")), new("Reason", "string", 0, o => S(o, "reason")),
              new("Object", "string", 0, o => $"{S(o, "involvedObject", "kind")?.ToLowerInvariant()}/{S(o, "involvedObject", "name")}"), new("Message", "string", 0, o => S(o, "message"))]),
         new("", "v1", "persistentvolumeclaims", "PersistentVolumeClaim", true, ["pvc"], StdColl, ["status"], [Name, new("Status", "string", 0, o => S(o, "status", "phase")), AgeCol]),
+        new("", "v1", "persistentvolumes", "PersistentVolume", false, ["pv"], StdColl, ["status"], [Name, new("Status", "string", 0, o => S(o, "status", "phase")), AgeCol]),
         new("", "v1", "serviceaccounts", "ServiceAccount", true, ["sa"], StdColl, [], [Name, AgeCol]),
         new("", "v1", "endpoints", "Endpoints", true, ["ep"], StdColl, [], [Name, AgeCol]),
         new("apps", "v1", "deployments", "Deployment", true, ["deploy"], StdColl, ["scale", "status"],

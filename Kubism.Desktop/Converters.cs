@@ -81,6 +81,7 @@ public static class Icons
         ["security"] = "M12,3 L20,6 V12 C20,16.5 16.5,20 12,21 C7.5,20 4,16.5 4,12 V6 Z M9,12 L11,14 L15,10",
         ["gitops"] = "M20,12 A8,8 0 0 0 6,6.3 M4,4 V9 H9 M4,12 A8,8 0 0 0 18,17.7 M20,20 V15 H15",
         ["capacity"] = "M4,6 H20 V10 H4 Z M4,14 H20 V18 H4 Z M4,6 H12 V10 H4 Z M4,14 H16 V18 H4 Z",
+        ["usage"] = "M4,6 L5.5,7.5 L8,5 M11,6 H20 M4,12 L5.5,13.5 L8,11 M11,12 H20 M4,18 H8 M11,18 H20",
         ["create"] = "M12,4 V20 M4,12 H20",
         ["activity"] = "M2,12 H6 L9,4 L15,20 L18,12 H22",
         ["portforward"] = "M3,12 H17 M13,7 L18,12 L13,17 M21,5 V19",

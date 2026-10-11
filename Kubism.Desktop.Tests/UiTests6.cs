@@ -2,6 +2,7 @@ using Avalonia.Headless.XUnit;
 using Kubism.Core.Views;
 using Kubism.Desktop.Controls;
 using Kubism.Desktop.ViewModels;
+using Kubism.Core.Usage;
 using Xunit;
 
 namespace Kubism.Desktop.Tests;
@@ -201,6 +202,64 @@ public class UiExplorationTests
         Assert.All(d.TimelineRows, r => Assert.NotEqual(Severity.Neutral, r.Severity));
         Assert.Contains(d.TimelineRows, r => r.Title == "BackOff");
         h.Screenshot("36-timeline-problems");
+    }
+
+    [AvaloniaFact]
+    public async Task Usage_pages_tell_used_from_unreferenced_config_and_storage()
+    {
+        await using var h = await UiHarness.StartAsync();
+        h.Demo.Server.SeedYaml("""
+            {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"shop","namespace":"usage-demo","uid":"u-shop"},"spec":{"replicas":1,"template":{"spec":{"volumes":[{"name":"d","persistentVolumeClaim":{"claimName":"shop-data"}},{"name":"x","configMap":{"name":"deleted-cfg"}}],"containers":[{"name":"c","image":"x:1","envFrom":[{"configMapRef":{"name":"shop-cfg"}}],"env":[{"name":"K","valueFrom":{"secretKeyRef":{"name":"shop-secret","key":"k"}}}]}]}}}}
+            ---
+            {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"shop-cfg","namespace":"usage-demo"}}
+            ---
+            {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"forgotten-cfg","namespace":"usage-demo"}}
+            ---
+            {"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"shop-secret","namespace":"usage-demo"},"data":{"k":"c2VjcmV0LXZhbHVl"}}
+            ---
+            {"apiVersion":"v1","kind":"Secret","type":"Opaque","metadata":{"name":"forgotten-secret","namespace":"usage-demo"},"data":{"k":"c2VjcmV0LXZhbHVl"}}
+            ---
+            {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":"shop-data","namespace":"usage-demo"},"spec":{"storageClassName":"usage-fast"},"status":{"phase":"Bound"}}
+            ---
+            {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":"old-data","namespace":"usage-demo"},"spec":{"storageClassName":"usage-fast"},"status":{"phase":"Bound"}}
+            ---
+            {"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":"usage-pv-released"},"spec":{"storageClassName":"usage-fast","persistentVolumeReclaimPolicy":"Retain","claimRef":{"namespace":"usage-demo","name":"gone"}},"status":{"phase":"Released"}}
+            ---
+            {"apiVersion":"storage.k8s.io/v1","kind":"StorageClass","metadata":{"name":"usage-fast"}}
+            ---
+            {"apiVersion":"storage.k8s.io/v1","kind":"StorageClass","metadata":{"name":"usage-slow"}}
+            """);
+        var ws = await h.ConnectAsync("demo-staging");
+        ws.Namespaces.SelectAll();
+
+        ws.Navigate(ws.FindNav(NavTarget.ConfigUsage)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v && v.Rows.Count > 0, what: "config usage");
+        var vm = (UsageViewModel)ws.CurrentContent!;
+        Assert.Equal(UsageStatus.Used, vm.Rows.Single(r => r.Row.Name == "shop-cfg").Row.Status);
+        Assert.Equal(UsageStatus.Unused, vm.Rows.Single(r => r.Row.Name == "forgotten-cfg").Row.Status);
+        h.Screenshot("40-usage-config");
+        vm.UnusedOnly = true;
+        Assert.All(vm.Rows, r => Assert.Equal(UsageStatus.Unused, r.Row.Status));
+        Assert.Contains(vm.Rows, r => r.Row.Name == "forgotten-cfg");
+        vm.UnusedOnly = false;
+        vm.Section = 1;
+        Assert.Equal(UsageStatus.Unused, vm.Rows.Single(r => r.Row.Name == "forgotten-secret").Row.Status);
+        Assert.Equal("Deployment/usage-demo/shop", vm.Rows.Single(r => r.Row.Name == "shop-secret").Row.Consumers.Single().Display);
+        vm.Section = 2;
+        Assert.Contains(vm.BrokenRows, b => b.Target == "ConfigMap/usage-demo/deleted-cfg" && b.Consumer == "Deployment/usage-demo/shop");
+
+        ws.Navigate(ws.FindNav(NavTarget.StorageUsage)!);
+        await UiHarness.WaitFor(() => ws.CurrentContent is UsageViewModel v && v.Mode == UsageMode.Storage && v.Rows.Count > 0, what: "storage usage");
+        var st = (UsageViewModel)ws.CurrentContent!;
+        Assert.Equal(UsageStatus.Used, st.Rows.Single(r => r.Row.Name == "shop-data").Row.Status);
+        Assert.Equal(UsageStatus.Unused, st.Rows.Single(r => r.Row.Name == "old-data").Row.Status);
+        h.Screenshot("41-usage-storage");
+        st.Section = 1;
+        Assert.Equal(UsageStatus.Unused, st.Rows.Single(r => r.Row.Name == "usage-pv-released").Row.Status);
+        st.Section = 2;
+        Assert.Equal(UsageStatus.Used, st.Rows.Single(r => r.Row.Name == "usage-fast").Row.Status);
+        Assert.Equal(UsageStatus.Unused, st.Rows.Single(r => r.Row.Name == "usage-slow").Row.Status);
+        Assert.DoesNotContain("c2VjcmV0LXZhbHVl", string.Join("|", vm.Rows.Select(r => r.UsedBy + r.Note)));
     }
 
     [AvaloniaFact]

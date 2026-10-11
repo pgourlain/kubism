@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:u="using:Kubism.Core.Usage"
+             xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             x:Class="Kubism.Desktop.Views.UsageView"
+             x:DataType="vm:UsageViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="16" RowSpacing="6">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="{Binding Title}" Classes="h1" />
+        <TextBlock Text="Read-only. Shows what the cluster's objects refer to; something outside them (an operator, a script, an application calling the API) can still use an object that is not referenced. Secret values are never read." Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
+        <c:RefreshButton Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </Grid>
+    <StackPanel Grid.Row="1" Spacing="2">
+      <TextBlock Text="{Binding Summary}" />
+      <TextBlock Text="{Binding Warning}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
+    </StackPanel>
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <TextBox Text="{Binding Filter, Mode=TwoWay}" PlaceholderText="Filter by name or consumer" AutomationProperties.Name="Filter" />
+      <CheckBox Grid.Column="1" Content="Not referenced only" IsChecked="{Binding UnusedOnly}" IsVisible="{Binding ShowRows}" />
+      <Button Grid.Column="2" Content="Open object" Command="{Binding OpenSelectedCommand}" ToolTip.Tip="Open the selected object (or, for a broken reference, the object that holds it)" />
+    </Grid>
+    <ListBox Grid.Row="3" ItemsSource="{Binding Sections}" SelectedIndex="{Binding Section, Mode=TwoWay}" AutomationProperties.Name="Section">
+      <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+    </ListBox>
+    <Grid Grid.Row="4" RowDefinitions="*,Auto" RowSpacing="6">
+      <DataGrid ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowRows}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" CanUserSortColumns="True" AutomationProperties.Name="Usage">
+                    <DataGrid.Columns>
+                      <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="StatusText">
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate x:DataType="vm:UsageRowViewModel">
+                            <Border Classes="pill" BorderBrush="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" Margin="4,2" HorizontalAlignment="Left">
+                              <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                            </Border>
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                      <DataGridTextColumn Header="Name" Binding="{Binding Display}" x:DataType="vm:UsageRowViewModel" Width="1.5*" />
+                      <DataGridTextColumn Header="Used by" Binding="{Binding Count}" x:DataType="vm:UsageRowViewModel" Width="80" />
+                      <DataGridTextColumn Header="Consumers" Binding="{Binding UsedBy}" x:DataType="vm:UsageRowViewModel" Width="3*" />
+                      <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:UsageRowViewModel" Width="2*" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                  <DataGrid ItemsSource="{Binding BrokenRows}" SelectedItem="{Binding SelectedBroken}" IsVisible="{Binding ShowBroken}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Broken references">
+                    <DataGrid.Columns>
+                      <DataGridTextColumn Header="Held by" Binding="{Binding Consumer}" x:DataType="vm:BrokenRow" Width="2*" />
+                      <DataGridTextColumn Header="Through" Binding="{Binding How}" x:DataType="vm:BrokenRow" Width="*" />
+                      <DataGridTextColumn Header="Refers to (missing)" Binding="{Binding Target}" x:DataType="vm:BrokenRow" Width="2*" />
+                    </DataGrid.Columns>
+                  </DataGrid>
+                  <StackPanel Grid.Row="1" Spacing="4" IsVisible="{Binding ShowRows}" MaxHeight="180">
+                    <TextBlock Text="CONSUMERS OF THE SELECTED OBJECT" Classes="sectionTitle" />
+                    <ListBox ItemsSource="{Binding Consumers}" AutomationProperties.Name="Consumers">
+                      <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="u:Consumer">
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{Binding Display}" />
+                            <TextBlock Grid.Column="1" Text="{Binding How}" Classes="muted" />
+                          </Grid>
+                        </DataTemplate>
+                      </ListBox.ItemTemplate>
+                    </ListBox>
+                  </StackPanel>
+    </Grid>
+  </Grid>
+</UserControl>

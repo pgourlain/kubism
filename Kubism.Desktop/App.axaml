@@ -23,6 +23,7 @@
     <DataTemplate DataType="vm:CapacityViewModel"><v:CapacityView /></DataTemplate>
     <DataTemplate DataType="vm:GitOpsViewModel"><v:GitOpsView /></DataTemplate>
     <DataTemplate DataType="vm:SecurityViewModel"><v:SecurityView /></DataTemplate>
+    <DataTemplate DataType="vm:UsageViewModel"><v:UsageView /></DataTemplate>
     <DataTemplate DataType="vm:RbacViewModel"><v:RbacView /></DataTemplate>
     <DataTemplate DataType="vm:NetworkViewModel"><v:NetworkView /></DataTemplate>
     <DataTemplate DataType="vm:CompareViewModel"><v:CompareView /></DataTemplate>
