@@ -55,7 +55,7 @@ public sealed partial class NetworkGraph
     }
 
     private sealed record Port(string? Name, int Number, string Protocol, string TargetRaw, int? NodePort);
-    private sealed record ContainerPort(string? Name, int Number, string Protocol, int? HostPort);
+    private sealed record ContainerPort(string? Name, int Number, string Protocol, int? HostPort, string Container = "");
     private sealed record WorkloadRef(string Namespace, string Kind, string Name)
     {
         public string Id => $"w:{Namespace}/{Kind}/{Name}";
@@ -410,8 +410,8 @@ public sealed partial class NetworkGraph
         }
 
         private static IEnumerable<ContainerPort> ContainerPorts(KubeObject pod) =>
-            (pod.At("spec", "containers") as JsonArray ?? []).OfType<JsonObject>().SelectMany(c => (c["ports"] as JsonArray ?? []).OfType<JsonObject>())
-                .Select(p => new ContainerPort(KubeObject.Str(p, "name"), p["containerPort"]?.GetValue<int>() ?? 0, KubeObject.Str(p, "protocol") ?? "TCP", p["hostPort"] is JsonValue hv && hv.TryGetValue<int>(out var h) ? h : null));
+            (pod.At("spec", "containers") as JsonArray ?? []).OfType<JsonObject>().SelectMany(c => (c["ports"] as JsonArray ?? []).OfType<JsonObject>()
+                .Select(p => new ContainerPort(KubeObject.Str(p, "name"), p["containerPort"]?.GetValue<int>() ?? 0, KubeObject.Str(p, "protocol") ?? "TCP", p["hostPort"] is JsonValue hv && hv.TryGetValue<int>(out var h) ? h : null, KubeObject.Str(c, "name") ?? "")));
 
         private static bool PodReady(KubeObject p) =>
             (p.At("status", "conditions") as JsonArray ?? []).OfType<JsonObject>().Any(c => KubeObject.Str(c, "type") == "Ready" && KubeObject.Str(c, "status") == "True");
@@ -441,7 +441,7 @@ public sealed partial class NetworkGraph
             var hostNet = workloadPods.Any(p => p.At("spec", "hostNetwork") is JsonValue v && v.TryGetValue<bool>(out var b) && b);
             var hostPorts = ports.Where(p => p.HostPort is not null).ToList();
             Node(new NetworkNode(id, NetworkNodeKind.Workload, $"{w.Kind} {w.Name}", w.Namespace, $"{ready}/{workloadPods.Count} pods ready" + (ports.Count > 0 ? " · " + string.Join(", ", ports.Take(4).Select(p => p.Name is null ? p.Number.ToString() : $"{p.Name}:{p.Number}")) : ""),
-                ExposureLevel.InCluster, [], [], null));
+                ExposureLevel.InCluster, [], [], null) { DeclaredPorts = ports.Select(p => p.Number.ToString()).Distinct().ToList(), PortOwners = ports.GroupBy(p => p.Number.ToString()).ToDictionary(g => g.Key, g => string.Join(", ", g.Select(p => p.Container).Where(c => c.Length > 0).Distinct())) });
             foreach (var onNode in workloadPods.Where(p => (p.StringAt("spec", "nodeName") ?? "").Length > 0).GroupBy(p => p.StringAt("spec", "nodeName")!))
             {
                 if (!_onNode.TryGetValue(onNode.Key, out var uses)) _onNode[onNode.Key] = uses = [];

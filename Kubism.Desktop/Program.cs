@@ -15,6 +15,9 @@ public static class Program
         }
 
         AppOptions.Current = AppOptions.Parse(args);
+        // Anything that escapes every catch (an async void handler, a background thread, a forgotten task) ends up in log.txt instead of vanishing.
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => Kubism.Core.AppLog.Unhandled(e.IsTerminating ? "AppDomain, terminating" : "AppDomain", e.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, e) => { Kubism.Core.AppLog.Unhandled("unobserved task", e.Exception); e.SetObserved(); };
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

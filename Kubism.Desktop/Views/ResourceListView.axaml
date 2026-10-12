@@ -18,7 +18,6 @@
         <TextBlock Text="{Binding StateText}" Classes="muted" VerticalAlignment="Center" />
       </StackPanel>
       <WrapPanel>
-        <v:NamespacePicker DataContext="{Binding Workspace.Namespaces}" IsVisible="{Binding $parent[v:ResourceListView].((vm:ResourceListViewModel)DataContext).Namespaced}" Margin="0,0,8,4" />
         <TextBox Text="{Binding Filter}" PlaceholderText="Filter (name, key=value)" Width="220" Margin="0,0,8,4" AutomationProperties.Name="Filter" />
         <CheckBox Content="All columns" IsChecked="{Binding ShowAllColumns}" ToolTip.Tip="Columns…" Margin="0,0,8,4" />
         <c:RefreshButton Command="{Binding RefreshCommand}" Margin="0,0,8,4" VerticalAlignment="Center" />

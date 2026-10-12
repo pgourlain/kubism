@@ -102,6 +102,7 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
     public RightSizingViewModel(WorkspaceViewModel ws)
     {
         _ws = ws;
+        ws.Namespaces.Changed += OnNamespacesChanged;
         var s = ws.Main.Settings.Current;
         WindowDays = s.RightSizingWindowDays;
         ResetSources();
@@ -347,5 +348,7 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
         catch (Exception ex) { ConnectionResult = ex.Message; }
     }
 
-    public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }
+    private void OnNamespacesChanged() { if (_started) _ws.Ui.Post(() => _ = LoadAsync()); }
+
+    public ValueTask DisposeAsync() { _ws.Namespaces.Changed -= OnNamespacesChanged; _cts.Cancel(); return ValueTask.CompletedTask; }
 }

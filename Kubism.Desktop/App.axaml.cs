@@ -24,6 +24,8 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // A UI-thread exception no handler caught (a command, an event handler): log it with its stack and keep the app alive.
+        Avalonia.Threading.Dispatcher.UIThread.UnhandledException += (_, e) => { Kubism.Core.AppLog.Unhandled("UI thread", e.Exception); e.Handled = true; };
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var options = AppOptions.Current;

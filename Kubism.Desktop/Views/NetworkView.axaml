@@ -22,7 +22,6 @@
     </StackPanel>
     <StackPanel Grid.Row="2" Spacing="4">
       <WrapPanel>
-        <v:NamespacePicker DataContext="{Binding Workspace.Namespaces}" Margin="0,0,8,4" />
         <ComboBox ItemsSource="{Binding ExposureChoices}" SelectedItem="{Binding SelectedExposure, Mode=TwoWay}" MinWidth="210" Margin="0,0,8,4" AutomationProperties.Name="Exposure filter" />
         <CheckBox Content="Problems only" IsChecked="{Binding ProblemsOnly}" Margin="0,0,8,4" />
         <CheckBox Content="Show internal services" IsChecked="{Binding IncludeInternal}" Margin="0,0,8,4" ToolTip.Tip="Services that nothing routes to (ClusterIP only) are hidden by default" />

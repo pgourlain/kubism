@@ -19,6 +19,10 @@ public sealed record NetworkNode(string Id, NetworkNodeKind Kind, string Label, 
 {
     /// <summary>For an Ingress: what it matches on the way in, one line per host ("shop.example.com: /, /api", "default backend"). Drawn inside the box.</summary>
     public IReadOnlyList<string> FilterLines { get; init; } = Filters ?? [];
+    /// <summary>For a workload: the container ports (and hostPorts) it declares. The ones no Service reaches are drawn at its entry without an arrow.</summary>
+    public IReadOnlyList<string> DeclaredPorts { get; init; } = [];
+    /// <summary>Declared port → container(s) that declare it (a sidecar's port, for instance).</summary>
+    public IReadOnlyDictionary<string, string> PortOwners { get; init; } = new Dictionary<string, string>();
     public bool HasProblem => Problems.Count > 0;
     public FindingSeverity? Worst => Problems.Count == 0 ? null : Problems.Max(p => p.Severity);
     public string KindText => Kind switch { NetworkNodeKind.Exposure => "Exposure", NetworkNodeKind.Ingress => "Ingress", NetworkNodeKind.Service => "Service", NetworkNodeKind.Node => "Node", _ => "Workload" };

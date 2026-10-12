@@ -188,6 +188,9 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
     public bool CanGoForward => History.CanForward;
     public string BackTip => History.BackEntry is { } b ? $"Back to {b.Location.Title}" : "Back";
     public string ForwardTip => History.ForwardEntry is { } f ? $"Forward to {f.Location.Title}" : "Forward";
+    /// <summary>The namespace picker lives in the navigation bar; shown for the pages that follow the namespace selection.</summary>
+    public bool ShowNamespacePicker => CurrentContent switch { ResourceListViewModel l => l.Namespaced, NetworkViewModel or SecurityViewModel or UsageViewModel or HelmViewModel or RightSizingViewModel => true, _ => false };
+    partial void OnCurrentContentChanged(object? value) => OnPropertyChanged(nameof(ShowNamespacePicker));
     public string Crumbs => History.Current?.Location.Crumbs ?? "";
 
     private LeaveSnapshot CaptureLeave() => new((CurrentContent as INavigablePage)?.CaptureState(), [.. Namespaces.Selected]);

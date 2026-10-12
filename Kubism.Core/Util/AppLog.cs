@@ -10,6 +10,9 @@ public static class AppLog
     public static void Warn(string message) => Write("WARN", message);
     public static void Error(string message, Exception? ex = null) => Write("ERROR", ex is null ? message : $"{message}: {ex.GetType().Name}: {ex.Message}");
 
+    /// <summary>An exception nobody caught: logged with its full stack trace (and inner exceptions), so a crash report is complete. Messages only, never request data.</summary>
+    public static void Unhandled(string source, Exception? ex) => Write("FATAL", $"Unhandled exception ({source}): {ex?.ToString() ?? "unknown"}");
+
     private static void Write(string level, string message)
     {
         var path = Path;

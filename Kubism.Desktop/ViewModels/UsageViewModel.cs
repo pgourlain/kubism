@@ -69,6 +69,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
     public UsageViewModel(WorkspaceViewModel ws, UsageMode mode, UsageState? restore = null)
     {
         _ws = ws; Mode = mode;
+        ws.Namespaces.Changed += OnNamespacesChanged;
         Sections = mode switch
         {
             UsageMode.Config => ["ConfigMaps", "Secrets", "Unread keys", "HPA & PDB", "Broken references"],
@@ -273,5 +274,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
         if (c is not null) _ws.OpenGraphNode(new GraphNode(c.Display, c.Kind, c.Namespace, c.Name));
     }
 
-    public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }
+    private void OnNamespacesChanged() => _ws.Ui.Post(() => _ = LoadAsync());
+
+    public ValueTask DisposeAsync() { _ws.Namespaces.Changed -= OnNamespacesChanged; _cts.Cancel(); return ValueTask.CompletedTask; }
 }

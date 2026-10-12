@@ -15,8 +15,21 @@ public sealed class AvaloniaClipboardService : IClipboardService
 {
     public async Task SetTextAsync(string text)
     {
-        var clipboard = TopLevel.GetTopLevel(WindowHelper.MainWindow)?.Clipboard;
-        if (clipboard is not null) await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text);
+        // Windows: the clipboard can be locked by another process (CLIPBRD_E_CANT_OPEN); retry briefly, never let it crash the app.
+        for (var attempt = 0; attempt < 4; attempt++)
+        {
+            try
+            {
+                var clipboard = TopLevel.GetTopLevel(WindowHelper.MainWindow)?.Clipboard;
+                if (clipboard is not null) await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text);
+                return;
+            }
+            catch (Exception ex)
+            {
+                if (attempt == 3) Kubism.Core.AppLog.Warn($"Cannot write to the clipboard: {ex.Message}");
+                else await Task.Delay(100);
+            }
+        }
     }
 }
 

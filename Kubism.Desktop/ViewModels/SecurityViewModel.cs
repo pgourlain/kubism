@@ -50,8 +50,11 @@ public sealed partial class SecurityViewModel : ViewModelBase, IClosable, Naviga
     {
         _ws = ws;
         if (restore is not null) { _tab = restore.Tab; _highOnly = restore.HighOnly; _subjectQuery = restore.SubjectQuery; _restoreKey = restore.SelectedKey; }
+        ws.Namespaces.Changed += OnNamespacesChanged;
         _ = EnsureLoadedAsync(Tab);
     }
+
+    private void OnNamespacesChanged() => _ws.Ui.Post(() => { Array.Clear(_loaded); _ = EnsureLoadedAsync(Tab); });
 
     public object? CaptureState() => new SecurityState(Tab, HighOnly, SubjectQuery, Selected is { } f ? $"{f.Finding.Rule}|{f.Display}" : null);
 
@@ -237,5 +240,5 @@ public sealed partial class SecurityViewModel : ViewModelBase, IClosable, Naviga
         if (Selected?.Finding is { } f && f.Kind.Length > 0) _ws.OpenGraphNode(new GraphNode(f.Subject, f.Kind, f.Namespace, f.Name));
     }
 
-    public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }
+    public ValueTask DisposeAsync() { _ws.Namespaces.Changed -= OnNamespacesChanged; _cts.Cancel(); return ValueTask.CompletedTask; }
 }

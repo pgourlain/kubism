@@ -28,7 +28,7 @@ public sealed class NetworkGraphControl : Control
     private NetworkView? _layoutFor;
     private double[] _tops = [];
     private Dictionary<string, Rect> _boxes = [];
-    private Dictionary<string, (string Ok, string Bad, string Tip)> _badges = [];
+    private Dictionary<string, (string Ok, string Bad, string Tip, string Unrouted)> _badges = [];
 
     static NetworkGraphControl()
     {
@@ -68,9 +68,21 @@ public sealed class NetworkGraphControl : Control
             var good = grp.Where(e => !e.Problem).SelectMany(e => e.Ports).Distinct().ToList();
             var bad = grp.Where(e => e.Problem).SelectMany(e => e.Ports).Distinct().Where(p => !good.Contains(p)).ToList();
             var tip = $"Entry ports of {byId[grp.Key].Node.Label}:\n" + string.Join("\n", grp.Where(e => e.Label.Length > 0).Select(e => $"• {byId.GetValueOrDefault(e.From)?.Node.Label}: {e.Label}{(e.Problem ? "  ⚠" : "")}"));
-            _badges[grp.Key] = (string.Join(", ", good), string.Join(", ", bad), tip);
+            // Container ports no Service reaches (a metrics or OTLP port, say): shown at the entry too, but with no arrow.
+            var reached = grp.SelectMany(e => e.Ports).ToHashSet();
+            var unrouted = byId[grp.Key].Node.DeclaredPorts.Where(p => !reached.Contains(p)).ToList();
+            if (unrouted.Count > 0) tip += "\nDeclared by a container, reached by no Service: " + string.Join(", ", unrouted.Select(p => OwnerText(byId[grp.Key].Node, p)));
+            _badges[grp.Key] = (string.Join(", ", good), string.Join(", ", bad), tip, string.Join(", ", unrouted));
+        }
+        // A workload that no Service reaches at all has no arrow in: its declared ports are still listed.
+        foreach (var n in v.Nodes.Where(n => n.Node.Kind == NetworkNodeKind.Workload && n.Node.DeclaredPorts.Count > 0 && !_badges.ContainsKey(n.Id)))
+        {
+            var list = string.Join(", ", n.Node.DeclaredPorts);
+            _badges[n.Id] = ("", "", $"Declared by a container of {n.Node.Label}, reached by no Service: " + string.Join(", ", n.Node.DeclaredPorts.Select(p => OwnerText(n.Node, p))), list);
         }
     }
+
+    private static string OwnerText(NetworkNode n, string port) => n.PortOwners.TryGetValue(port, out var c) && c.Length > 0 ? $"{port} (container {c})" : port;
 
     public Rect BoxOf(PlacedNode n) { EnsureLayout(); return _boxes.TryGetValue(n.Id, out var r) ? r : default; }
 
@@ -162,25 +174,26 @@ public sealed class NetworkGraphControl : Control
         foreach (var (id, badge) in _badges)
         {
             if (!_boxes.TryGetValue(id, out var box)) continue;
-            foreach (var (rect, label, problem) in BadgesOf(box, badge))
+            foreach (var (rect, label, problem, unrouted) in BadgesOf(box, badge))
             {
                 var ft = new FormattedText(label, culture, FlowDirection.LeftToRight, new Typeface(Face.FontFamily, FontStyle.Normal, FontWeight.SemiBold), 9.5, problem ? error : text) { MaxTextWidth = GapX - 26, MaxLineCount = 1, Trimming = TextTrimming.CharacterEllipsis };
-                var brush = problem ? error : LevelBrush(byId[id].Node.Exposure);
+                var brush = problem ? error : unrouted ? muted : LevelBrush(byId[id].Node.Exposure);
                 // the rectangle was sized for an estimate of the text; fit it to the real width
                 var fitted = new Rect(box.X - 8 - (Math.Min(ft.Width, GapX - 26) + 10), rect.Y, Math.Min(ft.Width, GapX - 26) + 10, rect.Height);
-                ctx.DrawRectangle(panel, new Pen(brush, problem ? 1.8 : 1.2), fitted, 4);
+                ctx.DrawRectangle(panel, new Pen(brush, problem ? 1.8 : 1.2) { DashStyle = unrouted ? DashStyle.Dash : null }, fitted, 4);
                 ctx.DrawText(ft, new Point(fitted.X + 5, fitted.Y + (fitted.Height - ft.Height) / 2));
             }
         }
     }
 
     /// <summary>The good ports' rectangle, and below it the wrong ports' one when there are both; each sits on the arrow just before the box.</summary>
-    private static IEnumerable<(Rect Rect, string Text, bool Problem)> BadgesOf(Rect box, (string Ok, string Bad, string Tip) badge)
+    private static IEnumerable<(Rect Rect, string Text, bool Problem, bool Unrouted)> BadgesOf(Rect box, (string Ok, string Bad, string Tip, string Unrouted) badge)
     {
-        var both = badge.Ok.Length > 0 && badge.Bad.Length > 0;
-        var y = box.Center.Y - BadgeH / 2 - (both ? (BadgeH + 2) / 2 : 0);
-        if (badge.Ok.Length > 0) { yield return (BadgeRect(box, y, badge.Ok), badge.Ok, false); y += BadgeH + 2; }
-        if (badge.Bad.Length > 0) yield return (BadgeRect(box, y, badge.Bad), badge.Bad, true);
+        var count = (badge.Ok.Length > 0 ? 1 : 0) + (badge.Bad.Length > 0 ? 1 : 0) + (badge.Unrouted.Length > 0 ? 1 : 0);
+        var y = box.Center.Y - BadgeH / 2 - (count - 1) * (BadgeH + 2) / 2;
+        if (badge.Ok.Length > 0) { yield return (BadgeRect(box, y, badge.Ok), badge.Ok, false, false); y += BadgeH + 2; }
+        if (badge.Bad.Length > 0) { yield return (BadgeRect(box, y, badge.Bad), badge.Bad, true, false); y += BadgeH + 2; }
+        if (badge.Unrouted.Length > 0) yield return (BadgeRect(box, y, badge.Unrouted), badge.Unrouted, false, true);
     }
 
     private static Rect BadgeRect(Rect box, double y, string text)

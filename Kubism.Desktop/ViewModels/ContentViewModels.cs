@@ -78,7 +78,14 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
     private readonly WorkspaceViewModel _ws;
     private CancellationTokenSource _cts = new();
 
-    public HelmViewModel(WorkspaceViewModel ws) { _ws = ws; _ = LoadAsync(); }
+    public HelmViewModel(WorkspaceViewModel ws)
+    {
+        _ws = ws;
+        ws.Namespaces.Changed += OnNamespacesChanged;
+        _ = LoadAsync();
+    }
+
+    private void OnNamespacesChanged() => _ws.Ui.Post(() => _ = LoadAsync());
 
     public ObservableCollection<HelmRelease> Releases { get; } = [];
     public ObservableCollection<HelmRelease> History { get; } = [];
@@ -162,7 +169,15 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         IsLoading = true; Error = null;
         try
         {
-            var all = await new HelmReleases(_ws.Session.Transport).ListAsync(_ws.Namespaces.IsAll ? null : _ws.Namespaces.Selected[0], _cts.Token);
+            var helm = new HelmReleases(_ws.Session.Transport);
+            IReadOnlyList<HelmRelease> all;
+            if (_ws.Namespaces.IsAll) all = await helm.ListAsync(null, _cts.Token);
+            else
+            {
+                var merged = new List<HelmRelease>();
+                foreach (var ns in _ws.Namespaces.Selected.ToList()) merged.AddRange(await helm.ListAsync(ns, _cts.Token));
+                all = merged.OrderBy(r => r.Namespace).ThenBy(r => r.Name).ToList();
+            }
             Releases.Clear(); foreach (var r in all) Releases.Add(r);
             var now = DateTimeOffset.UtcNow;
             Failing.Clear(); foreach (var r in all.Where(r => HelmDiagnostics.IsProblem(r, now))) Failing.Add(r);
@@ -399,5 +414,5 @@ public sealed partial class HelmViewModel : ViewModelBase, IClosable
         await LoadAsync();
     }
 
-    public ValueTask DisposeAsync() { _cts.Cancel(); return ValueTask.CompletedTask; }
+    public ValueTask DisposeAsync() { _ws.Namespaces.Changed -= OnNamespacesChanged; _cts.Cancel(); return ValueTask.CompletedTask; }
 }
