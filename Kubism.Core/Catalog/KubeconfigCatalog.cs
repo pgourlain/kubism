@@ -212,7 +212,7 @@ public sealed class KubeconfigCatalog : IKubeconfigCatalog
                     w.Changed += OnFsEvent; w.Created += OnFsEvent; w.Deleted += OnFsEvent; w.Renamed += OnFsEvent;
                     _watchers.Add(w);
                 }
-                catch (Exception ex) { AppLog.Warn($"Cannot watch {d}: {ex.Message}"); }
+                catch (Exception ex) { AppLog.Warn($"Cannot watch {d}", ex); }
             }
             _watchedDirs = wanted;
         }

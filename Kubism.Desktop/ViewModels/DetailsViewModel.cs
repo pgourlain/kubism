@@ -215,7 +215,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
             });
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { AppLog.Warn($"Details load failed: {ex.Message}"); }
+        catch (Exception ex) { AppLog.Warn($"Details load failed", ex); }
     }
 
     private async Task<IReadOnlyList<RelatedItem>> LoadRelatedAsync(KubeObject obj, CancellationToken ct)
@@ -275,7 +275,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
             });
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { AppLog.Warn($"Graph load failed: {ex.Message}"); _ws.Ui.Post(() => GraphStatus = ex.Message); }
+        catch (Exception ex) { AppLog.Warn($"Graph load failed", ex); _ws.Ui.Post(() => GraphStatus = ex.Message); }
         finally { _ws.Ui.Post(() => GraphLoading = false); }
     }
 
@@ -303,7 +303,7 @@ public sealed partial class DetailsViewModel : ViewModelBase
             });
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { AppLog.Warn($"Timeline load failed: {ex.Message}"); _ws.Ui.Post(() => TimelineStatus = ex.Message); }
+        catch (Exception ex) { AppLog.Warn($"Timeline load failed", ex); _ws.Ui.Post(() => TimelineStatus = ex.Message); }
         finally { _ws.Ui.Post(() => TimelineLoading = false); }
     }
 

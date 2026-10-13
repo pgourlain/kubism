@@ -138,7 +138,7 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
             finished = true; signIn?.Close();
             item.State = SessionState.Error;
             item.ErrorMessage = ClusterSession.Describe(ex);
-            AppLog.Warn($"Connect {item.DisplayName} failed: {ex.Message}");
+            AppLog.Warn($"Connect {item.DisplayName} failed", ex);
             await _sessions.DisconnectAsync(item.Id);
         }
     }

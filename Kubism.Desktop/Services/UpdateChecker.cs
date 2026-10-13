@@ -35,7 +35,7 @@ public sealed class UpdateChecker(Kubism.Core.Catalog.ISettingsStore settings, H
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
         {
-            Kubism.Core.AppLog.Warn($"Update check failed: {ex.Message}");
+            Kubism.Core.AppLog.Warn("Update check failed", ex);
             if (manual) throw;
             return null;
         }

@@ -56,7 +56,7 @@ public sealed class YamlEditor : UserControl
             _tm = _editor.InstallTextMate(_registry);
             _tm.SetGrammar(_registry.GetScopeByExtension(".yaml"));
         }
-        catch (Exception ex) { Kubism.Core.AppLog.Warn($"TextMate unavailable: {ex.Message}"); }
+        catch (Exception ex) { Kubism.Core.AppLog.Warn($"TextMate unavailable", ex); }
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

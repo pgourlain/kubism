@@ -92,7 +92,7 @@ public sealed class KubeTransport : IKubeTransport
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         {
-            AppLog.Warn($"{req.Method} {_baseUri.Host}{req.RequestUri?.AbsolutePath} failed: {ex.GetType().Name}: {(ex.InnerException ?? ex).Message}");
+            AppLog.Warn($"{req.Method} {_baseUri.Host}{req.RequestUri?.AbsolutePath} failed", ex);
             throw MapException(ex);
         }
     }

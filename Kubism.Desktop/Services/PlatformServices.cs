@@ -26,7 +26,7 @@ public sealed class AvaloniaClipboardService : IClipboardService
             }
             catch (Exception ex)
             {
-                if (attempt == 3) Kubism.Core.AppLog.Warn($"Cannot write to the clipboard: {ex.Message}");
+                if (attempt == 3) Kubism.Core.AppLog.Warn($"Cannot write to the clipboard", ex);
                 else await Task.Delay(100);
             }
         }
@@ -43,6 +43,6 @@ public sealed class SystemBrowserLauncher : IBrowserLauncher
             else if (OperatingSystem.IsMacOS()) Process.Start("open", url);
             else Process.Start("xdg-open", url);
         }
-        catch (Exception ex) { Kubism.Core.AppLog.Warn($"Cannot open browser: {ex.Message}"); }
+        catch (Exception ex) { Kubism.Core.AppLog.Warn($"Cannot open browser", ex); }
     }
 }

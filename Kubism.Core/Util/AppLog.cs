@@ -7,8 +7,11 @@ public static class AppLog
     public static string? Path { get; set; }
 
     public static void Info(string message) => Write("INFO", message);
-    public static void Warn(string message) => Write("WARN", message);
-    public static void Error(string message, Exception? ex = null) => Write("ERROR", ex is null ? message : $"{message}: {ex.GetType().Name}: {ex.Message}");
+    public static void Warn(string message, Exception? ex = null) => Write("WARN", Format(message, ex));
+    public static void Error(string message, Exception? ex = null) => Write("ERROR", Format(message, ex));
+
+    /// <summary>Full <see cref="Exception.ToString"/>: type, message, stack trace and inner exceptions.</summary>
+    private static string Format(string message, Exception? ex) => ex is null ? message : $"{message}: {ex}";
 
     /// <summary>An exception nobody caught: logged with its full stack trace (and inner exceptions), so a crash report is complete. Messages only, never request data.</summary>
     public static void Unhandled(string source, Exception? ex) => Write("FATAL", $"Unhandled exception ({source}): {ex?.ToString() ?? "unknown"}");

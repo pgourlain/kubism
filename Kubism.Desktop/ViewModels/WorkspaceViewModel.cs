@@ -662,7 +662,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
                 var pf = await Session.Actions.StartPortForwardAsync(new ForwardTarget(kind, k.Namespace, k.Name, k.RemotePort), k.LocalPort, true, Session.SessionToken);
                 pf.Keep = true;
             }
-            catch (Exception ex) { AppLog.Warn($"Cannot restore kept port-forward {k.Name}: {ex.Message}"); }
+            catch (Exception ex) { AppLog.Warn($"Cannot restore kept port-forward {k.Name}", ex); }
         }
         if (Session.PortForwards?.Forwards.Count > 0) Ui.Post(() => EnsurePortForwardsDock());
     }
