@@ -102,13 +102,13 @@
         </ScrollViewer>
       </TabItem>
       <TabItem Header="Values">
-        <TextBox Text="{Binding ValuesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+        <c:YamlEditor Text="{Binding ValuesText, Mode=OneWay}" IsReadOnly="True" />
       </TabItem>
       <TabItem Header="User values">
-        <TextBox Text="{Binding UserValuesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+        <c:YamlEditor Text="{Binding UserValuesText, Mode=OneWay}" IsReadOnly="True" />
       </TabItem>
       <TabItem Header="Manifest">
-        <TextBox Text="{Binding ManifestText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
+        <c:YamlEditor Text="{Binding ManifestText, Mode=OneWay}" IsReadOnly="True" />
       </TabItem>
       <TabItem Header="Notes">
         <TextBox Text="{Binding NotesText}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Menlo,Consolas,monospace" FontSize="12" />
