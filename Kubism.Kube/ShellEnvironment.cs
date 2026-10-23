@@ -19,7 +19,7 @@ public static class ShellEnvironment
             try
             {
                 var shell = Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } s ? s : "/bin/sh";
-                var psi = new ProcessStartInfo(shell) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+                var psi = new ProcessStartInfo(shell) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
                 psi.ArgumentList.Add("-l"); psi.ArgumentList.Add("-c"); psi.ArgumentList.Add("echo \"__KUBISM_PATH__$PATH\"");
                 using var p = Process.Start(psi)!;
                 var outTask = p.StandardOutput.ReadToEndAsync();

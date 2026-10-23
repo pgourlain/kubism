@@ -16,7 +16,7 @@ public sealed class AzureCliTokenProvider : ITokenProvider
         if (_cache.TryGetValue(scope, out var c) && c.expires > DateTimeOffset.UtcNow.AddMinutes(2)) return c.token;
         var az = ShellEnvironment.Which("az") ?? throw new InvalidOperationException("The Azure CLI ('az') was not found on PATH. Run 'az login' first.");
         var resource = scope.EndsWith("/.default", StringComparison.Ordinal) ? scope[..^"/.default".Length] : scope;
-        var psi = new ProcessStartInfo(az) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        var psi = new ProcessStartInfo(az) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var a in new[] { "account", "get-access-token", "--resource", resource, "--query", "{t:accessToken,e:expiresOn}", "-o", "json" }) psi.ArgumentList.Add(a);
         using var p = Process.Start(psi)!;
         var stdout = p.StandardOutput.ReadToEndAsync(ct);

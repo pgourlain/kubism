@@ -45,7 +45,7 @@ public sealed class ExecCredentialProvider(ExecSpec spec, IExecPluginObserver? o
         AppLog.Info($"Exec plugin: running {exe} {string.Join(' ', spec.Args)}");
         var psi = new ProcessStartInfo(exe)
         {
-            RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = false, UseShellExecute = false,
+            RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = false, UseShellExecute = false, CreateNoWindow = true,
         };
         foreach (var a in spec.Args) psi.ArgumentList.Add(a);
         foreach (var (k, v) in spec.Env) psi.Environment[k] = v;

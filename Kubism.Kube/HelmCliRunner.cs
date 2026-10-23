@@ -12,7 +12,7 @@ public sealed class HelmCliRunner(ClusterEntry entry) : IHelmRunner
     public async Task<string> RunAsync(IReadOnlyList<string> args, CancellationToken ct)
     {
         var exe = ShellEnvironment.Which("helm") ?? throw new InvalidOperationException("helm was not found on PATH");
-        var psi = new ProcessStartInfo(exe) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        var psi = new ProcessStartInfo(exe) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         psi.ArgumentList.Add("--kubeconfig"); psi.ArgumentList.Add(entry.FilePath);
         psi.ArgumentList.Add("--kube-context"); psi.ArgumentList.Add(entry.ContextName);
         foreach (var a in args) psi.ArgumentList.Add(a);
