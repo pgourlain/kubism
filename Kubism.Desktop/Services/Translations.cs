@@ -18,7 +18,7 @@ public static class Translations
         ["Welcome"] = "Bienvenue", ["No clusters found"] = "Aucun cluster trouvé", ["Command palette"] = "Palette de commandes",
         ["Production"] = "Production", ["Read-only"] = "Lecture seule", ["Normal"] = "Normal", ["Apply"] = "Appliquer",
         ["Search"] = "Rechercher", ["Pause"] = "Pause", ["Resume"] = "Reprendre", ["Clear"] = "Effacer", ["Download"] = "Télécharger",
-        ["Export"] = "Exporter", ["Copy"] = "Copier", ["Open Log Folder"] = "Ouvrir le dossier des journaux", ["Copy diagnostics"] = "Copier les diagnostics",
+        ["Export"] = "Exporter", ["Copy"] = "Copier", ["Cut"] = "Couper", ["Paste"] = "Coller", ["Select all"] = "Tout sélectionner", ["Open Log Folder"] = "Ouvrir le dossier des journaux", ["Copy diagnostics"] = "Copier les diagnostics",
         ["Diagnostics"] = "Diagnostics", ["RBAC graph"] = "Graphe RBAC", ["Network graph"] = "Graphe réseau", ["Releases"] = "Releases", ["Namespace"] = "Namespace", ["All namespaces"] = "Tous les namespaces",
     };
 

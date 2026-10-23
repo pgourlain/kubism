@@ -21,6 +21,7 @@ public partial class LogView : UserControl
         InitializeComponent();
         _transformer = new ColorTransformer(_colors);
         Editor.TextArea.TextView.LineTransformers.Add(_transformer);
+        Kubism.Desktop.Controls.EditorContextMenu.Attach(Editor);
         DataContextChanged += (_, _) => Attach();
     }
 

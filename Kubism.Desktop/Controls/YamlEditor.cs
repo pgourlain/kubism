@@ -35,6 +35,7 @@ public sealed class YamlEditor : UserControl
             if (_updating) return;
             _updating = true; Text = _editor.Text; _updating = false;
         };
+        EditorContextMenu.Attach(_editor);
         AccessibilityName();
     }
 
