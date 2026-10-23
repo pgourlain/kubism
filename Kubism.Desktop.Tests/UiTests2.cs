@@ -98,6 +98,24 @@ public class UiDetailsAndActionsTests
     }
 
     [AvaloniaFact]
+    public async Task Selecting_another_object_while_editing_drops_the_stale_edit()
+    {
+        var (h, ws, list) = await OpenAsync("demo-staging", "pods");
+        await using var _ = h;
+        var first = list.Rows[0]; var second = list.Rows.First(r => r.Name != first.Name);
+        list.SelectedRow = first;
+        var d = ws.Details;
+        d.BeginEditCommand.Execute(null);
+        Assert.Contains($"name: {first.Name}", d.EditText);
+        list.SelectedRow = second;
+        Assert.False(d.IsEditing);
+        Assert.Equal(second.Name, d.Object!.Name);
+        Assert.Contains($"name: {second.Name}", d.YamlText);
+        d.BeginEditCommand.Execute(null);
+        Assert.Contains($"name: {second.Name}", d.EditText);
+    }
+
+    [AvaloniaFact]
     public async Task Edit_validation_error_is_shown_inline_with_the_api_message()
     {
         var (h, ws, list) = await OpenAsync("demo-staging", "configmaps");

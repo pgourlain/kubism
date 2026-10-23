@@ -91,6 +91,8 @@ public sealed partial class DetailsViewModel : ViewModelBase
 
     public void Show(ResourceKind kind, KubeObject obj)
     {
+        // Another object selected while editing: the edit buffer belongs to the previous one, drop it.
+        if (IsEditing && Object?.Uid != obj.Uid) { IsEditing = false; EditError = null; HasConflict = false; }
         Kind = kind; Object = obj; IsDeleted = false;
         Title = obj.Name;
         Subtitle = obj.Namespace is null ? kind.Kind : $"{kind.Kind} · {obj.Namespace}";
