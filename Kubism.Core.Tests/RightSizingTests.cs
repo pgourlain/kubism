@@ -346,4 +346,26 @@ public class RightSizingTests
         // Owner lookup fails so the workload is the Deployment by name through owner reference.
         Assert.Equal("VPA recommender target", report.Containers.Single().Recommended!.Strategy);
     }
+
+    [Theory]
+    [InlineData("monitoring/prometheus:9091", true, "monitoring", "prometheus:9091")]
+    [InlineData("monitoring/prometheus", true, "monitoring", "prometheus")]
+    [InlineData("https://prom.example.com:9091", false, "", "")]
+    [InlineData("prometheus:9090", false, "", "")]
+    [InlineData("", false, "", "")]
+    public void Prometheus_setting_can_name_an_in_cluster_service(string value, bool ok, string ns, string svc)
+    {
+        Assert.Equal(ok, PrometheusDiscovery.TryParseServiceRef(value, out var n, out var s));
+        Assert.Equal(ns, n); Assert.Equal(svc, s);
+    }
+
+    [Fact]
+    public void Discovery_uses_the_service_port_instead_of_assuming_9090()
+    {
+        JsonArray Ports(params (string name, int port)[] p) => new(p.Select(x => (JsonNode)new JsonObject { ["name"] = x.name, ["port"] = x.port }).ToArray());
+        Assert.Equal("9090", PrometheusDiscovery.PickPort(Ports(("web", 9091), ("other", 9090))));
+        Assert.Equal("9091", PrometheusDiscovery.PickPort(Ports(("grpc", 10901), ("web", 9091))));
+        Assert.Equal("8080", PrometheusDiscovery.PickPort(Ports(("x", 8080))));
+        Assert.Equal("9090", PrometheusDiscovery.PickPort(null));
+    }
 }

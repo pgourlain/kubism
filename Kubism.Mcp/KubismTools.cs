@@ -315,6 +315,8 @@ public sealed class KubismReadTools(McpContext ctx)
                 var azure = uri.Host.EndsWith("prometheus.monitor.azure.com", StringComparison.OrdinalIgnoreCase);
                 source = new PrometheusUsageSource(new HttpPromClient(uri, azure ? ctx.Usage?.Tokens : null, azure ? "https://prometheus.monitor.azure.com/.default" : null), "Prometheus");
             }
+            if (source is null && PrometheusDiscovery.TryParseServiceRef(meta.PrometheusUrl, out var svcNs, out var svcPort))
+                source = PrometheusDiscovery.FromService(t, svcNs, svcPort);
             source ??= await PrometheusDiscovery.FindAsync(t, ct);
             source ??= ctx.Usage is not null && meta.LocalSampling ? new LocalSamplerSource(s.Entry.Id, ctx.Usage.Store) : new VpaRecommendationSource(t);
             var ns = @namespace is null ? null : new List<string> { @namespace };

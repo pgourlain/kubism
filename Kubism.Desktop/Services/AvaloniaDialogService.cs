@@ -210,7 +210,7 @@ public sealed class AvaloniaDialogService : IDialogService
         Add("Safety mode", safety);
         Add("Default namespace", Box(vm.DefaultNamespace, s => vm.DefaultNamespace = s));
         Add("Known namespaces", Box(vm.Namespaces, s => vm.Namespaces = s, "when listing namespaces is forbidden"));
-        Add("Prometheus URL", Box(vm.PrometheusUrl, s => vm.PrometheusUrl = s, "https://… or empty for auto-detect"));
+        Add("Prometheus URL", Box(vm.PrometheusUrl, s => vm.PrometheusUrl = s, "https://…, namespace/service:port (in-cluster), or empty for auto-detect"));
         var sampling = new CheckBox { Content = "Sample metrics-server locally (for right-sizing)", IsChecked = vm.LocalSampling };
         sampling.IsCheckedChanged += (_, _) => vm.LocalSampling = sampling.IsChecked == true;
         Add("Local sampling", sampling);

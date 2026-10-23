@@ -19,6 +19,8 @@ public static class RightSizingRunner
             list.Add(new SourceChoice(azure ? "Azure Monitor managed Prometheus" : "Prometheus",
                 () => new PrometheusUsageSource(new HttpPromClient(uri, azure ? tokens : null, azure ? "https://prometheus.monitor.azure.com/.default" : null), azure ? "Azure Monitor managed Prometheus" : "Prometheus")));
         }
+        else if (PrometheusDiscovery.TryParseServiceRef(meta.PrometheusUrl, out var svcNs, out var svcPort))
+            list.Add(new SourceChoice($"Prometheus ({svcNs}/{svcPort}, API server proxy)", () => PrometheusDiscovery.FromService(ws.Session.Transport, svcNs, svcPort)));
         list.Add(new SourceChoice("Prometheus (in-cluster, API server proxy)", () =>
             PrometheusDiscovery.FindAsync(ws.Session.Transport, ws.Session.SessionToken).GetAwaiter().GetResult()
             ?? throw new InvalidOperationException("No in-cluster Prometheus found. Set a Prometheus URL in the cluster settings, or use local sampling.")));

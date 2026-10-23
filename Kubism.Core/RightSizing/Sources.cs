@@ -200,6 +200,32 @@ public static class PrometheusDiscovery
 {
     private static readonly string[] Excluded = ["alertmanager", "operator", "exporter", "node", "kube-state", "pushgateway", "grafana", "adapter"];
 
+    /// <summary>The service's own port: 9090 when exposed, else a port named web/http, else the first one (GKE and others often change it).</summary>
+    public static string PickPort(JsonArray? ports)
+    {
+        var all = (ports ?? []).OfType<JsonObject>().ToList();
+        string? Num(JsonObject p) => p["port"]?.ToString();
+        return all.Select(Num).FirstOrDefault(p => p == "9090")
+               ?? all.Where(p => p["name"]?.ToString() is "web" or "http" or "http-web" or "prometheus").Select(Num).FirstOrDefault()
+               ?? all.Select(Num).FirstOrDefault()
+               ?? "9090";
+    }
+
+    /// <summary>Parses the cluster setting when it names an in-cluster service instead of a URL: <c>namespace/service:port</c> (port optional, a port name works too).</summary>
+    public static bool TryParseServiceRef(string? value, out string ns, out string serviceAndPort)
+    {
+        ns = serviceAndPort = "";
+        if (string.IsNullOrWhiteSpace(value) || value.Contains("://")) return false;
+        var parts = value.Trim().Split('/');
+        if (parts.Length != 2 || parts[0].Length == 0 || parts[1].Length == 0 || parts[1].StartsWith(':')) return false;
+        ns = parts[0]; serviceAndPort = parts[1];
+        return true;
+    }
+
+    /// <summary>A Prometheus reached through the API server's service proxy, from a <c>namespace/service:port</c> setting.</summary>
+    public static IUsageHistorySource FromService(IKubeTransport transport, string ns, string serviceAndPort) =>
+        new PrometheusUsageSource(new ProxyPromClient(transport, ns, serviceAndPort), $"Prometheus ({ns}/{serviceAndPort})");
+
     public static async Task<IUsageHistorySource?> FindAsync(IKubeTransport transport, CancellationToken ct)
     {
         var list = await transport.ListAsync(Gvr.Services, null, new ListOptions(), ct).ConfigureAwait(false);
@@ -208,7 +234,7 @@ public static class PrometheusDiscovery
             var n = s.Name;
             if (!n.Contains("prometheus", StringComparison.OrdinalIgnoreCase)) continue;
             if (Excluded.Any(x => n.Contains(x, StringComparison.OrdinalIgnoreCase))) continue;
-            var port = (s.At("spec", "ports") as JsonArray ?? []).OfType<JsonObject>().Select(p => p["port"]?.ToString()).FirstOrDefault(p => p == "9090") ?? "9090";
+            var port = PickPort(s.At("spec", "ports") as JsonArray);
             return new PrometheusUsageSource(new ProxyPromClient(transport, s.Namespace ?? "default", $"{n}:{port}"), $"Prometheus ({s.Namespace}/{n})");
         }
         return null;
