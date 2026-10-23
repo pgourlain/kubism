@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Kubism.Desktop.Services;
 using Kubism.Desktop.Terminal;
 
 namespace Kubism.Desktop.Controls;
@@ -134,6 +135,7 @@ public sealed class TerminalControl : Control, ITerminalView
         base.OnPointerPressed(e);
         Focus();
         var p = e.GetPosition(this);
+        if (e.GetCurrentPoint(this).Properties.IsRightButtonPressed) { ShowMenu(); e.Handled = true; return; }
         _selStart = _selEnd = ((int)(p.Y / _ch), (int)(p.X / _cw));
         InvalidateVisual();
     }
@@ -145,6 +147,29 @@ public sealed class TerminalControl : Control, ITerminalView
         var p = e.GetPosition(this);
         _selEnd = (Math.Clamp((int)(p.Y / _ch), 0, (_buffer?.Rows ?? 1) - 1), Math.Clamp((int)(p.X / _cw), 0, (_buffer?.Cols ?? 1) - 1));
         InvalidateVisual();
+    }
+
+    private void ShowMenu()
+    {
+        var copy = new MenuItem { Header = "Copy".T(), IsEnabled = SelectedText().Length > 0 };
+        copy.Click += async (_, _) => await CopySelectionAsync();
+        var paste = new MenuItem { Header = "Paste".T() };
+        paste.Click += async (_, _) => await PasteAsync();
+        var all = new MenuItem { Header = "Select all".T() };
+        all.Click += (_, _) => { if (_buffer is { } b) { _selStart = (0, 0); _selEnd = (b.Rows - 1, b.Cols - 1); InvalidateVisual(); } };
+        new ContextMenu { ItemsSource = new Control[] { copy, paste, new Separator(), all } }.Open(this);
+    }
+
+    private async Task CopySelectionAsync()
+    {
+        var t = SelectedText();
+        if (t.Length > 0 && CopyRequested is not null) await CopyRequested(t);
+    }
+
+    private async Task PasteAsync()
+    {
+        if (PasteRequested is not null && await PasteRequested() is { } text)
+            await Send(_buffer?.BracketedPaste == true ? $"\u001b[200~{text}\u001b[201~" : text);
     }
 
     public string SelectedText()
@@ -168,8 +193,8 @@ public sealed class TerminalControl : Control, ITerminalView
         base.OnKeyDown(e);
         var mods = e.KeyModifiers;
         var cmd = mods.HasFlag(KeyModifiers.Meta) || (mods.HasFlag(KeyModifiers.Control) && mods.HasFlag(KeyModifiers.Shift));
-        if (cmd && e.Key == Key.C) { var t = SelectedText(); if (t.Length > 0 && CopyRequested is not null) await CopyRequested(t); e.Handled = true; return; }
-        if (cmd && e.Key == Key.V) { if (PasteRequested is not null && await PasteRequested() is { } text) await Send(_buffer?.BracketedPaste == true ? $"\u001b[200~{text}\u001b[201~" : text); e.Handled = true; return; }
+        if ((cmd && e.Key == Key.C) || (mods == KeyModifiers.Control && e.Key == Key.Insert)) { await CopySelectionAsync(); e.Handled = true; return; }
+        if ((cmd && e.Key == Key.V) || (mods == KeyModifiers.Shift && e.Key == Key.Insert)) { await PasteAsync(); e.Handled = true; return; }
         var app = _buffer?.ApplicationCursorKeys == true;
         string? seq = e.Key switch
         {
