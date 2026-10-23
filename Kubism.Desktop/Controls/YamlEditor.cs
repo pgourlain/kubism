@@ -12,7 +12,7 @@ public sealed class YamlEditor : UserControl
 {
     private readonly TextEditor _editor = new()
     {
-        ShowLineNumbers = true, FontFamily = new FontFamily("Menlo,Consolas,DejaVu Sans Mono,monospace"), FontSize = 12,
+        ShowLineNumbers = true, IsReadOnly = true, FontFamily = new FontFamily("Menlo,Consolas,DejaVu Sans Mono,monospace"), FontSize = 12,
         HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
         VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
     };

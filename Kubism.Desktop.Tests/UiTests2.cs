@@ -329,3 +329,17 @@ internal static class CommandExt
         if (c is CommunityToolkit.Mvvm.Input.IAsyncRelayCommand a) await a.ExecuteAsync(null); else c.Execute(null);
     }
 }
+
+public class YamlEditorTests
+{
+    [AvaloniaFact]
+    public void Yaml_editor_is_read_only_until_told_otherwise()
+    {
+        var editor = new Kubism.Desktop.Controls.YamlEditor();
+        Assert.True(editor.Editor.IsReadOnly);   // a binding to True is not a property change, so the default must already be read-only
+        editor.IsReadOnly = false;
+        Assert.False(editor.Editor.IsReadOnly);
+        editor.IsReadOnly = true;
+        Assert.True(editor.Editor.IsReadOnly);
+    }
+}
