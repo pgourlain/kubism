@@ -219,40 +219,56 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable, IN
     {
         var skew = _ws.Session.ClockSkew;
         var cells = new string[Columns.Count];
+        var tips = new string?[Columns.Count];
         for (var i = 0; i < cells.Length; i++)
         {
             var c = Columns[i];
-            cells[i] = c.Index switch
-            {
-                CpuColumn or MemoryColumn => MetricCell(row, c.Index == CpuColumn),
-                _ => TableService.Cell(row.Item, c, skew),
-            };
+            if (c.Index is CpuColumn or MemoryColumn) (cells[i], tips[i]) = MetricCell(row, c.Index == CpuColumn);
+            else cells[i] = TableService.Cell(row.Item, c, skew);
         }
+        row.Tips = tips;
         row.Cells = cells;
         row.Severity = ResourceRowViewModel.SeverityOf(Kind.Kind, row.Item);
     }
 
-    private string MetricCell(ResourceRowViewModel row, bool cpu)
+    /// <summary>Tooltip of a CPU / Memory column header; null for every other column.</summary>
+    public string? HeaderTip(ColumnDef col) => col.Index switch
+    {
+        CpuColumn or MemoryColumn when Kind.Kind == "Pod" => $"Current {(col.Index == CpuColumn ? "CPU" : "memory")} usage (% of the pod's requests, % of its limits). – when none is set.",
+        CpuColumn or MemoryColumn when Kind.Kind == "Node" => $"Current {(col.Index == CpuColumn ? "CPU" : "memory")} usage (% of the node's allocatable).",
+        _ => null,
+    };
+
+    private static string Pct(double used, double of) => of > 0 ? $"{used / of * 100:0}%" : "–";
+
+    private static string Bytes(double b) => b >= 1024 * 1024 && b < 1024.0 * 1024 * 1024 ? $"{b / (1024 * 1024):0}Mi" : Quantities.FormatBytes(b);
+
+    private (string text, string? tip) MetricCell(ResourceRowViewModel row, bool cpu)
     {
         var m = _ws.Session.Metrics;
-        if (m is null || m.Available != true) return "";
+        if (m is null || m.Available != true) return ("", null);
         if (Kind.Kind == "Pod")
         {
-            if (!m.Pods.TryGetValue($"{row.Namespace}/{row.Name}", out var u)) return "";
-            var pv = new PodView(row.Item.Object);
-            if (cpu)
-            {
-                var req = pv.Containers.Where(c => !c.IsInit).Sum(c => Quantities.ParseCpu(c.CpuRequest));
-                return req > 0 ? $"{Quantities.FormatCpu(u.CpuCores)} ({u.CpuCores / req:P0})" : Quantities.FormatCpu(u.CpuCores);
-            }
-            var rq = pv.Containers.Where(c => !c.IsInit).Sum(c => Quantities.ParseBytes(c.MemoryRequest));
-            return rq > 0 ? $"{Quantities.FormatBytes(u.MemoryBytes)} ({u.MemoryBytes / rq:P0})" : Quantities.FormatBytes(u.MemoryBytes);
+            if (!m.Pods.TryGetValue($"{row.Namespace}/{row.Name}", out var u)) return ("", null);
+            var cs = new PodView(row.Item.Object).Containers.Where(c => !c.IsInit).ToList();
+            var used = cpu ? u.CpuCores : u.MemoryBytes;
+            var req = cs.Sum(c => cpu ? Quantities.ParseCpu(c.CpuRequest) : Quantities.ParseBytes(c.MemoryRequest));
+            // A limit only means something when every container has one; otherwise the pod is unbounded.
+            var limits = cs.Select(c => cpu ? Quantities.ParseCpu(c.CpuLimit) : Quantities.ParseBytes(c.MemoryLimit)).ToList();
+            var lim = limits.Count > 0 && limits.All(l => l > 0) ? limits.Sum() : 0;
+            string F(double v) => cpu ? Quantities.FormatCpu(v) : Bytes(v);
+            var usedText = F(used);
+            if (req <= 0 && lim <= 0) return (usedText, $"{usedText} · no request, no limit");
+            var text = $"{usedText} ({Pct(used, req)}, {Pct(used, lim)})";
+            var tip = $"{(cpu ? "CPU" : "Memory")} {usedText}\nrequest {(req > 0 ? $"{F(req)} ({Pct(used, req)})" : "–")}\nlimit {(lim > 0 ? $"{F(lim)} ({Pct(used, lim)})" : "–")}";
+            return (text, tip);
         }
-        if (!m.Nodes.TryGetValue(row.Name, out var n)) return "";
+        if (!m.Nodes.TryGetValue(row.Name, out var n)) return ("", null);
         var nv = new NodeView(row.Item.Object);
-        return cpu
+        var text2 = cpu
             ? $"{Quantities.FormatCpu(n.CpuCores)} ({(nv.CpuAllocatable > 0 ? n.CpuCores / nv.CpuAllocatable : 0):P0})"
             : $"{Quantities.FormatBytes(n.MemoryBytes)} ({(nv.MemoryAllocatable > 0 ? n.MemoryBytes / nv.MemoryAllocatable : 0):P0})";
+        return (text2, null);
     }
 
     private void OnMetrics() => _ui.Post(() =>

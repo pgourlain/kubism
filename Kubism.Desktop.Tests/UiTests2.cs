@@ -116,6 +116,21 @@ public class UiDetailsAndActionsTests
     }
 
     [AvaloniaFact]
+    public async Task Pod_usage_cells_show_percent_of_request_and_of_limit_with_a_tooltip()
+    {
+        var (h, ws, list) = await OpenAsync("demo-staging", "pods");
+        await using var _ = h;
+        var mem = list.Columns.ToList().FindIndex(c => c.Name == "Memory");
+        Assert.True(mem >= 0);
+        await UiHarness.WaitFor(() => list.Rows.Any(r => r.Cells.Length > mem && r.Cells[mem].Contains("%)")), what: "memory usage cells");
+        var row = list.Rows.First(r => r.Cells.Length > mem && r.Cells[mem].Contains("%)"));
+        Assert.Matches(@"^\S+ \((\d+%|–), (\d+%|–)\)$", row.Cells[mem]);
+        Assert.Contains("request", row.Tips[mem]);
+        Assert.Contains("limit", row.Tips[mem]);
+        Assert.NotNull(list.HeaderTip(list.Columns[mem]));
+    }
+
+    [AvaloniaFact]
     public async Task Edit_validation_error_is_shown_inline_with_the_api_message()
     {
         var (h, ws, list) = await OpenAsync("demo-staging", "configmaps");

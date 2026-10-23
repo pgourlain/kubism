@@ -43,7 +43,8 @@ internal sealed class CellTextBlock : TextBlock
     private void Update()
     {
         Text = _row is not null && _index < _row.Cells.Length ? _row.Cells[_index] : "";
-        ToolTip.SetTip(this, string.IsNullOrEmpty(Text) ? null : Text);
+        var tip = _row is not null && _index < _row.Tips.Length ? _row.Tips[_index] : null;
+        ToolTip.SetTip(this, string.IsNullOrEmpty(Text) ? null : tip ?? Text);
         if (_colored && _row is not null)
             Foreground = _row.Severity is Severity.Neutral ? null : Converters.Brush(_row.Severity switch { Severity.Ok => "KubismOkBrush", Severity.Warning => "KubismWarnBrush", _ => "KubismErrorBrush" });
     }
@@ -109,12 +110,21 @@ public partial class ResourceListView : UserControl
             var colored = def.Name is "Status" or "Phase" || (_vm.Kind.Kind == "Event" && def.Name == "Type");
             Grid.Columns.Add(new DataGridTemplateColumn
             {
-                Header = def.Name, Tag = idx, CanUserSort = true,
+                Header = HeaderFor(def), Tag = idx, CanUserSort = true,
                 Width = WidthFor(def),
                 MinWidth = def.Name is "Name" ? 170 : def.Name == "Message" ? 200 : 50,
                 CellTemplate = new FuncDataTemplate<ResourceRowViewModel>((_, _) => new CellTextBlock(idx, colored)),
             });
         }
+    }
+
+    private object HeaderFor(ColumnDef def)
+    {
+        var tip = _vm?.HeaderTip(def);
+        if (tip is null) return def.Name;
+        var tb = new TextBlock { Text = def.Name, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        ToolTip.SetTip(tb, tip);
+        return tb;
     }
 
     private static DataGridLength WidthFor(ColumnDef def) => def.Name switch
@@ -123,7 +133,7 @@ public partial class ResourceListView : UserControl
         "Namespace" => new DataGridLength(130),
         "Status" or "Phase" or "Type" => new DataGridLength(130),
         "Age" or "Ready" or "Restarts" or "Desired" or "Current" or "Available" or "Up-to-date" => new DataGridLength(85),
-        "CPU" or "Memory" or "CPU usage" or "Memory usage" => new DataGridLength(120),
+        "CPU" or "Memory" or "CPU usage" or "Memory usage" => new DataGridLength(170),
         "Message" => new DataGridLength(3, DataGridLengthUnitType.Star),
         _ => new DataGridLength(120),
     };

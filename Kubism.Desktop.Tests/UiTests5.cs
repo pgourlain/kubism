@@ -335,7 +335,12 @@ public class UiTooltipTests
         UiHarness.Pump();
         var cells = h.Window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.Parent is not null && t.GetVisualAncestors().OfType<Avalonia.Controls.DataGridCell>().Any() && !string.IsNullOrEmpty(t.Text)).ToList();
         Assert.NotEmpty(cells);
-        Assert.All(cells, c => Assert.Equal(c.Text, ToolTip.GetTip(c)));
+        // Usage cells (CPU / Memory of pods) carry a richer tooltip: the value plus its request and limit.
+        Assert.All(cells, c =>
+        {
+            var tip = ToolTip.GetTip(c) as string;
+            if (tip != c.Text) { Assert.Contains(c.Text!.Split(' ')[0], tip); Assert.Contains("request", tip); }
+        });
         // Other grids (activity log) get the same behaviour from the global style.
         ws.Navigate(ws.FindNav(NavTarget.Activity)!);
         await ws.Session.Actions.ScaleAsync(Gvr.Deployments, "default", "web", 4, default);

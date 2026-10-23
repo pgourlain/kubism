@@ -11,6 +11,8 @@ public sealed partial class ResourceRowViewModel(CacheItem item) : ViewModelBase
     public string Name => Item.Object.Name;
     public string? Namespace => Item.Object.Namespace;
 
+    /// <summary>Hover text per cell, same indexing as <see cref="Cells"/>; null where the cell text says it all. Set before Cells.</summary>
+    public string?[] Tips { get; set; } = [];
     [ObservableProperty] private string[] _cells = [];
     [ObservableProperty] private Severity _severity;
     [ObservableProperty] private bool _isNew;
