@@ -88,14 +88,15 @@
             <ItemsControl ItemsSource="{Binding Warnings}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:WarningEvent">
-                  <StackPanel Margin="0,0,0,4">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                      <TextBlock Text="{Binding Reason}" FontWeight="SemiBold" Foreground="{DynamicResource KubismWarnBrush}" />
-                      <TextBlock Text="{Binding Object}" />
-                      <TextBlock Text="{Binding Age}" Classes="muted" />
-                    </StackPanel>
-                    <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Classes="muted" FontSize="11" />
-                  </StackPanel>
+                  <SelectableTextBlock Margin="0,0,0,4" TextWrapping="Wrap">
+                    <Run Text="{Binding Reason}" FontWeight="SemiBold" Foreground="{DynamicResource KubismWarnBrush}" />
+                    <Run Text="  " />
+                    <Run Text="{Binding Object}" />
+                    <Run Text="  " />
+                    <Run Text="{Binding Age}" Foreground="{DynamicResource KubismMutedBrush}" />
+                    <LineBreak />
+                    <Run Text="{Binding Message}" FontSize="11" Foreground="{DynamicResource KubismMutedBrush}" />
+                  </SelectableTextBlock>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>

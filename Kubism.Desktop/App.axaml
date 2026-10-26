@@ -125,6 +125,7 @@
       <Setter Property="BorderThickness" Value="0" />
     </Style>
     <Style Selector="TextBox"><Setter Property="CornerRadius" Value="8" /><Setter Property="Background" Value="{DynamicResource KubismBgBrush}" /></Style>
+    <Style Selector="SelectableTextBlock"><Setter Property="SelectionBrush" Value="#593B82F6" /></Style>
     <Style Selector="TreeViewItem">
       <Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" />
       <Setter Property="CornerRadius" Value="6" />
