@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <Version>0.3.7</Version>
+    <Version>0.3.8</Version>
   </PropertyGroup>
   <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Kubism.Core' Or '$(MSBuildProjectName)' == 'Kubism.Kube'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

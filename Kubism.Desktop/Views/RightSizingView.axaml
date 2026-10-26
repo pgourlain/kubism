@@ -201,22 +201,32 @@
     </Border>
 
     <Border Grid.Row="5" Classes="card">
-      <StackPanel Spacing="6">
+      <StackPanel Spacing="4">
         <WrapPanel>
-          <TextBlock Text="{Binding SelectedCount, StringFormat='{}{0} selected'}" VerticalAlignment="Center" Margin="0,0,8,0" />
-          <Button Content="Select all" Command="{Binding SelectAllVisibleCommand}" Margin="0,0,6,0" />
-          <Button Content="Clear" Command="{Binding ClearSelectionCommand}" Margin="0,0,12,0" />
-          <CheckBox Content="Override GitOps / Helm protection" IsChecked="{Binding OverrideGitOps}" />
+          <TextBlock Text="Recommendations" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" ToolTip.Tip="Tick containers in the table above, then apply the recommended requests/limits or take them elsewhere." />
+          <TextBlock Text="{Binding SelectedCount, StringFormat='{}{0} selected'}" Classes="muted" VerticalAlignment="Center" Margin="0,0,8,0" />
+          <Button Content="All" Command="{Binding SelectAllVisibleCommand}" Padding="8,2" Margin="0,0,4,0" ToolTip.Tip="Tick every container that has a recommendation" />
+          <Button Content="None" Command="{Binding ClearSelectionCommand}" Padding="8,2" Margin="0,0,12,0" />
+          <TextBlock Text="{Binding ApplyBlockedReason}" FontSize="12" Foreground="{DynamicResource KubismWarnBrush}" VerticalAlignment="Center" TextWrapping="Wrap" IsVisible="{Binding ApplyBlockedReason, Converter={x:Static app:Converters.NotNull}}" />
         </WrapPanel>
-        <TextBlock Text="{Binding ApplyBlockedReason}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" IsVisible="{Binding ApplyBlockedReason, Converter={x:Static app:Converters.NotNull}}" />
         <WrapPanel>
-          <Button Content="Apply…" Command="{Binding ApplyCommand}" IsEnabled="{Binding ApplyBlockedReason, Converter={x:Static app:Converters.IsNull}}" ToolTip.Tip="{Binding ApplyBlockedReason}" Margin="0,0,6,4" />
-          <Button Content="Copy YAML" Command="{Binding CopyYamlCommand}" Margin="0,0,6,4" />
-          <Button Content="Copy Helm values" Command="{Binding CopyHelmCommand}" Margin="0,0,6,4" />
-          <Button Content="Copy Kustomize patch" Command="{Binding CopyKustomizeCommand}" Margin="0,0,6,4" />
-          <Button Content="Create VPA (recommend only)" Command="{Binding CreateVpaCommand}" Margin="0,0,6,4" />
-          <Button Content="Export CSV…" Command="{Binding ExportCsvCommand}" Margin="0,0,6,4" />
-          <Button Content="Export Markdown…" Command="{Binding ExportMarkdownCommand}" Margin="0,0,6,4" />
+          <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,16,2">
+            <TextBlock Text="Apply" Classes="muted" VerticalAlignment="Center" />
+            <Button Content="Apply…" Command="{Binding ApplyCommand}" IsEnabled="{Binding ApplyBlockedReason, Converter={x:Static app:Converters.IsNull}}" ToolTip.Tip="Patch the workloads in the cluster (triggers a rollout)" />
+            <CheckBox Content="Override GitOps/Helm" IsChecked="{Binding OverrideGitOps}" ToolTip.Tip="Allow applying to workloads managed by Argo CD, Flux or Helm; the change will be reverted at their next sync" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,16,2">
+            <TextBlock Text="Copy as" Classes="muted" VerticalAlignment="Center" />
+            <Button Content="YAML" Command="{Binding CopyYamlCommand}" ToolTip.Tip="resources: blocks as plain YAML" />
+            <Button Content="Helm values" Command="{Binding CopyHelmCommand}" ToolTip.Tip="resources: block per container for values.yaml" />
+            <Button Content="Kustomize" Command="{Binding CopyKustomizeCommand}" ToolTip.Tip="Kustomize patch" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,2">
+            <TextBlock Text="Other" Classes="muted" VerticalAlignment="Center" />
+            <Button Content="Create VPA" Command="{Binding CreateVpaCommand}" ToolTip.Tip="Create a VerticalPodAutoscaler in recommend-only mode (updateMode: Off)" />
+            <Button Content="CSV…" Command="{Binding ExportCsvCommand}" ToolTip.Tip="Export the report as CSV" />
+            <Button Content="Markdown…" Command="{Binding ExportMarkdownCommand}" ToolTip.Tip="Export the report as Markdown" />
+          </StackPanel>
         </WrapPanel>
       </StackPanel>
     </Border>

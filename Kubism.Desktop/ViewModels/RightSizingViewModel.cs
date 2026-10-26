@@ -292,7 +292,7 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
         UpdatePreview();
         var sel = SelectedReports();
         ApplyBlockedReason = null;
-        if (sel.Count == 0) { ApplyBlockedReason = "Select containers to apply"; return; }
+        if (sel.Count == 0) { ApplyBlockedReason = "Tick containers above to enable Apply"; return; }
         var managed = sel.FirstOrDefault(c => c.GitOpsManager is not null);
         if (managed is not null && !OverrideGitOps)
             ApplyBlockedReason = $"Will be reverted by {managed.GitOpsManager}: copy the snippet instead (or tick override)";
