@@ -23,7 +23,7 @@
       <Border Grid.Row="1" IsVisible="{Binding HasFailing}" Background="{DynamicResource KubismErrorBrush}" Padding="8,4" Margin="0,0,0,6" CornerRadius="4">
         <TextBlock Text="{Binding FailingSummary}" Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap" />
       </Border>
-      <DataGrid Grid.Row="2" ItemsSource="{Binding Releases}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
+      <DataGrid Grid.Row="2" ItemsSource="{Binding Releases}" SelectedItem="{Binding Selected}" IsReadOnly="True" CanUserResizeColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
         <DataGrid.Columns>
           <DataGridTextColumn Header="Name" Binding="{Binding Name}" x:DataType="h:HelmRelease" Width="*" MinWidth="110" />
           <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="h:HelmRelease" />
@@ -115,7 +115,7 @@
       </TabItem>
       <TabItem Header="History">
         <Grid RowDefinitions="*,Auto">
-          <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" AutoGenerateColumns="False" SelectionMode="Single" Name="HistoryGrid">
+          <DataGrid ItemsSource="{Binding History}" IsReadOnly="True" CanUserResizeColumns="True" AutoGenerateColumns="False" SelectionMode="Single" Name="HistoryGrid">
             <DataGrid.Columns>
               <DataGridTextColumn Header="Revision" Binding="{Binding Revision}" x:DataType="h:HelmRelease" />
               <DataGridTextColumn Header="Status" Binding="{Binding Status}" x:DataType="h:HelmRelease" />
