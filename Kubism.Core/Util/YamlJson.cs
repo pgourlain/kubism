@@ -73,7 +73,8 @@ public static class YamlJson
             case JsonValue v:
                 if (v.TryGetValue<string>(out var str))
                 {
-                    var needsQuote = str.Length == 0 || str is "true" or "false" or "null" or "~" or "yes" or "no" or "on" or "off"
+                    var needsQuote = str.Length == 0 || str == "~"
+                        || str.ToLowerInvariant() is "true" or "false" or "null" or "yes" or "no" or "on" or "off" or "y" or "n"
                         || double.TryParse(str, NumberStyles.Float, CultureInfo.InvariantCulture, out _)
                         || str.StartsWith(' ') || str.EndsWith(' ') || str.Contains(": ") || str.Contains(" #") || str.StartsWith('#')
                         || ":{}[],&*!|>'\"%@`-?".Contains(str[0]);

@@ -40,6 +40,17 @@ public class UtilTests
         Assert.Equal(5, back["n"]!.GetValue<int>());
     }
 
+    [Theory]
+    [InlineData("True")]
+    [InlineData("False")]
+    [InlineData("Null")]
+    [InlineData("YES")]
+    public void Yaml_quotes_capitalised_booleans_so_condition_status_stays_a_string(string value)
+    {
+        var back = (JsonObject)YamlJson.Parse(YamlJson.ToYaml(new JsonObject { ["status"] = value }))!;
+        Assert.Equal(value, back["status"]!.GetValue<string>());
+    }
+
     [Fact]
     public void Multi_document_yaml_is_split()
     {
