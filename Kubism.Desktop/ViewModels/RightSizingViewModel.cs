@@ -231,15 +231,42 @@ public sealed partial class RightSizingViewModel : ViewModelBase, IClosable
         UpdateSelection();
     }
 
+    private CancellationTokenSource? _detailCts;
+    [ObservableProperty] private bool _isDetailLoading;
+
     partial void OnSelectedChanged(ContainerRowViewModel? value)
     {
-        UpdatePreview();
-        if (value is null || _history is null) { CpuSeries = []; MemorySeries = []; SeriesNote = value is null ? "" : "No usage history for this container."; return; }
-        var pts = _history.Series.Where(s => s.Key.Namespace == value.Report.Namespace && s.Key.Container == value.Report.Container
-                                              && s.Key.Pod.StartsWith(value.Report.WorkloadName)).SelectMany(s => s.Points).GroupBy(p => p.Time).OrderBy(g => g.Key).ToList();
-        CpuSeries = pts.Select(g => g.Average(p => p.CpuCores)).ToList();
-        MemorySeries = pts.Select(g => g.Average(p => p.MemoryBytes)).ToList();
-        SeriesNote = pts.Count < 2 ? "No usage history for this container in the window." : "";
+        _detailCts?.Cancel(); _detailCts = null;
+        CpuSeries = []; MemorySeries = []; SeriesNote = "";
+        try { UpdatePreview(); }
+        catch (Exception ex) { PatchPreview = $"Cannot build the preview: {ex.Message}"; }
+        if (value is null) { IsDetailLoading = false; return; }
+        if (_history is null) { IsDetailLoading = false; SeriesNote = "No usage history for this container."; return; }
+        _detailCts = CancellationTokenSource.CreateLinkedTokenSource(_ws.Session.SessionToken);
+        _ = LoadDetailAsync(value, _history, _detailCts.Token);
+    }
+
+    /// <summary>Escape in the grid: close the detail.</summary>
+    public void CloseDetail() => Selected = null;
+
+    private async Task LoadDetailAsync(ContainerRowViewModel row, UsageHistory history, CancellationToken ct)
+    {
+        IsDetailLoading = true;
+        try
+        {
+            var (cpu, mem) = await Task.Run(() =>
+            {
+                var pts = history.Series.Where(s => s.Key.Namespace == row.Report.Namespace && s.Key.Container == row.Report.Container
+                                                     && s.Key.Pod.StartsWith(row.Report.WorkloadName, StringComparison.Ordinal)).SelectMany(s => s.Points).GroupBy(p => p.Time).OrderBy(g => g.Key).ToList();
+                return (pts.Select(g => g.Average(p => p.CpuCores)).ToList(), pts.Select(g => g.Average(p => p.MemoryBytes)).ToList());
+            }, ct);
+            if (ct.IsCancellationRequested) return;
+            CpuSeries = cpu; MemorySeries = mem;
+            SeriesNote = cpu.Count < 2 ? "No usage history for this container in the window." : "";
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { if (!ct.IsCancellationRequested) SeriesNote = $"Cannot load the usage history: {ex.Message}"; }
+        finally { if (!ct.IsCancellationRequested) IsDetailLoading = false; }
     }
 
     /// <summary>

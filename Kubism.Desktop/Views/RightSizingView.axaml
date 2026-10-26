@@ -70,7 +70,7 @@
       <TabItem Header="Misconfigured">
         <Grid RowDefinitions="Auto,*">
           <TextBlock Text="{Binding ProblemsTitle}" FontWeight="SemiBold" Margin="2,6,0,6" />
-          <DataGrid Grid.Row="1" Name="ProblemsGrid" ItemsSource="{Binding Problems}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Misconfigured containers">
+          <DataGrid Grid.Row="1" Name="ProblemsGrid" ItemsSource="{Binding Problems}" SelectedItem="{Binding Selected}" IsReadOnly="True" CanUserResizeColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Misconfigured containers">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="44">
                 <DataGridTemplateColumn.CellTemplate>
@@ -95,7 +95,7 @@
       </TabItem>
       <TabItem Header="All containers">
         <Grid>
-          <DataGrid Name="ContainersGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Containers">
+          <DataGrid Name="ContainersGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsReadOnly="True" CanUserResizeColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" SelectionMode="Single" AutomationProperties.Name="Containers">
             <DataGrid.Columns>
               <DataGridTemplateColumn Width="40">
                 <DataGridTemplateColumn.CellTemplate>
@@ -116,7 +116,15 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="CPU rec." Binding="{Binding RecCpu}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTextColumn Binding="{Binding RecCpu}" x:DataType="vm:ContainerRowViewModel">
+                <DataGridTextColumn.Header>
+                  <TextBlock Text="CPU rec.">
+                    <ToolTip.Tip>
+                      <TextBlock MaxWidth="320" TextWrapping="Wrap" Text="Recommended CPU request: the 95th percentile of CPU usage over the window (minimum 10m), rounded up to a sensible step. No CPU limit is recommended by default, so the container is not throttled. Empty when there is not enough data." />
+                    </ToolTip.Tip>
+                  </TextBlock>
+                </DataGridTextColumn.Header>
+              </DataGridTextColumn>
               <DataGridTemplateColumn Header="Memory  (req | p95 | max)" Width="1.3*" MinWidth="170">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ContainerRowViewModel">
@@ -127,7 +135,15 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Mem rec." Binding="{Binding RecMemory}" x:DataType="vm:ContainerRowViewModel" />
+              <DataGridTextColumn Binding="{Binding RecMemory}" x:DataType="vm:ContainerRowViewModel">
+                <DataGridTextColumn.Header>
+                  <TextBlock Text="Mem rec.">
+                    <ToolTip.Tip>
+                      <TextBlock MaxWidth="320" TextWrapping="Wrap" Text="Recommended memory request: the highest working set seen over the window, plus a 15 % safety margin (minimum 32 Mi), rounded to a sensible step. By default the recommended limit equals this request. Empty when there is not enough data." />
+                    </ToolTip.Tip>
+                  </TextBlock>
+                </DataGridTextColumn.Header>
+              </DataGridTextColumn>
               <DataGridTemplateColumn Header="Verdict">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ContainerRowViewModel">
@@ -144,7 +160,7 @@
         </Grid>
       </TabItem>
       <TabItem Header="Namespaces">
-        <DataGrid ItemsSource="{Binding Rollups}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
+        <DataGrid ItemsSource="{Binding Rollups}" IsReadOnly="True" CanUserResizeColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal">
           <DataGrid.Columns>
             <DataGridTextColumn Header="Namespace" Binding="{Binding Namespace}" x:DataType="rs:NamespaceRollup" Width="*" />
             <DataGridTextColumn Header="CPU requested" Binding="{Binding CpuRequested, StringFormat='{}{0:0.###}'}" x:DataType="rs:NamespaceRollup" />
@@ -162,6 +178,8 @@
     </TabControl>
 
     <Border Grid.Row="4" Classes="card" IsVisible="{Binding Selected, Converter={x:Static app:Converters.NotNull}}">
+      <StackPanel Spacing="6">
+      <ProgressBar IsIndeterminate="True" Height="4" IsVisible="{Binding IsDetailLoading}" AutomationProperties.Name="Loading details" />
       <Grid ColumnDefinitions="*,*,1.2*" ColumnSpacing="12">
         <StackPanel Spacing="4">
           <TextBlock Classes="h2" TextWrapping="Wrap"><Run Text="{Binding Selected.Workload}" /><Run Text=" / " /><Run Text="{Binding Selected.Container}" /></TextBlock>
@@ -179,6 +197,7 @@
           <TextBox Text="{Binding PatchPreview}" IsReadOnly="True" AcceptsReturn="True" Height="64" FontFamily="Menlo,Consolas,monospace" FontSize="11" />
         </StackPanel>
       </Grid>
+      </StackPanel>
     </Border>
 
     <Border Grid.Row="5" Classes="card">
