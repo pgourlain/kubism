@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Security.Authentication;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -314,14 +315,40 @@ public sealed class KubeTransport : IKubeTransport
             {
                 last = ex;
                 var msg = ex.ToString();
-                // A definite HTTP error (not found, forbidden…) won't change with another protocol.
-                if (msg.Contains("'404'") || msg.Contains("'403'") || msg.Contains("'401'") || msg.Contains("'400'")) break;
+                // A definite HTTP error (not found, bad request, unauthorized) won't change with another protocol.
+                // 403 is not in the list: the API server answers an empty 403 when it rejects the requested sub-protocol (v5 on an older server).
+                if (msg.Contains("'404'") || msg.Contains("'401'") || msg.Contains("'400'")) break;
             }
         }
         var mapped = MapException(last!);
         if (last!.ToString().Contains("'404'")) throw new KubeApiException(404, "NotFound", "pod or container not found", last);
-        if (last.ToString().Contains("'403'")) throw new KubeApiException(403, "Forbidden", "forbidden: you cannot connect to this resource", last);
+        if (last.ToString().Contains("'403'"))
+        {
+            // The WebSocket handshake hides the Status body; the same request via the HTTP client returns it.
+            var detail = await ProbeDeniedAsync(path, subProtocols.Take(2).Last(), ct).ConfigureAwait(false);
+            throw new KubeApiException(403, "Forbidden", detail ?? "forbidden: you cannot connect to this resource", last);
+        }
         throw mapped;
+    }
+
+    private async Task<string?> ProbeDeniedAsync(string path, string protocol, CancellationToken ct)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, Url(path));
+            req.Headers.Connection.Add("Upgrade");
+            req.Headers.Upgrade.Add(new ProductHeaderValue("websocket"));
+            req.Headers.TryAddWithoutValidation("Sec-WebSocket-Version", "13");
+            req.Headers.TryAddWithoutValidation("Sec-WebSocket-Key", Convert.ToBase64String(RandomNumberGenerator.GetBytes(16)));
+            req.Headers.TryAddWithoutValidation("Sec-WebSocket-Protocol", protocol);
+            using var res = await RequestAsync(req, HttpCompletionOption.ResponseContentRead, ct).ConfigureAwait(false);
+            if ((int)res.StatusCode == 403) return (await ToApiException(res).ConfigureAwait(false)).Message;
+            var body = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            if (body.Length > 300) body = body[..300];
+            return $"forbidden: the API server refused the WebSocket upgrade (probe answered {(int)res.StatusCode} {res.ReasonPhrase}) {body}".TrimEnd();
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception) { return null; }
     }
 
     public void Dispose() { _http.Dispose(); _clientCertificate?.Dispose(); }
