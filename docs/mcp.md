@@ -2,6 +2,9 @@
 
 `Kubism --mcp` runs a headless [Model Context Protocol](https://modelcontextprotocol.io) server over **stdio**. It reuses the desktop app's kubeconfig catalog and cluster metadata (labels, safety modes, Prometheus URL), so a cluster marked *production* or *read-only* in the app is treated the same way here.
 
+**From the app:** File › *Connect an AI Agent…* shows the exact command / JSON for your install path.
+
+
 Nothing is written to stdout except protocol messages; logs go to stderr and `mcp-log.txt` in the data folder.
 
 ## Setup

@@ -27,6 +27,8 @@ public static class MenuSpecs
             new("Reload clusters", () => vm.ReloadCatalogCommand.Execute(null)),
             new("Settings…", () => _ = vm.EditSettingsAsync()),
             MenuSpec.Sep(),
+            new("Connect an AI Agent…", () => _ = vm.ShowConnectAgentAsync()),
+            MenuSpec.Sep(),
             new("Quit".T(), () => window.Close(), new KeyGesture(Key.Q, Cmd)),
         ]),
         new("Go".T(), Children:

@@ -261,6 +261,26 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         OnPropertyChanged(nameof(WindowTitle));
     }
 
+    public async Task ShowConnectAgentAsync()
+    {
+        var exe = Environment.ProcessPath ?? "Kubism";
+        var q = "\"" + exe.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        var text = $$"""
+            Kubism runs as an MCP server over stdio: the agent starts it, it reads your kubeconfig clusters (read-only by default, Secret values redacted).
+
+            Claude Code
+              claude mcp add kubism -- "{{exe}}" --mcp
+
+            Claude Desktop, VS Code, Cursor (mcp config JSON)
+              { "mcpServers": { "kubism": { "command": {{q}}, "args": ["--mcp"] } } }
+
+            Writes (apply, delete, scale, rollout_restart) stay off. Add "--allow-writes" to args to enable them,
+            plus "--allow-production" to also reach clusters tagged production.
+
+            """;
+        await Dialogs.ShowTextAsync("Connect an AI Agent", text);
+    }
+
     public async Task CheckForUpdatesAsync(bool force = false)
     {
         var current = typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 1);
