@@ -4,7 +4,10 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-11-03
+
 ### Added
+- Typed-name confirmation dialog: the name is selectable and a *Copy name* button copies it, so long names can be pasted instead of typed (#11).
 - File › *Connect an AI Agent…* shows the exact `claude mcp add` command and the `mcpServers` JSON (Claude Desktop, VS Code, Cursor) for the installed executable, so the MCP server can be set up without the command line.
 
 ## [0.3.8] - 2026-10-26

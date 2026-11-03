@@ -77,8 +77,11 @@ public sealed class AvaloniaDialogService : IDialogService
     {
         var w = new Window();
         var panel = new StackPanel { Margin = new Thickness(20), Spacing = 8 };
-        panel.Children.Add(new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
-        panel.Children.Add(new TextBlock { Text = $"Type \"{expected}\" to confirm:", FontWeight = FontWeight.SemiBold });
+        panel.Children.Add(new SelectableTextBlock { Text = message, TextWrapping = TextWrapping.Wrap });
+        panel.Children.Add(new SelectableTextBlock { Text = $"Type \"{expected}\" to confirm:", FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+        var copyName = new Button { Content = "Copy name", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left };
+        copyName.Click += async (_, _) => await new AvaloniaClipboardService().SetTextAsync(expected);
+        panel.Children.Add(copyName);
         var box = new TextBox { PlaceholderText = expected };
         panel.Children.Add(box);
         var okPanel = Buttons(w, "Confirm", okEnabled: false, destructive: true);
