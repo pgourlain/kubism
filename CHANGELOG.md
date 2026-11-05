@@ -6,6 +6,8 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ### Added
 - Workloads › *Images*: the images the pods of the selected namespaces run, one row per reference with registry, repository, version, the digest the node resolved, pods, workloads, namespaces and pull policy. Flags `latest`/untagged images, repositories running in several versions and images that fail to pull; filters, *Repositories* and *Registries* tabs, and the workloads that use the selected image (double-click opens one).
+- Images: *Compare* tab lines up what each workload container runs in this cluster and another connected one (same namespaces, matched by name) and says whether only the version differs; *Export CSV* / *Export Markdown*.
+- MCP: read tools `list_images` and `compare_images`.
 
 ## [0.3.9] - 2026-11-03
 

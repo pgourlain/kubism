@@ -73,4 +73,55 @@ public class ImagesUiTests
         Assert.Equal(key, back.Selected?.Key);
         Assert.Equal("registry.example.com/team/shop", back.Filter);
     }
+
+    [AvaloniaFact]
+    public async Task Images_compare_two_clusters_and_export()
+    {
+        await using var h = await UiHarness.StartAsync(withDrift: true);
+        // The drifted cluster runs an older nginx for web and no longer has the api pods.
+        var dev = h.Demo.Drifted!;
+        foreach (var pod in dev.List(Kubism.Core.Api.Gvr.Pods, "default"))
+        {
+            var name = pod["metadata"]!["name"]!.GetValue<string>();
+            if (name.StartsWith("web-")) { pod["spec"]!["containers"]![0]!["image"] = "nginx:1.25"; dev.Upsert(pod, silent: true); }
+            else if (name.StartsWith("api-")) dev.Remove(Kubism.Core.Api.Gvr.Pods, "default", name);
+        }
+        var staging = await h.ConnectAsync("demo-staging");
+        await h.ConnectAsync("demo-dev");
+        h.Main.SelectedWorkspace = staging;
+        staging.Namespaces.Select("default");
+        staging.Navigate(staging.FindNav(NavTarget.Images)!);
+        await UiHarness.WaitFor(() => staging.CurrentContent is ImagesViewModel v && v.Rows.Count > 0, what: "images");
+        var vm = (ImagesViewModel)staging.CurrentContent!;
+
+        vm.Section = 3;
+        await UiHarness.WaitFor(() => vm.DiffRows.Count > 0, what: "image differences");
+        Assert.Equal("demo-dev", vm.TargetTitle);
+        var web = vm.DiffRows.Single(r => r.Entry.Name == "web");
+        Assert.Equal(("version differs", "nginx:1.27", "nginx:1.25"), (web.StatusText, web.Here, web.There));
+        Assert.Equal("only here", vm.DiffRows.First(r => r.Entry.Name == "api").StatusText);
+        Assert.DoesNotContain(vm.DiffRows, r => r.Entry.Status == Kubism.Core.Views.CompareStatus.Same);
+        vm.ShowIdentical = true;
+        Assert.Contains(vm.DiffRows, r => r.Entry.Status == Kubism.Core.Views.CompareStatus.Same);
+        vm.ShowIdentical = false;
+        h.Screenshot("62-images-compare");
+
+        // Export: the differences as CSV, the images as Markdown.
+        var dir = Path.Combine(Path.GetTempPath(), "kubism-img-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var dialogs = (FakeDialogService)h.Main.Dialogs;
+            dialogs.SavePath = Path.Combine(dir, "diff.csv");
+            await vm.ExportCsvCommand.ExecuteAsync(null);
+            var csv = await File.ReadAllTextAsync(dialogs.SavePath);
+            Assert.Contains("version_only", csv);
+            Assert.Contains("nginx:1.25", csv);
+            vm.Section = 0;
+            dialogs.SavePath = Path.Combine(dir, "images.md");
+            await vm.ExportMarkdownCommand.ExecuteAsync(null);
+            Assert.Contains("`nginx:1.27`", await File.ReadAllTextAsync(dialogs.SavePath));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
 }

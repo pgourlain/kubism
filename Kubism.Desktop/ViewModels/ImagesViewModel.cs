@@ -46,6 +46,22 @@ public sealed record ImageRowViewModel(ImageRow Row)
 /// <summary>A registry or a repository, with how many images, versions and pods sit under it.</summary>
 public sealed record ImageGroupRow(string Name, int Images, string Versions, int Pods, int Namespaces, string Note);
 
+public sealed record ImageDiffRow(ImageDiffEntry Entry)
+{
+    public string Workload => Entry.Display;
+    public string Here => string.Join(", ", Entry.Left);
+    public string There => string.Join(", ", Entry.Right);
+    public string Marker => Entry.Status switch { CompareStatus.Same => "=", CompareStatus.Different => "≠", CompareStatus.OnlyLeft => "◀", _ => "▶" };
+    public string StatusText => Entry.Status switch
+    {
+        CompareStatus.Same => "identical",
+        CompareStatus.Different => Entry.VersionOnly ? "version differs" : "other image",
+        CompareStatus.OnlyLeft => "only here",
+        _ => "only there",
+    };
+    public Severity Severity => Entry.Status switch { CompareStatus.Same => Severity.Ok, CompareStatus.Different => Severity.Warning, _ => Severity.Error };
+}
+
 public sealed record ImageUserRow(ImageUser User)
 {
     public string Workload => User.Display;
@@ -61,7 +77,6 @@ public sealed record ImageUserRow(ImageUser User)
 /// </summary>
 public sealed partial class ImagesViewModel : ViewModelBase, IClosable, INavigablePage
 {
-    private const int ListCap = 5000;
     private readonly WorkspaceViewModel _ws;
     private readonly CancellationTokenSource _cts = new();
     private IReadOnlyList<ImageRow> _rows = [];
@@ -84,11 +99,14 @@ public sealed partial class ImagesViewModel : ViewModelBase, IClosable, INavigab
         _ = LoadAsync();
     }
 
-    public IReadOnlyList<string> Sections { get; } = ["Images", "Repositories", "Registries"];
+    public IReadOnlyList<string> Sections { get; } = ["Images", "Repositories", "Registries", "Compare"];
     public ObservableCollection<SectionTab> Tabs { get; } = [];
     public ObservableCollection<ImageRowViewModel> Rows { get; } = [];
     public ObservableCollection<ImageGroupRow> Groups { get; } = [];
     public ObservableCollection<ImageUserRow> Users { get; } = [];
+    public ObservableCollection<ImageDiffRow> DiffRows { get; } = [];
+    /// <summary>The clusters this one can be compared with: every other connected cluster.</summary>
+    public IEnumerable<WorkspaceViewModel> Targets => _ws.Main.Workspaces.Where(w => w != _ws);
     [ObservableProperty] private int _section;
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private string? _error;
@@ -99,19 +117,30 @@ public sealed partial class ImagesViewModel : ViewModelBase, IClosable, INavigab
     [ObservableProperty] private ImageRowViewModel? _selected;
     [ObservableProperty] private ImageGroupRow? _selectedGroup;
     [ObservableProperty] private string _digests = "";
+    [ObservableProperty] private WorkspaceViewModel? _target;
+    [ObservableProperty] private bool _showIdentical;
+    [ObservableProperty] private bool _isComparing;
+    [ObservableProperty] private string _compareSummary = "";
 
     public bool ShowImages => Section == 0;
-    public bool ShowGroups => Section != 0;
+    public bool ShowGroups => Section is 1 or 2;
+    public bool ShowCompare => Section == 3;
+    public bool CanCompare => Targets.Any();
+    public bool NoTarget => ShowCompare && !CanCompare;
+    public string TargetTitle => Target?.Title ?? "";
     public bool HasWarning => Warning.Length > 0;
     public string GroupHeader => Section == 1 ? "Repository" : "Registry";
 
     partial void OnSectionChanged(int value)
     {
         foreach (var t in Tabs) t.IsActive = t.Index == value;
-        OnPropertyChanged(nameof(ShowImages)); OnPropertyChanged(nameof(ShowGroups)); OnPropertyChanged(nameof(GroupHeader));
-        ShowResults();
+        OnPropertyChanged(nameof(ShowImages)); OnPropertyChanged(nameof(ShowGroups)); OnPropertyChanged(nameof(ShowCompare)); OnPropertyChanged(nameof(GroupHeader));
+        if (value == 3) { Target ??= Targets.FirstOrDefault(); OnPropertyChanged(nameof(CanCompare)); OnPropertyChanged(nameof(NoTarget)); _ = CompareAsync(); }
+        else ShowResults();
     }
-    partial void OnFilterChanged(string value) => ShowResults();
+    partial void OnFilterChanged(string value) { if (Section == 3) ShowDiff(); else ShowResults(); }
+    partial void OnShowIdenticalChanged(bool value) => ShowDiff();
+    partial void OnTargetChanged(WorkspaceViewModel? value) { OnPropertyChanged(nameof(TargetTitle)); if (Section == 3) _ = CompareAsync(); }
     partial void OnShowChanged(ImageShow value) { OnPropertyChanged(nameof(ShowIndex)); ShowResults(); }
 
     /// <summary>The "Show" combo box lists the <see cref="ImageShow"/> values in order.</summary>
@@ -148,34 +177,12 @@ public sealed partial class ImagesViewModel : ViewModelBase, IClosable, INavigab
         IsLoading = true; Error = null;
         try
         {
-            var notRead = new List<string>();
-            var truncated = new List<string>();
-            async Task<List<KubeObject>> ReadAsync(string resource, bool required)
-            {
-                var kind = _ws.Session.Discovery.FindByName(resource);
-                if (kind is null || !kind.CanList) { if (required) notRead.Add(resource); return []; }
-                var found = new List<KubeObject>();
-                try
-                {
-                    foreach (var ns in kind.Namespaced ? Namespaces() : [null])
-                        found.AddRange(await CompareViewModel.ListAllAsync(_ws, kind, ns, _cts.Token));
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException) { lock (notRead) notRead.Add(resource); return []; }
-                if (found.Count >= ListCap) lock (truncated) truncated.Add(resource);
-                return found;
-            }
-
-            // Replica sets and jobs only resolve the owner of a pod: failing to read them is not an error.
-            var pods = ReadAsync("pods", true);
-            var sets = ReadAsync("replicasets", false);
-            var jobs = ReadAsync("jobs", false);
-            await Task.WhenAll(pods, sets, jobs);
-            var rows = ImageInventory.Analyze(pods.Result, sets.Result, jobs.Result);
+            var snapshot = await ImageLoader.LoadAsync(_ws.Session.Transport, Namespaces(), _cts.Token);
+            var rows = snapshot.Rows;
             _ws.Ui.Post(() =>
             {
                 _rows = rows;
-                Warning = notRead.Count == 0 && truncated.Count == 0 ? ""
-                    : $"{(notRead.Count > 0 ? $"Could not read {string.Join(", ", notRead)}. " : "")}{(truncated.Count > 0 ? $"{string.Join(", ", truncated)} truncated at {ListCap}. " : "")}The list may be incomplete.";
+                Warning = snapshot.Warning ?? "";
                 var repos = rows.Select(r => r.Image.Name).Distinct().Count();
                 Summary = $"{rows.Count} image(s) in {repos} repositor{(repos == 1 ? "y" : "ies")} · {rows.Select(r => r.Image.Registry).Distinct().Count()} registr{(rows.Select(r => r.Image.Registry).Distinct().Count() == 1 ? "y" : "ies")} · "
                     + $"{rows.Count(r => r.Issues.HasFlag(ImageIssues.Latest))} latest or untagged · {rows.Count(r => r.Issues.HasFlag(ImageIssues.PullFailing))} failing to pull · "
@@ -222,6 +229,71 @@ public sealed partial class ImagesViewModel : ViewModelBase, IClosable, INavigab
         }
     }
 
+    private IReadOnlyList<ImageDiffEntry> _diff = [];
+    private CancellationTokenSource? _compareCts;
+
+    /// <summary>Reads the other cluster (same namespaces by name) and lines up what each workload container runs.</summary>
+    [RelayCommand]
+    private async Task CompareAsync()
+    {
+        if (Target is not { } target) { DiffRows.Clear(); CompareSummary = ""; return; }
+        _compareCts?.Cancel();
+        _compareCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, target.Session.SessionToken);
+        var ct = _compareCts.Token;
+        IsComparing = true; Error = null;
+        try
+        {
+            var scope = Namespaces();
+            var here = ImageLoader.LoadAsync(_ws.Session.Transport, scope, ct);
+            var there = ImageLoader.LoadAsync(target.Session.Transport, scope, ct);
+            await Task.WhenAll(here, there);
+            var diff = ImageComparison.Compare(here.Result.Rows, there.Result.Rows);
+            _ws.Ui.Post(() =>
+            {
+                _diff = diff;
+                int N(CompareStatus st) => diff.Count(e => e.Status == st);
+                var warning = string.Join(" ", new[] { here.Result.Warning, there.Result.Warning }.Where(w => w is not null));
+                CompareSummary = $"{N(CompareStatus.Different)} differ ({diff.Count(e => e.VersionOnly)} by version only) · {N(CompareStatus.OnlyLeft)} only in {_ws.Title} · {N(CompareStatus.OnlyRight)} only in {target.Title} · {N(CompareStatus.Same)} identical. Same namespaces on both sides, matched by name.{(warning.Length > 0 ? " " + warning : "")}";
+                ShowDiff();
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Error = ex.Message; }
+        finally { IsComparing = false; }
+    }
+
+    private void ShowDiff()
+    {
+        DiffRows.Clear();
+        var needle = Filter.Trim();
+        foreach (var e in _diff.Where(e => (ShowIdentical || e.Status != CompareStatus.Same)
+                     && (needle.Length == 0 || e.Display.Contains(needle, StringComparison.OrdinalIgnoreCase) || e.Left.Concat(e.Right).Any(r => r.Contains(needle, StringComparison.OrdinalIgnoreCase)))))
+            DiffRows.Add(new ImageDiffRow(e));
+    }
+
+    [RelayCommand]
+    private async Task ExportCsvAsync()
+    {
+        var csv = Section == 3 ? ImageExport.CompareCsv(DiffRows.Select(r => r.Entry), _ws.Title, Target?.Title ?? "") : ImageExport.Csv(VisibleRows(), _ws.Title);
+        var path = await _ws.Dialogs.SaveFileAsync("Export CSV", Section == 3 ? "images-compare.csv" : "images.csv");
+        if (path is not null) await File.WriteAllTextAsync(path, csv);
+    }
+
+    [RelayCommand]
+    private async Task ExportMarkdownAsync()
+    {
+        var path = await _ws.Dialogs.SaveFileAsync("Export Markdown", "images.md");
+        if (path is not null) await File.WriteAllTextAsync(path, ImageExport.Markdown(VisibleRows(), _ws.Title));
+    }
+
+    /// <summary>What the Images tab shows now (filters applied), whichever tab is open: the export is of the images, not of the groups.</summary>
+    private List<ImageRow> VisibleRows()
+    {
+        var needle = Filter.Trim();
+        return _rows.Where(r => Passes(r) && (needle.Length == 0 || r.Reference.Contains(needle, StringComparison.OrdinalIgnoreCase)
+            || r.Users.Any(u => u.Display.Contains(needle, StringComparison.OrdinalIgnoreCase)))).ToList();
+    }
+
     private string? SelectionKey() => Selected?.Key;
 
     private void RestoreSelection()
@@ -242,7 +314,7 @@ public sealed partial class ImagesViewModel : ViewModelBase, IClosable, INavigab
         if (row?.User is { } u) _ws.OpenGraphNode(new GraphNode(u.Display, u.Kind, u.Namespace, u.Name));
     }
 
-    private void OnNamespacesChanged() => _ws.Ui.Post(() => _ = LoadAsync());
+    private void OnNamespacesChanged() => _ws.Ui.Post(() => { _ = LoadAsync(); if (Section == 3) _ = CompareAsync(); });
 
-    public ValueTask DisposeAsync() { _ws.Namespaces.Changed -= OnNamespacesChanged; _cts.Cancel(); return ValueTask.CompletedTask; }
+    public ValueTask DisposeAsync() { _ws.Namespaces.Changed -= OnNamespacesChanged; _cts.Cancel(); _compareCts?.Cancel(); return ValueTask.CompletedTask; }
 }

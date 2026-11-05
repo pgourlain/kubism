@@ -24,20 +24,28 @@
       </StackPanel>
     </Grid>
     <StackPanel Grid.Row="1" Spacing="2">
-      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" IsVisible="{Binding !ShowCompare}" />
+      <TextBlock Text="{Binding CompareSummary}" TextWrapping="Wrap" IsVisible="{Binding ShowCompare}" />
+      <TextBlock Text="Connect another cluster to compare what it runs with this one." Classes="muted" IsVisible="{Binding NoTarget}" />
       <TextBlock Text="{Binding Warning}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
     </StackPanel>
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
       <TextBox Text="{Binding Filter, Mode=TwoWay}" PlaceholderText="Filter by image or workload" AutomationProperties.Name="Filter" />
-      <ComboBox Grid.Column="1" SelectedIndex="{Binding ShowIndex, Mode=TwoWay}" MinWidth="200" AutomationProperties.Name="Show">
+      <ComboBox Grid.Column="1" SelectedIndex="{Binding ShowIndex, Mode=TwoWay}" MinWidth="200" IsVisible="{Binding !ShowCompare}" AutomationProperties.Name="Show">
         <ComboBoxItem Content="All images" />
         <ComboBoxItem Content="latest or no tag" />
         <ComboBoxItem Content="Not pinned by digest" />
         <ComboBoxItem Content="Failing to pull" />
         <ComboBoxItem Content="Several versions" />
       </ComboBox>
-      <Button Grid.Column="2" Content="Show images" Command="{Binding ShowImagesOfGroupCommand}" IsVisible="{Binding ShowGroups}" ToolTip.Tip="List the images of the selected repository or registry" />
+      <ComboBox Grid.Column="1" ItemsSource="{Binding Targets}" SelectedItem="{Binding Target}" MinWidth="200" IsVisible="{Binding ShowCompare}" AutomationProperties.Name="Compare with cluster">
+        <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:WorkspaceViewModel"><TextBlock Text="{Binding Title}" /></DataTemplate></ComboBox.ItemTemplate>
+      </ComboBox>
+      <CheckBox Grid.Column="2" Content="Show identical" IsChecked="{Binding ShowIdentical}" IsVisible="{Binding ShowCompare}" />
+      <Button Grid.Column="3" Content="Show images" Command="{Binding ShowImagesOfGroupCommand}" IsVisible="{Binding ShowGroups}" ToolTip.Tip="List the images of the selected repository or registry" />
+      <Button Grid.Column="4" Content="Export CSV" Command="{Binding ExportCsvCommand}" ToolTip.Tip="Save the images shown (or the differences) as CSV" />
+      <Button Grid.Column="5" Content="Export Markdown" Command="{Binding ExportMarkdownCommand}" IsVisible="{Binding !ShowCompare}" ToolTip.Tip="Save the images shown as a Markdown table" />
     </Grid>
     <ItemsControl Grid.Row="3" ItemsSource="{Binding Tabs}" AutomationProperties.Name="Section">
       <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -78,6 +86,22 @@
           <DataGridTextColumn Header="Pods" Binding="{Binding Pods}" x:DataType="vm:ImageGroupRow" Width="70" />
           <DataGridTextColumn Header="Namespaces" Binding="{Binding Namespaces}" x:DataType="vm:ImageGroupRow" Width="110" />
           <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:ImageGroupRow" Width="*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <DataGrid x:Name="DiffGrid" ItemsSource="{Binding DiffRows}" IsVisible="{Binding ShowCompare}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Image differences">
+        <DataGrid.Columns>
+          <DataGridTemplateColumn Header="Status" Width="150" SortMemberPath="StatusText">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:ImageDiffRow">
+                <Border Classes="pill" BorderBrush="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" Margin="4,2" HorizontalAlignment="Left">
+                  <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                </Border>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="Workload · container" Binding="{Binding Workload}" x:DataType="vm:ImageDiffRow" Width="3*" />
+          <DataGridTextColumn Header="Here" Binding="{Binding Here}" x:DataType="vm:ImageDiffRow" Width="3*" />
+          <DataGridTextColumn Header="There" Binding="{Binding There}" x:DataType="vm:ImageDiffRow" Width="3*" />
         </DataGrid.Columns>
       </DataGrid>
       <StackPanel Grid.Row="1" Spacing="4" IsVisible="{Binding ShowImages}" MaxHeight="220">

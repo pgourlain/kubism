@@ -47,6 +47,8 @@ Read tools (always on). Every `cluster` argument accepts the context name, the l
 | `rbac_who_can` | Who can `<verb>` `<resource>` in `<namespace>`: subjects with the binding → role → rule paths and risk flags (RBAC objects only; says when a kind could not be read) |
 | `rbac_rights_of` | What a subject can do: paths per namespace through its bindings and implicit groups, risk flags, and a verbs × resources matrix for one namespace |
 | `network_exposure` | How traffic reaches the pods: exposure (outside the cluster or not) → Ingress → Service → workload with hosts, paths, ports and problems; namespace, exposure and problems filters (the controller of another namespace stays as context) |
+| `list_images` | The images the pods run now: registry, repository, tag, pinned and node-resolved digests, pods and workloads, who uses each, and flags (latest or untagged, not pinned, failing to pull, several versions of a repository); namespace, `show` filter and search |
+| `compare_images` | What two clusters (or two namespaces of one) run, container by container: other version (one side behind), other image, only on one side; `onlyDifferent` by default |
 
 Resources: `kubism://clusters`, `kubism://clusters/{id}/kinds`.
 

@@ -84,7 +84,7 @@ public class McpReadToolsTests
     public async Task Server_lists_read_tools_and_hides_write_tools_by_default()
     {
         await using var f = await McpFixture.StartAsync([]);
-        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of", "network_exposure" })
+        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of", "network_exposure", "list_images", "compare_images" })
             Assert.Contains(t, f.ToolNames);
         foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart" })
             Assert.DoesNotContain(t, f.ToolNames);
@@ -144,6 +144,26 @@ public class McpReadToolsTests
     }
 
     [Fact]
+    public async Task Images_are_listed_and_compared_between_namespaces()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var all = JsonNode.Parse(await f.CallAsync("list_images", new() { ["cluster"] = "fake" }))!;
+        Assert.True(all["images"]!.GetValue<int>() > 3);
+        var web = all["items"]!.AsArray().First(i => i!["image"]!.GetValue<string>() == "nginx:1.27")!;
+        Assert.Equal("library/nginx", web["repository"]!.GetValue<string>());
+        Assert.Equal("Deployment/default/web", web["usedBy"]![0]!["workload"]!.GetValue<string>());
+        var failing = JsonNode.Parse(await f.CallAsync("list_images", new() { ["cluster"] = "fake", ["show"] = "pullfailing" }))!;
+        Assert.Equal(0, failing["images"]!.GetValue<int>());
+        await Assert.ThrowsAnyAsync<Exception>(() => f.CallAsync("list_images", new() { ["cluster"] = "fake", ["show"] = "nope" }));
+
+        // Two namespaces of one cluster are matched by name: web exists in "default" only.
+        var diff = JsonNode.Parse(await f.CallAsync("compare_images", new() { ["cluster"] = "fake", ["namespace"] = "default", ["otherNamespace"] = "staging" }))!;
+        Assert.Contains(diff["items"]!.AsArray(), i => i!["workload"]!.GetValue<string>() == "Deployment/web" && i["status"]!.GetValue<string>() == "only here");
+        Assert.Contains(diff["items"]!.AsArray(), i => i!["workload"]!.GetValue<string>() == "Deployment/worker" && i["status"]!.GetValue<string>() == "only there");
+        await Assert.ThrowsAnyAsync<Exception>(() => f.CallAsync("compare_images", new() { ["cluster"] = "fake" }));
+    }
+
+    [Fact]
     public async Task No_tool_or_resource_can_leak_a_secret_value()
     {
         await using var f = await McpFixture.StartAsync([]);
@@ -156,6 +176,7 @@ public class McpReadToolsTests
             await f.CallAsync("list_kinds", new() { ["cluster"] = "fake" }),
             await f.CallAsync("get_events", new() { ["cluster"] = "fake" }),
             await f.CallAsync("rightsizing_report", new() { ["cluster"] = "fake" }),
+            await f.CallAsync("list_images", new() { ["cluster"] = "fake" }),
         };
         // A pod referencing the secret through env: only the reference may appear.
         var pod = f.Server.List(Core.Api.Gvr.Pods, "default")[0];

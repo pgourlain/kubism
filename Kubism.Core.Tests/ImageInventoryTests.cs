@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Kubism.Core.Api;
 using Kubism.Core.Images;
+using Kubism.Core.Views;
 using Xunit;
 
 namespace Kubism.Core.Tests;
@@ -87,5 +88,53 @@ public class ImageInventoryTests
         var rows = ImageInventory.Analyze([pod]);
         Assert.Equal(["init", "container"], rows.OrderBy(r => r.Reference == "busybox:1" ? 0 : 1).Select(r => r.Users.Single().Role));
         Assert.DoesNotContain("hunter2", string.Concat(rows.Select(r => r.ToString())));
+    }
+}
+
+public class ImageReportsTests
+{
+    private static KubeObject O(string json) => new(JsonNode.Parse(json)!.AsObject());
+
+    private static KubeObject Pod(string name, string ns, string deploy, string image)
+        => O("{\"kind\":\"Pod\",\"metadata\":{\"name\":\"" + name + "\",\"namespace\":\"" + ns + "\",\"ownerReferences\":[{\"apiVersion\":\"apps/v1\",\"kind\":\"ReplicaSet\",\"name\":\"" + deploy + "-5d8f7c\",\"uid\":\"r\",\"controller\":true}]},\"spec\":{\"containers\":[{\"name\":\"main\",\"image\":\"" + image + "\"}]}}");
+
+    [Fact]
+    public void Compare_tells_behind_from_missing_and_identical()
+    {
+        var staging = ImageInventory.Analyze([Pod("a", "d", "web", "r.io/web:1.2"), Pod("b", "d", "api", "r.io/api:3"), Pod("c", "d", "only-staging", "r.io/x:1"), Pod("d", "d", "swap", "r.io/old:1")]);
+        var prod = ImageInventory.Analyze([Pod("a", "d", "web", "r.io/web:1.1"), Pod("b", "d", "api", "r.io/api:3"), Pod("c", "d", "only-prod", "r.io/y:1"), Pod("d", "d", "swap", "r.io/new:1")]);
+        var diff = ImageComparison.Compare(staging, prod);
+        ImageDiffEntry E(string name) => diff.Single(d => d.Name == name);
+        Assert.Equal(CompareStatus.Different, E("web").Status);
+        Assert.True(E("web").VersionOnly);
+        Assert.Equal(["r.io/web:1.2"], E("web").Left);
+        Assert.Equal(["r.io/web:1.1"], E("web").Right);
+        Assert.Equal(CompareStatus.Same, E("api").Status);
+        Assert.Equal(CompareStatus.OnlyLeft, E("only-staging").Status);
+        Assert.Equal(CompareStatus.OnlyRight, E("only-prod").Status);
+        Assert.False(E("swap").VersionOnly);
+    }
+
+    [Fact]
+    public void Compare_ignores_namespaces_when_asked_to()
+    {
+        var left = ImageInventory.Analyze([Pod("a", "team-a", "web", "r.io/web:1")]);
+        var right = ImageInventory.Analyze([Pod("a", "team-b", "web", "r.io/web:1")]);
+        Assert.Equal([CompareStatus.OnlyLeft, CompareStatus.OnlyRight], ImageComparison.Compare(left, right, matchNamespace: true).Select(d => d.Status).Order());
+        Assert.Equal(CompareStatus.Same, Assert.Single(ImageComparison.Compare(left, right, matchNamespace: false)).Status);
+    }
+
+    [Fact]
+    public void Exports_quote_and_stay_free_of_secrets()
+    {
+        var rows = ImageInventory.Analyze([Pod("a", "d", "web", "r.io/web:1,2"), Pod("b", "d", "web", "r.io/web:latest")]);
+        var csv = ImageExport.Csv(rows, "prod, eu");
+        Assert.StartsWith("cluster,image,", csv);
+        Assert.Contains("\"prod, eu\",\"r.io/web:1,2\"", csv);
+        Assert.Equal(rows.Count + 1, csv.TrimEnd().Split('\n').Length);
+        var md = ImageExport.Markdown(rows, "prod");
+        Assert.Contains("# Images — prod", md);
+        Assert.Contains("`r.io/web:latest`", md);
+        Assert.Contains("latest or no tag", md);
     }
 }

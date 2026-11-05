@@ -301,6 +301,77 @@ public sealed class KubismReadTools(McpContext ctx)
             return Json(o);
         });
 
+    [McpServerTool(Name = "list_images"), Description("The container images the pods of a cluster run now (read-only): one entry per image reference with registry, repository, tag, digest pinned in the spec and digests the nodes resolved, pod and workload counts, the workloads that use it, and what needs a look (latest or untagged, not pinned by digest, failing to pull, the same repository in several versions). Read from existing pods only: a CronJob between runs is not listed. Environment values and pull secrets are never read.")]
+    public Task<string> ListImages(string cluster, [Description("Namespace to read; omit for all")] string? @namespace = null,
+        [Description("all, latest (latest or no tag), unpinned (no digest), pullfailing or mixed (several versions of one repository)")] string show = "all",
+        [Description("Text to look for in the image reference or the workload name")] string? search = null, [Description("Maximum images returned")] int limit = 100, CancellationToken ct = default) =>
+        ctx.Run(async () =>
+        {
+            var s = await ctx.SessionAsync(cluster, ct);
+            var snapshot = await Core.Images.ImageLoader.LoadAsync(s.Transport, string.IsNullOrWhiteSpace(@namespace) ? null : [@namespace], ct);
+            var want = show.ToLowerInvariant() switch
+            {
+                "all" => Core.Images.ImageIssues.None, "latest" => Core.Images.ImageIssues.Latest, "unpinned" => Core.Images.ImageIssues.NotPinned,
+                "pullfailing" => Core.Images.ImageIssues.PullFailing, "mixed" => Core.Images.ImageIssues.MixedVersions,
+                _ => throw new McpException("show must be all, latest, unpinned, pullfailing or mixed"),
+            };
+            var rows = snapshot.Rows.Where(r => (want == Core.Images.ImageIssues.None || r.Issues.HasFlag(want))
+                && (string.IsNullOrWhiteSpace(search) || r.Reference.Contains(search, StringComparison.OrdinalIgnoreCase) || r.Users.Any(u => u.Name.Contains(search, StringComparison.OrdinalIgnoreCase)))).ToList();
+            limit = Math.Clamp(limit, 1, 500);
+            var o = new JsonObject
+            {
+                ["complete"] = snapshot.IsComplete, ["warning"] = snapshot.Warning,
+                ["images"] = rows.Count, ["repositories"] = rows.Select(r => r.Image.Name).Distinct().Count(), ["truncated"] = rows.Count > limit,
+                ["items"] = new JsonArray(rows.Take(limit).Select(r => (JsonNode?)ImageJson(r)).ToArray()),
+            };
+            return Json(o);
+        });
+
+    private static JsonObject ImageJson(Core.Images.ImageRow r) => new()
+    {
+        ["image"] = r.Reference, ["registry"] = r.Image.Registry, ["repository"] = r.Image.Repository, ["tag"] = r.Image.Tag, ["digest"] = r.Image.Digest,
+        ["resolvedDigests"] = new JsonArray(r.ResolvedDigests.Select(d => (JsonNode?)JsonValue.Create(d)).ToArray()),
+        ["pods"] = r.Pods, ["workloads"] = r.Workloads, ["namespaces"] = new JsonArray(r.Namespaces.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
+        ["latest"] = r.Issues.HasFlag(Core.Images.ImageIssues.Latest), ["notPinned"] = r.Issues.HasFlag(Core.Images.ImageIssues.NotPinned),
+        ["pullFailing"] = r.Issues.HasFlag(Core.Images.ImageIssues.PullFailing), ["versionsOfRepository"] = r.Versions,
+        ["usedBy"] = new JsonArray(r.Users.Take(20).Select(u => (JsonNode?)new JsonObject
+        {
+            ["workload"] = u.Display, ["container"] = u.Container, ["role"] = u.Role, ["pods"] = u.Pods, ["pullPolicy"] = u.PullPolicy, ["podsFailingToPull"] = u.PullFailures,
+        }).ToArray()),
+    };
+
+    [McpServerTool(Name = "compare_images"), Description("Compares what two clusters (or two namespaces) run, container by container (read-only): which workloads run another image or version on each side, which exist on one side only, and whether only the version differs (one side is behind). Workloads are matched by kind, name and container, and by namespace when both sides read the same namespace.")]
+    public Task<string> CompareImages(string cluster, [Description("The other cluster; omit to compare two namespaces of the same cluster")] string? otherCluster = null,
+        [Description("Namespace on this side; omit for all")] string? @namespace = null, [Description("Namespace on the other side; defaults to the same namespace")] string? otherNamespace = null,
+        [Description("Only what differs or exists on one side")] bool onlyDifferent = true, [Description("Maximum entries returned")] int limit = 200, CancellationToken ct = default) =>
+        ctx.Run(async () =>
+        {
+            var left = await ctx.SessionAsync(cluster, ct);
+            var right = otherCluster is null ? left : await ctx.SessionAsync(otherCluster, ct);
+            var rns = otherNamespace ?? @namespace;
+            if (ReferenceEquals(left, right) && string.Equals(@namespace, rns, StringComparison.Ordinal)) throw new McpException("Nothing to compare: give another cluster or another namespace.");
+            var a = Core.Images.ImageLoader.LoadAsync(left.Transport, string.IsNullOrWhiteSpace(@namespace) ? null : [@namespace], ct);
+            var b = Core.Images.ImageLoader.LoadAsync(right.Transport, string.IsNullOrWhiteSpace(rns) ? null : [rns], ct);
+            await Task.WhenAll(a, b);
+            var entries = Core.Images.ImageComparison.Compare(a.Result.Rows, b.Result.Rows, string.Equals(@namespace, rns, StringComparison.Ordinal));
+            int N(Core.Views.CompareStatus st) => entries.Count(e => e.Status == st);
+            var shown = entries.Where(e => !onlyDifferent || e.Status != Core.Views.CompareStatus.Same).ToList();
+            limit = Math.Clamp(limit, 1, 1000);
+            JsonArray Refs(IEnumerable<string> r) => new(r.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray());
+            var o = new JsonObject
+            {
+                ["complete"] = a.Result.IsComplete && b.Result.IsComplete, ["warning"] = string.Join(" ", new[] { a.Result.Warning, b.Result.Warning }.Where(w => w is not null)),
+                ["identical"] = N(Core.Views.CompareStatus.Same), ["different"] = N(Core.Views.CompareStatus.Different), ["onlyHere"] = N(Core.Views.CompareStatus.OnlyLeft), ["onlyThere"] = N(Core.Views.CompareStatus.OnlyRight),
+                ["truncated"] = shown.Count > limit,
+                ["items"] = new JsonArray(shown.Take(limit).Select(e => (JsonNode?)new JsonObject
+                {
+                    ["workload"] = e.Workload, ["container"] = e.Container, ["status"] = e.Status switch { Core.Views.CompareStatus.Same => "identical", Core.Views.CompareStatus.Different => "different", Core.Views.CompareStatus.OnlyLeft => "only here", _ => "only there" },
+                    ["versionOnly"] = e.VersionOnly, ["here"] = Refs(e.Left), ["there"] = Refs(e.Right),
+                }).ToArray()),
+            };
+            return Json(o);
+        });
+
     [McpServerTool(Name = "rightsizing_report"), Description("Requests/limits vs real usage per workload container, with verdicts, waste and recommended resources (and a YAML snippet). Uses Prometheus (cluster setting or in-cluster), else VPA, else local sampling.")]
     public Task<string> RightsizingReport(string cluster, string? @namespace = null, [Description("Window in days (1-30)")] int days = 7, [Description("Maximum workloads returned")] int limit = 40, CancellationToken ct = default) =>
         ctx.Run(async () =>
