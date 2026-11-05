@@ -4,6 +4,9 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Added
+- Workloads › *Images*: the images the pods of the selected namespaces run, one row per reference with registry, repository, version, the digest the node resolved, pods, workloads, namespaces and pull policy. Flags `latest`/untagged images, repositories running in several versions and images that fail to pull; filters, *Repositories* and *Registries* tabs, and the workloads that use the selected image (double-click opens one).
+
 ## [0.3.9] - 2026-11-03
 
 ### Added

@@ -113,6 +113,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             var g = new NavNode(section.T());
             foreach (var n in names)
                 if (Find(n) is { } k) g.Children.Add(new NavNode(Plural(k.Kind), NavTarget.Kind, k));
+            if (section == "Workloads" && Find("pods") is not null) g.Children.Add(new NavNode("Images".T(), NavTarget.Images, null, "images"));
             // The RBAC graph lives with the RBAC kinds; it needs to list at least the bindings or the roles.
             if (section == "Access Control" && (Find("rolebindings") is not null || Find("clusterrolebindings") is not null)) g.Children.Add(new NavNode("RBAC graph".T(), NavTarget.Rbac, null, "security"));
             if (section == "Network" && (Find("ingresses") is not null || Find("services") is not null)) g.Children.Add(new NavNode("Network graph".T(), NavTarget.NetworkGraph, null, "network"));
@@ -189,7 +190,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
     public string BackTip => History.BackEntry is { } b ? $"Back to {b.Location.Title}" : "Back";
     public string ForwardTip => History.ForwardEntry is { } f ? $"Forward to {f.Location.Title}" : "Forward";
     /// <summary>The namespace picker lives in the navigation bar; shown for the pages that follow the namespace selection.</summary>
-    public bool ShowNamespacePicker => CurrentContent switch { ResourceListViewModel l => l.Namespaced, NetworkViewModel or SecurityViewModel or UsageViewModel or HelmViewModel or RightSizingViewModel => true, _ => false };
+    public bool ShowNamespacePicker => CurrentContent switch { ResourceListViewModel l => l.Namespaced, NetworkViewModel or SecurityViewModel or UsageViewModel or ImagesViewModel or HelmViewModel or RightSizingViewModel => true, _ => false };
     partial void OnCurrentContentChanged(object? value) => OnPropertyChanged(nameof(ShowNamespacePicker));
     public string Crumbs => History.Current?.Location.Crumbs ?? "";
 
@@ -318,6 +319,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.StorageUsage => new UsageViewModel(this, UsageMode.Storage, TakeState<UsageState>()),
             NavTarget.AccessUsage => new UsageViewModel(this, UsageMode.Access, TakeState<UsageState>()),
             NavTarget.NetworkUsage => new UsageViewModel(this, UsageMode.Network, TakeState<UsageState>()),
+            NavTarget.Images => new ImagesViewModel(this, TakeState<ImagesState>()),
             NavTarget.NetworkGraph => new NetworkViewModel(this, TakeState<NetworkState>()),
             NavTarget.GitOps => new GitOpsViewModel(this),
             NavTarget.Capacity => new CapacityViewModel(this),

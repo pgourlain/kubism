@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             x:Class="Kubism.Desktop.Views.ImagesView"
+             x:DataType="vm:ImagesViewModel">
+  <UserControl.Styles>
+    <!-- A cell's text is cut with an ellipsis when it does not fit: the full text is the tooltip. -->
+    <Style Selector="DataGridCell TextBlock">
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="ToolTip.Tip" Value="{Binding $self.Text}" />
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Margin="16" RowSpacing="6">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="Images" Classes="h1" />
+        <TextBlock Text="Read-only. The images the pods of the selected namespaces run now, with the digest each node resolved. A tag can be moved: only a digest pins the content. Pull secrets and environment values are never read." Classes="muted" TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
+        <c:RefreshButton Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </Grid>
+    <StackPanel Grid.Row="1" Spacing="2">
+      <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Warning}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" />
+      <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
+    </StackPanel>
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <TextBox Text="{Binding Filter, Mode=TwoWay}" PlaceholderText="Filter by image or workload" AutomationProperties.Name="Filter" />
+      <ComboBox Grid.Column="1" SelectedIndex="{Binding ShowIndex, Mode=TwoWay}" MinWidth="200" AutomationProperties.Name="Show">
+        <ComboBoxItem Content="All images" />
+        <ComboBoxItem Content="latest or no tag" />
+        <ComboBoxItem Content="Not pinned by digest" />
+        <ComboBoxItem Content="Failing to pull" />
+        <ComboBoxItem Content="Several versions" />
+      </ComboBox>
+      <Button Grid.Column="2" Content="Show images" Command="{Binding ShowImagesOfGroupCommand}" IsVisible="{Binding ShowGroups}" ToolTip.Tip="List the images of the selected repository or registry" />
+    </Grid>
+    <ItemsControl Grid.Row="3" ItemsSource="{Binding Tabs}" AutomationProperties.Name="Section">
+      <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:SectionTab">
+          <ToggleButton Content="{Binding Name}" IsChecked="{Binding IsActive, Mode=OneWay}" Padding="12,6"
+                        Command="{Binding $parent[UserControl].((vm:ImagesViewModel)DataContext).SelectSectionCommand}" CommandParameter="{Binding Index}" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <Grid Grid.Row="4" RowDefinitions="*,Auto" RowSpacing="6">
+      <DataGrid x:Name="RowsGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowImages}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Images">
+        <DataGrid.Columns>
+          <DataGridTemplateColumn Header="Status" Width="170" SortMemberPath="StatusText">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:ImageRowViewModel">
+                <Border Classes="pill" BorderBrush="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" Margin="4,2" HorizontalAlignment="Left">
+                  <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />
+                </Border>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="Repository" Binding="{Binding Repository}" x:DataType="vm:ImageRowViewModel" Width="2*" />
+          <DataGridTextColumn Header="Version" Binding="{Binding Version}" x:DataType="vm:ImageRowViewModel" Width="*" />
+          <DataGridTextColumn Header="Digest" Binding="{Binding Digest}" x:DataType="vm:ImageRowViewModel" Width="*" />
+          <DataGridTextColumn Header="Registry" Binding="{Binding Registry}" x:DataType="vm:ImageRowViewModel" Width="*" />
+          <DataGridTextColumn Header="Pods" Binding="{Binding Pods}" x:DataType="vm:ImageRowViewModel" Width="70" />
+          <DataGridTextColumn Header="Workloads" Binding="{Binding Workloads}" x:DataType="vm:ImageRowViewModel" Width="100" />
+          <DataGridTextColumn Header="Namespaces" Binding="{Binding Namespaces}" x:DataType="vm:ImageRowViewModel" Width="110" />
+          <DataGridTextColumn Header="Pull policy" Binding="{Binding Policy}" x:DataType="vm:ImageRowViewModel" Width="*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <DataGrid x:Name="GroupsGrid" ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedGroup}" IsVisible="{Binding ShowGroups}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Image groups">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="Name" Binding="{Binding Name}" x:DataType="vm:ImageGroupRow" Width="3*" />
+          <DataGridTextColumn Header="Images" Binding="{Binding Images}" x:DataType="vm:ImageGroupRow" Width="80" />
+          <DataGridTextColumn Header="Versions" Binding="{Binding Versions}" x:DataType="vm:ImageGroupRow" Width="3*" />
+          <DataGridTextColumn Header="Pods" Binding="{Binding Pods}" x:DataType="vm:ImageGroupRow" Width="70" />
+          <DataGridTextColumn Header="Namespaces" Binding="{Binding Namespaces}" x:DataType="vm:ImageGroupRow" Width="110" />
+          <DataGridTextColumn Header="Note" Binding="{Binding Note}" x:DataType="vm:ImageGroupRow" Width="*" />
+        </DataGrid.Columns>
+      </DataGrid>
+      <StackPanel Grid.Row="1" Spacing="4" IsVisible="{Binding ShowImages}" MaxHeight="220">
+        <TextBlock Text="USED BY (SELECTED IMAGE)" Classes="sectionTitle" />
+        <TextBlock Text="{Binding Digests}" Classes="muted" TextWrapping="Wrap" />
+        <ListBox ItemsSource="{Binding Users}" AutomationProperties.Name="Users" DoubleTapped="OnUserDoubleTapped">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ImageUserRow">
+              <Grid ColumnDefinitions="3*,*,70,*,2*" ColumnSpacing="8">
+                <TextBlock Text="{Binding Workload}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="{Binding Container}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="{Binding Pods}" Classes="muted" />
+                <TextBlock Grid.Column="3" Text="{Binding Policy}" Classes="muted" />
+                <TextBlock Grid.Column="4" Text="{Binding Problem}" Foreground="{DynamicResource KubismErrorBrush}" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </StackPanel>
+    </Grid>
+  </Grid>
+</UserControl>
