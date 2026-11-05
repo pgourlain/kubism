@@ -8,7 +8,19 @@
         Title="{Binding WindowTitle}" Width="1440" Height="900" MinWidth="900" MinHeight="560">
   <Grid RowDefinitions="Auto,*,Auto">
     <!-- In-window menu (non-macOS); macOS gets a NativeMenu built from the same MenuSpec records. -->
-    <Menu Name="MainMenu" Grid.Row="0" />
+    <StackPanel Grid.Row="0">
+      <Menu Name="MainMenu" />
+      <!-- New version: thin, non-blocking, above whatever the user is doing. Closing it hides this version only. -->
+      <Border IsVisible="{Binding HasUpdate}" Background="{DynamicResource KubismAccentSoftBrush}" BorderBrush="{DynamicResource KubismAccentBrush}" BorderThickness="0,0,0,1" Padding="12,6">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+          <Path Data="M12,3 V15 M7,10 L12,15 L17,10 M5,20 H19" Stretch="Uniform" Width="14" Height="14" Stroke="{DynamicResource KubismAccentBrush}" StrokeThickness="2" StrokeLineCap="Round" StrokeJoin="Round" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding UpdateText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" AutomationProperties.Name="Update available" />
+          <Button Grid.Column="2" Content="Download" Command="{Binding DownloadUpdateCommand}" IsEnabled="{Binding CanDownloadUpdate}" ToolTip.Tip="Open the file for this platform" />
+          <Button Grid.Column="3" Content="What's new" Command="{Binding OpenReleaseNotesCommand}" ToolTip.Tip="Open the release notes" />
+          <Button Grid.Column="4" Content="✕" Command="{Binding DismissUpdateCommand}" Padding="8,4" ToolTip.Tip="Hide until a newer version is released" AutomationProperties.Name="Dismiss" />
+        </Grid>
+      </Border>
+    </StackPanel>
 
     <Grid Grid.Row="1" ColumnDefinitions="68,1,*">
       <!-- Cluster rail: one tile per kubeconfig context -->

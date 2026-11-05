@@ -61,7 +61,7 @@ public partial class App : Application
             // SIGTERM/SIGINT (kill, Ctrl+C, logout) quit through the same fast path as the menu.
             foreach (var sig in new[] { System.Runtime.InteropServices.PosixSignal.SIGTERM, System.Runtime.InteropServices.PosixSignal.SIGINT })
                 _signals.Add(System.Runtime.InteropServices.PosixSignalRegistration.Create(sig, ctx => { ctx.Cancel = true; Avalonia.Threading.Dispatcher.UIThread.Post(() => desktop.Shutdown()); }));
-            if (Services.GetRequiredService<ISettingsStore>().Current.CheckForUpdates) _ = vm.CheckForUpdatesAsync();
+            if (Services.GetRequiredService<ISettingsStore>().Current.CheckForUpdates) { vm.ShowKnownUpdate(); _ = vm.CheckForUpdatesAsync(); }
             desktop.Exit += (_, _) =>
             {
                 // Quit must feel instant: give the clean shutdown under a second, then leave regardless

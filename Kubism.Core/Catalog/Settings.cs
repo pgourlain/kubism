@@ -20,6 +20,12 @@ public sealed class AppSettings
     public bool EnableNodeShell { get; set; }
     public bool CheckForUpdates { get; set; }
     public DateTimeOffset? LastUpdateCheck { get; set; }
+    /// <summary>What the last successful check found, kept so the banner comes back at every launch without asking GitHub again.</summary>
+    public string? LatestVersion { get; set; }
+    public string? LatestUrl { get; set; }
+    public string? LatestAssetUrl { get; set; }
+    /// <summary>The version whose banner the user closed: it stays hidden until a newer one is released.</summary>
+    public string? DismissedUpdate { get; set; }
     // Right-sizing strategy
     public double CpuPercentile { get; set; } = 95;
     public double MemoryMargin { get; set; } = 1.15;

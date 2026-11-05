@@ -4,6 +4,9 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Changed
+- New version: a thin banner above the window content (*Download*, *What's new*, ✕) replaces the status-bar text. *Download* opens the file for this platform from the release (disk image on macOS), or the release page when there is none. ✕ hides that version only. What the last check found is kept, so the banner is back at every launch without asking GitHub again (it was shown once a day at most). *Help › Check for updates* shows it again even after a ✕. Still opt-in; nothing is downloaded or installed by the app.
+
 ### Added
 - Workloads › *Images*: the images the pods of the selected namespaces run, one row per reference with registry, repository, version, the digest the node resolved, pods, workloads, namespaces and pull policy. Flags `latest`/untagged images, repositories running in several versions and images that fail to pull; filters, *Repositories* and *Registries* tabs, and the workloads that use the selected image (double-click opens one).
 - Images: *Compare* tab lines up what each workload container runs in this cluster and another connected one (same namespaces, matched by name) and says whether only the version differs; *Export CSV* / *Export Markdown*.

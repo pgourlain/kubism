@@ -281,16 +281,52 @@ public sealed partial class MainViewModel : ViewModelBase, IAsyncDisposable
         await Dialogs.ShowTextAsync("Connect an AI Agent", text);
     }
 
+    private static Version CurrentVersion => typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 1);
+
+    /// <summary>The newer release the banner announces, or null.</summary>
+    [ObservableProperty] private UpdateInfo? _update;
+    public bool HasUpdate => Update is not null;
+    public string UpdateText => Update is null ? "" : $"Kubism {Update.Version} is available (you have {CurrentVersion.ToString(3)}).";
+    public bool CanDownloadUpdate => Update?.AssetUrl is not null;
+    partial void OnUpdateChanged(UpdateInfo? value) { OnPropertyChanged(nameof(HasUpdate)); OnPropertyChanged(nameof(UpdateText)); OnPropertyChanged(nameof(CanDownloadUpdate)); }
+
+    /// <summary>Shows the banner for what the last check found, with no network: called at every launch.</summary>
+    public void ShowKnownUpdate()
+    {
+        var known = new UpdateChecker(Settings).Known(CurrentVersion);
+        Update = known is not null && Settings.Current.DismissedUpdate != known.Version ? known : null;
+    }
+
     public async Task CheckForUpdatesAsync(bool force = false)
     {
-        var current = typeof(MainViewModel).Assembly.GetName().Version ?? new Version(0, 1);
+        var current = CurrentVersion;
         try
         {
             var info = await new UpdateChecker(Settings).CheckAsync(current, default, manual: force);
-            if (info is { IsNewer: true }) SetStatus($"Kubism {info.Version} is available: {info.Url}");
+            if (info is { IsNewer: true })
+            {
+                // Asking from the menu overrides an earlier "close": the user wants to know.
+                if (force && Settings.Current.DismissedUpdate == info.Version) { Settings.Current.DismissedUpdate = null; Settings.Save(); }
+                Ui.Post(ShowKnownUpdate);
+                if (force) SetStatus($"Kubism {info.Version} is available");
+            }
             else if (force && info is not null) SetStatus($"Kubism is up to date (current {current.ToString(3)}, latest release {info.Version})");
         }
         catch (Exception ex) when (force) { SetStatus($"Update check failed: {ex.Message}"); }
+    }
+
+    [RelayCommand]
+    private void DownloadUpdate() { if (Update is { } u) Browser.Open(u.AssetUrl ?? u.Url); }
+
+    [RelayCommand]
+    private void OpenReleaseNotes() { if (Update is { Url.Length: > 0 } u) Browser.Open(u.Url); }
+
+    [RelayCommand]
+    private void DismissUpdate()
+    {
+        if (Update is not { } u) return;
+        Settings.Current.DismissedUpdate = u.Version; Settings.Save();
+        Update = null;
     }
 
     [RelayCommand]
