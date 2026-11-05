@@ -4,6 +4,8 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
 ### Removed
 - The Intel macOS package (`osx-x64`). Apple has sold only Apple silicon Macs since 2023 and macOS 27 requires Apple silicon. Intel Mac users stay on the last release that had it; the update banner sends them to the release page.
 
@@ -154,7 +156,9 @@ First release.
 - Native AOT releases, own kubeconfig reader, third-party notices, About dialog, Arch/Omarchy package, macOS dmg with Applications shortcut.
 - CI and release workflows, headless UI tests, `FakeApiServer`, integration tests against kind.
 
-[Unreleased]: https://github.com/pgourlain/kubism/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/pgourlain/kubism/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/pgourlain/kubism/compare/v0.3.9...v0.4.0
+[0.3.9]: https://github.com/pgourlain/kubism/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/pgourlain/kubism/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/pgourlain/kubism/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/pgourlain/kubism/compare/v0.3.5...v0.3.6
