@@ -68,7 +68,7 @@ KUBISM_IT_KUBECONFIG=~/.kube/config dotnet test Kubism.Integration.Tests
 # MCP server over stdio (build first; `dotnet run` writes build output to stdout)
 dotnet Kubism.Desktop/bin/Debug/net10.0/Kubism.dll --mcp
 
-# Self-contained package (win-x64 | linux-x64 | osx-arm64 | osx-x64) into artifacts/
+# Self-contained package (win-x64 | linux-x64 | osx-arm64) into artifacts/
 packaging/package.sh osx-arm64 0.1.0
 ```
 

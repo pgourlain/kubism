@@ -214,7 +214,7 @@ Download the package for your system from the [latest release](https://github.co
 | System | Package | How |
 |---|---|---|
 | **Windows** | `Kubism-<version>-win-x64.zip` | Unzip and run `Kubism.exe`. SmartScreen may warn: *More info → Run anyway*. |
-| **macOS** | `Kubism-<version>-osx-arm64.dmg` (Apple Silicon) or `osx-x64.dmg` (Intel) | Open the dmg and drag `Kubism.app` to Applications. The app is not notarized, so macOS blocks the first launch: open *System Settings › Privacy & Security* and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Kubism.app`. |
+| **macOS** | `Kubism-<version>-osx-arm64.dmg` (Apple Silicon only; no Intel build) | Open the dmg and drag `Kubism.app` to Applications. The app is not notarized, so macOS blocks the first launch: open *System Settings › Privacy & Security* and click **Open Anyway**, or run `xattr -dr com.apple.quarantine /Applications/Kubism.app`. |
 | **Linux** | `Kubism-<version>-linux-x64.tar.gz` | Extract it, run `opt/kubism/Kubism`. Copy `usr/share/applications/kubism.desktop` to `~/.local/share/applications/` for a menu entry. |
 | **Arch / Omarchy** | `kubism-bin-<version>-1-x86_64.pkg.tar.zst` | `sudo pacman -U kubism-bin-<version>-1-x86_64.pkg.tar.zst` |
 

@@ -12,7 +12,6 @@ public class UpdateBannerTests
     [
         ("Kubism-0.4.0-osx-arm64.dmg", "https://example.test/Kubism-0.4.0-osx-arm64.dmg"),
         ("Kubism-0.4.0-osx-arm64.zip", "https://example.test/Kubism-0.4.0-osx-arm64.zip"),
-        ("Kubism-0.4.0-osx-x64.dmg", "https://example.test/Kubism-0.4.0-osx-x64.dmg"),
         ("Kubism-0.4.0-win-x64.zip", "https://example.test/Kubism-0.4.0-win-x64.zip"),
         ("Kubism-0.4.0-linux-x64.tar.gz", "https://example.test/Kubism-0.4.0-linux-x64.tar.gz"),
         ("Kubism-0.4.0-win-x64.zip.sha256", "https://example.test/Kubism-0.4.0-win-x64.zip.sha256"),
@@ -21,7 +20,7 @@ public class UpdateBannerTests
 
     [Theory]
     [InlineData("osx-arm64", "https://example.test/Kubism-0.4.0-osx-arm64.dmg")]
-    [InlineData("osx-x64", "https://example.test/Kubism-0.4.0-osx-x64.dmg")]
+    [InlineData("osx-x64", null)]   // no Intel build any more: the banner falls back to the release page
     [InlineData("win-x64", "https://example.test/Kubism-0.4.0-win-x64.zip")]
     [InlineData("linux-x64", "https://example.test/Kubism-0.4.0-linux-x64.tar.gz")]
     [InlineData("linux-arm64", null)]

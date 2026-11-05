@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-contained package for one runtime into artifacts/.
-#   packaging/package.sh <rid: win-x64|linux-x64|osx-arm64|osx-x64> <version>
+#   packaging/package.sh <rid: win-x64|linux-x64|osx-arm64> <version>
 # Native AOT by default (docs/adr/0001-kubernetes-client.md); AOT=0 gives a self-contained JIT build.
 set -euo pipefail
 RID="${1:?rid}"; VERSION="${2:-0.1.0}"
@@ -29,9 +29,10 @@ case "$RID" in
     ;;
   osx-*)
     APP="$OUT/Kubism.app"
-    case "$RID" in osx-arm64) ARCH=arm64 ;; osx-x64) ARCH=x86_64 ;; *) echo "unknown macOS runtime $RID" >&2; exit 1 ;; esac
-    # Only the arm64 package states an architecture priority (there is no Rosetta option, ever); the Intel package is Intel by construction.
-    ARCH_PRIORITY=""; [[ "$ARCH" == arm64 ]] && ARCH_PRIORITY='<key>LSArchitecturePriority</key><array><string>arm64</string></array>'
+    # Apple silicon only: Apple no longer sells Intel Macs and macOS 27 requires Apple silicon, so there is no Intel package.
+    case "$RID" in osx-arm64) ARCH=arm64 ;; *) echo "unknown macOS runtime $RID (only osx-arm64 is packaged)" >&2; exit 1 ;; esac
+    # The package states an architecture priority: there is no Rosetta option, ever.
+    ARCH_PRIORITY='<key>LSArchitecturePriority</key><array><string>arm64</string></array>'
     rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
     cp -R "$PUB"/. "$APP/Contents/MacOS/"
     # NuGet's native libraries are universal binaries: keep only this package's architecture (before signing: lipo invalidates signatures).

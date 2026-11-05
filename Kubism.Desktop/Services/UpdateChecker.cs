@@ -22,7 +22,7 @@ public sealed class UpdateChecker(Kubism.Core.Catalog.ISettingsStore settings, H
         return Norm(latest) > Norm(current) ? new UpdateInfo(tag, s.LatestUrl ?? "", true, s.LatestAssetUrl) : null;
     }
 
-    /// <summary>The runtime identifier the release files are named after: win-x64, linux-x64, osx-arm64, osx-x64.</summary>
+    /// <summary>The runtime identifier the release files are named after: win-x64, linux-x64, osx-arm64 (there is no Intel Mac build).</summary>
     public static string Rid
     {
         get

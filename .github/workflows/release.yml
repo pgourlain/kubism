@@ -17,7 +17,6 @@ jobs:
         include:
           - { os: windows-latest, rid: win-x64 }
           - { os: macos-latest, rid: osx-arm64 }
-          - { os: macos-15-intel, rid: osx-x64 }
           - { os: ubuntu-latest, rid: linux-x64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -41,8 +40,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          arch=arm64; [[ "${{ matrix.rid }}" == "osx-x64" ]] && arch=x86_64
-          packaging/check-macho-archs.sh artifacts/Kubism.app "$arch"
+          packaging/check-macho-archs.sh artifacts/Kubism.app arm64
       - uses: actions/upload-artifact@v4
         with:
           name: kubism-${{ matrix.rid }}

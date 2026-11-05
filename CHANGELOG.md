@@ -4,6 +4,9 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Removed
+- The Intel macOS package (`osx-x64`). Apple has sold only Apple silicon Macs since 2023 and macOS 27 requires Apple silicon. Intel Mac users stay on the last release that had it; the update banner sends them to the release page.
+
 ### Changed
 - New version: a thin banner above the window content (*Download*, *What's new*, ✕) replaces the status-bar text. *Download* opens the file for this platform from the release (disk image on macOS), or the release page when there is none. ✕ hides that version only. What the last check found is kept, so the banner is back at every launch without asking GitHub again (it was shown once a day at most). *Help › Check for updates* shows it again even after a ✕. Still opt-in; nothing is downloaded or installed by the app.
 
