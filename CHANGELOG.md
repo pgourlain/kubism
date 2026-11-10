@@ -4,6 +4,8 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-10
+
 ### Added
 - **Drain nodes** page (sidebar, under *Nodes*; a node's *Drain…* action opens it with that node ticked). Three steps on one screen: tick the nodes (one by one, or *Tick all of* a node pool: the pool label is detected, whatever the provider (`agentpool`, EKS node group, GKE node pool, Karpenter…), and can be changed), read a **pre-flight** of what happens to every pod on them, then drain. Choosing and reading never write anything; only the red *Cordon and drain…* button acts, after a confirmation that says in words what is about to happen (production asks for the node name or count).
 - The pre-flight flags the pods that would not be migrated, and the button stays off until you accept it: bare pods (nothing recreates them), pods no remaining node can run (nodeSelector, node affinity, taints without toleration, zonal volumes, host ports, pod anti-affinity, topology spread, CPU/memory/pod-count room), PodDisruptionBudgets that allow no eviction, emptyDir data. Blockers are listed first, each with its reason.
