@@ -32,6 +32,9 @@ public readonly record struct Gvr(string Group, string Version, string Resource)
     public static readonly Gvr DaemonSets = new("apps", "v1", "daemonsets");
     public static readonly Gvr Jobs = new("batch", "v1", "jobs");
     public static readonly Gvr CronJobs = new("batch", "v1", "cronjobs");
+    public static readonly Gvr PodDisruptionBudgets = new("policy", "v1", "poddisruptionbudgets");
+    public static readonly Gvr PersistentVolumeClaims = new("", "v1", "persistentvolumeclaims");
+    public static readonly Gvr PersistentVolumes = new("", "v1", "persistentvolumes");
     public static readonly Gvr Crds = new("apiextensions.k8s.io", "v1", "customresourcedefinitions");
     public static readonly Gvr PodMetrics = new("metrics.k8s.io", "v1beta1", "pods");
     public static readonly Gvr NodeMetrics = new("metrics.k8s.io", "v1beta1", "nodes");

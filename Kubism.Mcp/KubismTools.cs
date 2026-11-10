@@ -340,6 +340,37 @@ public sealed class KubismReadTools(McpContext ctx)
         }).ToArray()),
     };
 
+    [McpServerTool(Name = "drain_preflight"), Description("Predicts, without changing anything, what draining nodes would do to their pods (read-only): which pods would be moved and to which node, and which would NOT be migrated: bare pods without a controller, pods no remaining node can run (nodeSelector, node or pod affinity, taints, zonal volumes, host ports, topology spread, requests), PodDisruptionBudgets that never allow an eviction, emptyDir data. Give a node pool and/or node names. An approximation of the scheduler: it ignores preemption and the cluster autoscaler.")]
+    public Task<string> DrainPreflight(string cluster, [Description("Node pool: every node of this pool (pool label detected: agentpool, eks nodegroup, gke-nodepool, karpenter nodepool…)")] string? nodepool = null,
+        [Description("Comma-separated node names, added to the pool")] string? nodes = null,
+        [Description("Allow draining pods that use emptyDir (their data is lost)")] bool deleteEmptyDirData = false,
+        [Description("Label that defines the pool, when it is not one of the usual ones")] string? poolLabel = null, CancellationToken ct = default) =>
+        ctx.Run(async () =>
+        {
+            var s = await ctx.SessionAsync(cluster, ct);
+            var snapshot = await Core.Drain.DrainPreflightLoader.LoadAsync(s.Transport, ct);
+            var selected = ResolveNodes(snapshot, nodepool, nodes, poolLabel);
+            var plan = Core.Drain.DrainPreflight.Analyze(snapshot, selected, new Core.Actions.DrainOptions(DeleteEmptyDirData: deleteEmptyDirData));
+            return Json(new JsonObject
+            {
+                ["canComplete"] = plan.CanComplete, ["summary"] = plan.Summary, ["notes"] = new JsonArray(plan.Notes.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
+                ["nodes"] = new JsonArray(plan.Nodes.Select(n => (JsonNode?)JsonValue.Create(n)).ToArray()),
+                ["pods"] = new JsonArray(plan.Pods.Select(p => (JsonNode?)new JsonObject
+                {
+                    ["pod"] = p.Display, ["node"] = p.Node, ["workload"] = p.Workload, ["severity"] = p.Severity.ToString(), ["movesTo"] = p.MovesTo, ["reason"] = p.Reason,
+                }).ToArray()),
+            });
+        });
+
+    internal static IReadOnlyList<string> ResolveNodes(Core.Drain.DrainSnapshot snapshot, string? nodepool, string? nodes, string? poolLabel = null)
+    {
+        try
+        {
+            return Core.Drain.Scheduling.SelectNodes(snapshot.Nodes, nodepool, nodes?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), poolLabel);
+        }
+        catch (ArgumentException ex) { throw new McpException(ex.Message); }
+    }
+
     [McpServerTool(Name = "compare_images"), Description("Compares what two clusters (or two namespaces) run, container by container (read-only): which workloads run another image or version on each side, which exist on one side only, and whether only the version differs (one side is behind). Workloads are matched by kind, name and container, and by namespace when both sides read the same namespace.")]
     public Task<string> CompareImages(string cluster, [Description("The other cluster; omit to compare two namespaces of the same cluster")] string? otherCluster = null,
         [Description("Namespace on this side; omit for all")] string? @namespace = null, [Description("Namespace on the other side; defaults to the same namespace")] string? otherNamespace = null,
@@ -468,6 +499,25 @@ public sealed class KubismWriteTools(McpContext ctx)
         var k = ctx.ResolveKind(s, kind);
         await s.Actions.ScaleAsync(k.Gvr, @namespace, name, replicas, ct, confirmation);
         return Result("scale", $"{k.Kind} {name} to {replicas}");
+    });
+
+    [McpServerTool(Name = "drain_nodes"), Description("Cordons then drains nodes or a whole node pool so their pods move elsewhere, after a pre-flight: refuses, changing nothing, when some pod would not be migrated (run drain_preflight first) unless force is set. Every node is cordoned before any pod is evicted. On production clusters confirmName must equal the number of nodes.")]
+    public Task<string> DrainNodes(string cluster, [Description("Node pool: every node of this pool (pool label detected: agentpool, eks nodegroup, gke-nodepool, karpenter nodepool…)")] string? nodepool = null,
+        [Description("Comma-separated node names, added to the pool")] string? nodes = null, [Description("Production only: the number of nodes, typed")] string? confirmName = null,
+        [Description("Allow pods that use emptyDir to be evicted (their data is lost)")] bool deleteEmptyDirData = false,
+        [Description("Drain although the pre-flight found pods that will not be migrated (bare pods are deleted)")] bool force = false,
+        [Description("Label that defines the pool, when it is not one of the usual ones")] string? poolLabel = null, CancellationToken ct = default) => ctx.Run(async () =>
+    {
+        var s = await ctx.SessionAsync(cluster, ct);
+        var confirmation = ctx.RequireWrite(s, "drain", confirmName);
+        var snapshot = await Core.Drain.DrainPreflightLoader.LoadAsync(s.Transport, ct);
+        var selected = KubismReadTools.ResolveNodes(snapshot, nodepool, nodes, poolLabel);
+        try
+        {
+            await s.Actions.DrainManyAsync(selected, new Core.Actions.DrainOptions(DeleteEmptyDirData: deleteEmptyDirData, Force: force), null, ct, confirmation);
+        }
+        catch (Core.Drain.DrainBlockedException ex) { throw new McpException(ex.Message + " Run drain_preflight for the full list."); }
+        return Result("drain", $"{selected.Count} nodes ({string.Join(", ", selected)})");
     });
 
     [McpServerTool(Name = "rollout_restart"), Description("Rolling restart of a Deployment/StatefulSet/DaemonSet.")]

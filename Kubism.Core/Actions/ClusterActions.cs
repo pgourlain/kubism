@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Kubism.Core.Api;
 using Kubism.Core.Catalog;
 using Kubism.Core.Discovery;
+using Kubism.Core.Drain;
 using Kubism.Core.Events;
 using Kubism.Core.Exec;
 using Kubism.Core.Helm;
@@ -356,49 +357,86 @@ public sealed class ClusterActions
     public Task DrainAsync(string node, DrainOptions options, IProgress<DrainProgress>? progress, CancellationToken ct, string? confirmation = null) =>
         RunAsync("Drain", $"nodes/{node}", true, confirmation, node, async () =>
         {
-            await SendAsync("PATCH", Gvr.Nodes.ObjectPath(null, node), new JsonObject { ["spec"] = new JsonObject { ["unschedulable"] = true } }, Merge, ct).ConfigureAwait(false);
-            var list = await _transport.ListAsync(Gvr.Pods, null, new ListOptions { FieldSelector = $"spec.nodeName={node}" }, ct).ConfigureAwait(false);
-            var pods = new List<KubeObject>();
-            foreach (var p in list.Items.Select(i => new KubeObject(i)))
+            await CordonAsync(node, ct).ConfigureAwait(false);
+            var pods = await PodsToEvictAsync(node, options, ct).ConfigureAwait(false);
+            await EvictAsync(pods, options, progress, 0, pods.Count, ct).ConfigureAwait(false);
+        });
+
+    /// <summary>
+    /// Drains several nodes (a whole node pool). Runs the pre-flight first and refuses with <see cref="DrainBlockedException"/> when a pod would not be migrated
+    /// (unless <see cref="DrainOptions.Force"/>); then cordons <b>all</b> nodes before evicting anything, so evicted pods cannot land on a node about to be drained.
+    /// Production asks for the node count to be typed.
+    /// </summary>
+    [ClusterAction("DrainMany")]
+    public Task DrainManyAsync(IReadOnlyList<string> nodes, DrainOptions options, IProgress<DrainProgress>? progress, CancellationToken ct, string? confirmation = null) =>
+        RunAsync("DrainMany", $"{nodes.Count} x nodes", true, confirmation, nodes.Count.ToString(), async () =>
+        {
+            var plan = DrainPreflight.Analyze(await DrainPreflightLoader.LoadAsync(_transport, ct).ConfigureAwait(false), nodes, options);
+            if (!plan.CanComplete && !options.Force) throw new DrainBlockedException(plan);
+            foreach (var n in nodes) await CordonAsync(n, ct).ConfigureAwait(false);
+            var perNode = new List<(string node, List<KubeObject> pods)>();
+            foreach (var n in nodes) perNode.Add((n, await PodsToEvictAsync(n, options, ct).ConfigureAwait(false)));   // fails before any eviction
+            var total = perNode.Sum(x => x.pods.Count); var done = 0;
+            foreach (var (n, pods) in perNode)
             {
-                if (p.Annotations.ContainsKey("kubernetes.io/config.mirror")) continue;
-                var ds = p.OwnerReferences.Any(o => o.Kind == "DaemonSet");
-                if (ds)
-                {
-                    if (!options.IgnoreDaemonSets) throw new KubeApiException(400, "BadRequest", $"cannot delete DaemonSet-managed pod {p.Namespace}/{p.Name} (use ignore DaemonSets)");
-                    continue;
-                }
-                if (!options.DeleteEmptyDirData && (p.At("spec", "volumes") as JsonArray)?.OfType<JsonObject>().Any(v => v.ContainsKey("emptyDir")) == true)
-                    throw new KubeApiException(400, "BadRequest", $"pod {p.Namespace}/{p.Name} has emptyDir data (enable delete emptyDir data)");
-                pods.Add(p);
-            }
-            var deadline = DateTimeOffset.UtcNow + (options.Timeout ?? TimeSpan.FromMinutes(5));
-            var done = 0;
-            foreach (var pod in pods)
-            {
-                while (true)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    var ev = new JsonObject
-                    {
-                        ["apiVersion"] = "policy/v1", ["kind"] = "Eviction",
-                        ["metadata"] = new JsonObject { ["name"] = pod.Name, ["namespace"] = pod.Namespace },
-                    };
-                    var r = await _transport.SendAsync("POST", Gvr.Pods.ObjectPath(pod.Namespace, pod.Name, "eviction"), ev.ToJsonString(), Json, ct).ConfigureAwait(false);
-                    if (r.StatusCode is >= 200 and < 300 or 404) break;
-                    if (r.StatusCode == 429)
-                    {
-                        progress?.Report(new DrainProgress($"{pod.Namespace}/{pod.Name}", "blocked by a PodDisruptionBudget, retrying", done, pods.Count));
-                        if (DateTimeOffset.UtcNow > deadline) throw new KubeApiException(429, "TooManyRequests", $"drain timed out: {pod.Namespace}/{pod.Name} blocked by a PodDisruptionBudget");
-                        await Task.Delay(RetryDelay, ct).ConfigureAwait(false);
-                        continue;
-                    }
-                    throw ToException(r);
-                }
-                done++;
-                progress?.Report(new DrainProgress($"{pod.Namespace}/{pod.Name}", "evicted", done, pods.Count));
+                await EvictAsync(pods, options, progress, done, total, ct).ConfigureAwait(false);
+                done += pods.Count;
+                _log.Add("Drain", $"nodes/{n}", true);
             }
         });
+
+    private Task CordonAsync(string node, CancellationToken ct) =>
+        SendAsync("PATCH", Gvr.Nodes.ObjectPath(null, node), new JsonObject { ["spec"] = new JsonObject { ["unschedulable"] = true } }, Merge, ct);
+
+    private async Task<List<KubeObject>> PodsToEvictAsync(string node, DrainOptions options, CancellationToken ct)
+    {
+        var list = await _transport.ListAsync(Gvr.Pods, null, new ListOptions { FieldSelector = $"spec.nodeName={node}" }, ct).ConfigureAwait(false);
+        var pods = new List<KubeObject>();
+        foreach (var p in list.Items.Select(i => new KubeObject(i)))
+        {
+            if (p.Annotations.ContainsKey("kubernetes.io/config.mirror")) continue;
+            var ds = p.OwnerReferences.Any(o => o.Kind == "DaemonSet");
+            if (ds)
+            {
+                if (!options.IgnoreDaemonSets) throw new KubeApiException(400, "BadRequest", $"cannot delete DaemonSet-managed pod {p.Namespace}/{p.Name} (use ignore DaemonSets)");
+                continue;
+            }
+            if (!options.DeleteEmptyDirData && (p.At("spec", "volumes") as JsonArray)?.OfType<JsonObject>().Any(v => v.ContainsKey("emptyDir")) == true)
+                throw new KubeApiException(400, "BadRequest", $"pod {p.Namespace}/{p.Name} has emptyDir data (enable delete emptyDir data)");
+            pods.Add(p);
+        }
+        return pods;
+    }
+
+    private async Task EvictAsync(IReadOnlyList<KubeObject> pods, DrainOptions options, IProgress<DrainProgress>? progress, int doneBefore, int total, CancellationToken ct)
+    {
+        var deadline = DateTimeOffset.UtcNow + (options.Timeout ?? TimeSpan.FromMinutes(5));
+        var done = doneBefore;
+        foreach (var pod in pods)
+        {
+            while (true)
+            {
+                ct.ThrowIfCancellationRequested();
+                var ev = new JsonObject
+                {
+                    ["apiVersion"] = "policy/v1", ["kind"] = "Eviction",
+                    ["metadata"] = new JsonObject { ["name"] = pod.Name, ["namespace"] = pod.Namespace },
+                };
+                var r = await _transport.SendAsync("POST", Gvr.Pods.ObjectPath(pod.Namespace, pod.Name, "eviction"), ev.ToJsonString(), Json, ct).ConfigureAwait(false);
+                if (r.StatusCode is >= 200 and < 300 or 404) break;
+                if (r.StatusCode == 429)
+                {
+                    progress?.Report(new DrainProgress($"{pod.Namespace}/{pod.Name}", "blocked by a PodDisruptionBudget, retrying", done, total));
+                    if (DateTimeOffset.UtcNow > deadline) throw new KubeApiException(429, "TooManyRequests", $"drain timed out: {pod.Namespace}/{pod.Name} blocked by a PodDisruptionBudget");
+                    await Task.Delay(RetryDelay, ct).ConfigureAwait(false);
+                    continue;
+                }
+                throw ToException(r);
+            }
+            done++;
+            progress?.Report(new DrainProgress($"{pod.Namespace}/{pod.Name}", "evicted", done, total));
+        }
+    }
 
     // ---------- helm (CLI) ----------
 

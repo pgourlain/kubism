@@ -20,6 +20,7 @@ public static class Translations
         ["Search"] = "Rechercher", ["Pause"] = "Pause", ["Resume"] = "Reprendre", ["Clear"] = "Effacer", ["Download"] = "Télécharger",
         ["Export"] = "Exporter", ["Copy"] = "Copier", ["Cut"] = "Couper", ["Paste"] = "Coller", ["Select all"] = "Tout sélectionner", ["Open Log Folder"] = "Ouvrir le dossier des journaux", ["Copy diagnostics"] = "Copier les diagnostics",
         ["Diagnostics"] = "Diagnostics", ["RBAC graph"] = "Graphe RBAC", ["Network graph"] = "Graphe réseau", ["Images"] = "Images", ["Releases"] = "Releases", ["Namespace"] = "Namespace", ["All namespaces"] = "Tous les namespaces",
+        ["Drain nodes"] = "Vider des nodes",
     };
 
     public static string Language { get; set; } = "en";

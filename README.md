@@ -131,7 +131,7 @@ Actions go through the same safety checks as everything else: **Sync**, **Sync a
 
 ### Operate
 
-- **Safe actions**: edit YAML with conflict handling (a `409` shows a diff, never overwrites), create from YAML (multi-document, server-side apply), delete (single and bulk), scale, rollout restart and pause, cordon, drain (respects PodDisruptionBudgets, with progress and cancel), trigger or suspend a CronJob.
+- **Safe actions**: edit YAML with conflict handling (a `409` shows a diff, never overwrites), create from YAML (multi-document, server-side apply), delete (single and bulk), scale, rollout restart and pause, cordon, drain nodes or a whole node pool from a dedicated page (a pre-flight lists the pods that would not be migrated before anything changes: bare pods, selectors, taints, volumes, PodDisruptionBudgets; respects PodDisruptionBudgets, with progress and cancel), trigger or suspend a CronJob.
 - **Logs**: follow, search with regex, wrap, timestamps, pause, JSON pretty-printing, previous (crashed) container, and merged logs for a whole workload.
 - **Shell** into a container (WebSocket exec with TTY and resize) and **port-forward** to pods or services, with the list of active forwards.
 - **RBAC aware**: buttons you cannot use are disabled with the reason, instead of failing on click.

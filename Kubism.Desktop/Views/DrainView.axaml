@@ -1,0 +1,129 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Kubism.Desktop.ViewModels"
+             xmlns:app="using:Kubism.Desktop"
+             xmlns:c="using:Kubism.Desktop.Controls"
+             xmlns:drain="using:Kubism.Core.Drain"
+             x:Class="Kubism.Desktop.Views.DrainView"
+             x:DataType="vm:DrainViewModel">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="16" RowSpacing="8">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel>
+        <TextBlock Text="Drain nodes" Classes="h1" />
+        <TextBlock Classes="muted" TextWrapping="Wrap"
+                   Text="Move the pods of some nodes (a whole node pool, for instance) onto the other nodes. Nothing is changed on this page while you choose and read: only the red button at the bottom acts, and it asks you to confirm first." />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+        <TextBlock Text="Loading…" Classes="muted" IsVisible="{Binding IsLoading}" VerticalAlignment="Center" />
+        <c:RefreshButton Command="{Binding RefreshCommand}" />
+      </StackPanel>
+    </Grid>
+    <TextBlock Grid.Row="1" Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" TextWrapping="Wrap" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
+
+    <Grid Grid.Row="2" ColumnDefinitions="380,16,*">
+      <!-- 1. choose the nodes -->
+      <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="6">
+        <TextBlock Text="1 · Choose the nodes" FontWeight="SemiBold" />
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" IsVisible="{Binding GroupLabels.Count}">
+          <TextBlock Text="Pools defined by label" Classes="muted" VerticalAlignment="Center" />
+          <ComboBox Grid.Column="1" ItemsSource="{Binding GroupLabels}" SelectedItem="{Binding GroupLabel}" HorizontalAlignment="Stretch" AutomationProperties.Name="Pool label" />
+        </Grid>
+        <TextBlock Grid.Row="1" Classes="muted" TextWrapping="Wrap" IsVisible="{Binding NoGroupLabel}"
+                   Text="No node pool label found on these nodes: tick the nodes one by one." />
+        <ItemsControl Grid.Row="2" ItemsSource="{Binding Groups}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:GroupChip">
+              <Button Content="{Binding Text, StringFormat='Tick all of {0}'}" Margin="0,0,6,6" Padding="8,4"
+                      Command="{Binding $parent[UserControl].((vm:DrainViewModel)DataContext).SelectGroupCommand}" CommandParameter="{Binding Name}"
+                      ToolTip.Tip="Only ticks the nodes of this pool. Nothing is drained." />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+          <TextBlock Text="{Binding SelectionText}" Classes="muted" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Clear" Command="{Binding ClearSelectionCommand}" Padding="8,3" />
+        </Grid>
+        <Border Grid.Row="4" BorderThickness="1" BorderBrush="{DynamicResource KubismBorderBrush}" CornerRadius="6">
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Nodes}" AutomationProperties.Name="Nodes">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:DrainNodeRow">
+                  <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,3">
+                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" AutomationProperties.Name="{Binding Name}" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                      <TextBlock Classes="muted" FontSize="11.5" TextTrimming="CharacterEllipsis">
+                        <TextBlock.Text><MultiBinding StringFormat="{}{0}  ·  {1}  ·  {2}"><Binding Path="Group" /><Binding Path="PodsText" /><Binding Path="CpuText" /></MultiBinding></TextBlock.Text>
+                      </TextBlock>
+                    </StackPanel>
+                    <TextBlock Grid.Column="2" Text="{Binding Status}" Classes="muted" FontSize="11.5" VerticalAlignment="Center" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+      </Grid>
+
+      <!-- 2. read what would happen -->
+      <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" RowSpacing="6">
+        <TextBlock Text="2 · What would happen to the pods (a prediction, nothing is changed)" FontWeight="SemiBold" />
+        <TextBlock Grid.Row="1" Text="{Binding Plan.Summary}" FontWeight="SemiBold" TextWrapping="Wrap" IsVisible="{Binding Plan.HasNodes}" />
+        <StackPanel Grid.Row="2" Spacing="2">
+          <TextBlock Text="{Binding Plan.Verdict}" TextWrapping="Wrap" Foreground="{DynamicResource KubismMutedBrush}" IsVisible="{Binding !Plan.HasNodes}" />
+          <TextBlock Text="{Binding Plan.Verdict}" TextWrapping="Wrap" Foreground="{DynamicResource KubismOkBrush}" IsVisible="{Binding Plan.AllClear}" />
+          <TextBlock Text="{Binding Plan.Verdict}" TextWrapping="Wrap" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Plan.HasBlockers}" />
+          <ItemsControl ItemsSource="{Binding Plan.Notes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="x:String"><TextBlock Text="{Binding StringFormat='⚠ {0}'}" TextWrapping="Wrap" FontSize="12.5" Foreground="{DynamicResource KubismWarnBrush}" /></DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        <WrapPanel Grid.Row="3" IsVisible="{Binding Plan.HasNodes}">
+          <CheckBox Content="Allow deleting emptyDir data" IsChecked="{Binding Plan.DeleteEmptyDirData}" Margin="0,0,14,0"
+                    ToolTip.Tip="Pods that keep scratch data in an emptyDir are refused unless you accept that data is lost" />
+          <TextBlock Text="Show" Classes="muted" VerticalAlignment="Center" Margin="0,0,6,0" />
+          <ComboBox ItemsSource="{x:Static vm:DrainPlanViewModel.ShowChoices}" SelectedItem="{Binding Plan.Show}" MinWidth="110" AutomationProperties.Name="Show" />
+        </WrapPanel>
+        <Grid Grid.Row="4" ColumnDefinitions="70,*,110,*,110" IsVisible="{Binding Plan.HasNodes}" Margin="8,0">
+          <TextBlock Text="Status" FontWeight="SemiBold" Opacity="0.75" />
+          <TextBlock Grid.Column="1" Text="Pod" FontWeight="SemiBold" Opacity="0.75" />
+          <TextBlock Grid.Column="2" Text="Node" FontWeight="SemiBold" Opacity="0.75" />
+          <TextBlock Grid.Column="3" Text="Workload" FontWeight="SemiBold" Opacity="0.75" />
+          <TextBlock Grid.Column="4" Text="Moves to" FontWeight="SemiBold" Opacity="0.75" />
+        </Grid>
+        <Border Grid.Row="5" BorderThickness="1" BorderBrush="{DynamicResource KubismBorderBrush}" CornerRadius="6" IsVisible="{Binding Plan.HasNodes}">
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Plan.Rows}" AutomationProperties.Name="Pods">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="drain:PodVerdict">
+                  <Grid ColumnDefinitions="70,*,110,*,110" RowDefinitions="Auto,Auto" Margin="8,4,8,2">
+                    <TextBlock Text="{Binding Severity}" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.DrainSeverityBrush}}" />
+                    <TextBlock Grid.Column="1" Text="{Binding Display}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Display}" Margin="0,0,10,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding Node}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Node}" Margin="0,0,10,0" />
+                    <TextBlock Grid.Column="3" Text="{Binding Workload}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Workload}" Margin="0,0,10,0" />
+                    <TextBlock Grid.Column="4" Text="{Binding MovesTo, TargetNullValue='-'}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding Reason}" TextWrapping="Wrap" Classes="muted" FontSize="12.5" Margin="0,0,0,2" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <!-- 3. act -->
+    <Border Grid.Row="3" BorderThickness="0,1,0,0" BorderBrush="{DynamicResource KubismBorderBrush}" Padding="0,10,0,0">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="4">
+          <TextBlock Text="3 · Drain" FontWeight="SemiBold" />
+          <TextBlock Classes="muted" TextWrapping="Wrap" Text="The button cordons every chosen node first, then evicts their pods one by one (respecting PodDisruptionBudgets). You will be asked to confirm." />
+          <CheckBox Content="Drain anyway: I accept that pods which cannot be migrated are deleted or stay Pending" IsChecked="{Binding Plan.DrainAnyway}" IsVisible="{Binding Plan.HasBlockers}" Foreground="{DynamicResource KubismErrorBrush}" />
+        </StackPanel>
+        <Button Grid.Column="1" Content="{Binding DrainLabel}" Command="{Binding DrainCommand}" Classes="danger" Padding="16,10" VerticalAlignment="Center" AutomationProperties.Name="Drain" />
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

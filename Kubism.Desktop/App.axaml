@@ -21,6 +21,7 @@
     <DataTemplate DataType="vm:HelmViewModel"><v:HelmView /></DataTemplate>
     <DataTemplate DataType="vm:ActivityViewModel"><v:ActivityView /></DataTemplate>
     <DataTemplate DataType="vm:CapacityViewModel"><v:CapacityView /></DataTemplate>
+    <DataTemplate DataType="vm:DrainViewModel"><v:DrainView /></DataTemplate>
     <DataTemplate DataType="vm:GitOpsViewModel"><v:GitOpsView /></DataTemplate>
     <DataTemplate DataType="vm:SecurityViewModel"><v:SecurityView /></DataTemplate>
     <DataTemplate DataType="vm:UsageViewModel"><v:UsageView /></DataTemplate>

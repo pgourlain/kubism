@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using Kubism.Core.Actions;
 using Kubism.Core.Api;
+using Kubism.Core.Drain;
 using Kubism.Core.Catalog;
 using Kubism.Core.Events;
 using Kubism.Core.Sessions;
@@ -45,7 +46,7 @@ public class ClusterActionsTests : IAsyncLifetime
             .Where(m => m.Name.EndsWith("Async") && m.Name != nameof(ClusterActions.RunAsync)).ToList();
         foreach (var m in methods)
             Assert.True(m.GetCustomAttribute<ClusterActionAttribute>() is not null, $"{m.Name} is a public action without [ClusterAction]");
-        foreach (var expected in new[] { "Apply", "Replace", "Delete", "DeleteMany", "Scale", "RolloutRestart", "Cordon", "Drain", "TriggerCronJob", "SetResources", "SuspendCronJob", "CreateVpa", "ArgoSync", "ArgoRefresh", "FluxReconcile", "FluxSuspend" })
+        foreach (var expected in new[] { "Apply", "Replace", "Delete", "DeleteMany", "Scale", "RolloutRestart", "Cordon", "Drain", "DrainMany", "TriggerCronJob", "SetResources", "SuspendCronJob", "CreateVpa", "ArgoSync", "ArgoRefresh", "FluxReconcile", "FluxSuspend" })
             Assert.Contains(expected, ClusterActions.Actions);
     }
 
@@ -68,8 +69,9 @@ public class ClusterActionsTests : IAsyncLifetime
         await Assert.ThrowsAsync<SafetyException>(() => A.TriggerCronJobAsync("default", "nightly-report", Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.SetResourcesAsync(Gvr.Deployments, "default", "web", [], Ct));
         await Assert.ThrowsAsync<SafetyException>(() => A.DeleteManyAsync(Gvr.Pods, [("default", "x")], Ct));
+        await Assert.ThrowsAsync<SafetyException>(() => A.DrainManyAsync(["node-1", "node-2"], new DrainOptions(), null, Ct));
         Assert.Equal(before, Mutations());
-        Assert.Equal(14, _session.Activity.Entries.Count(e => !e.Success));
+        Assert.Equal(15, _session.Activity.Entries.Count(e => !e.Success));
     }
 
     [Fact]
@@ -194,6 +196,39 @@ public class ClusterActionsTests : IAsyncLifetime
         Assert.Null(_server.Get(Gvr.Pods, bns, bname));
         await Task.Delay(100);
         lock (progress) Assert.Contains(progress, p => p.Status.Contains("blocked"));
+    }
+
+    [Fact]
+    public async Task Drain_many_cordons_every_node_before_evicting_anything()
+    {
+        A.RetryDelay = TimeSpan.FromMilliseconds(50);
+        var before = _server.Requests.Count;
+        await A.DrainManyAsync(["node-1", "node-2"], new DrainOptions(Force: true), null, Ct);
+        var writes = _server.Requests.Skip(before).Where(r => r.Method is "POST" or "PATCH").Select(r => r.Path).ToList();
+        var lastCordon = writes.FindLastIndex(p => p.EndsWith("/nodes/node-1") || p.EndsWith("/nodes/node-2"));
+        var firstEviction = writes.FindIndex(p => p.EndsWith("/eviction"));
+        Assert.True(lastCordon >= 0 && firstEviction > lastCordon, "every node is cordoned before the first eviction");
+        Assert.True(_server.Get(Gvr.Nodes, null, "node-1")!["spec"]!["unschedulable"]!.GetValue<bool>());
+        Assert.True(_server.Get(Gvr.Nodes, null, "node-2")!["spec"]!["unschedulable"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public async Task Drain_many_refuses_before_changing_anything_when_a_pod_would_not_migrate()
+    {
+        // crashy-0 is a bare pod on node-2: it would be deleted and nothing would recreate it.
+        var before = Mutations();
+        var ex = await Assert.ThrowsAsync<DrainBlockedException>(() => A.DrainManyAsync(["node-1", "node-2"], new DrainOptions(), null, Ct));
+        Assert.Contains(ex.Plan.Pods, p => p.Name == "crashy-0" && p.Severity == DrainSeverity.Blocker);
+        Assert.Equal(before, Mutations());
+        Assert.False(_server.Get(Gvr.Nodes, null, "node-1")!["spec"]?["unschedulable"]?.GetValue<bool>() ?? false);
+    }
+
+    [Fact]
+    public async Task Drain_many_in_production_needs_the_node_count_typed()
+    {
+        SetMode(SafetyMode.Production);
+        await Assert.ThrowsAsync<SafetyException>(() => A.DrainManyAsync(["node-1"], new DrainOptions(Force: true), null, Ct, "node-1"));
+        await A.DrainManyAsync(["node-1"], new DrainOptions(Force: true), null, Ct, "1");
     }
 
     [Fact]

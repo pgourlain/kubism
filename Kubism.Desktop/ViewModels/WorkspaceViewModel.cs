@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Kubism.Core;
 using Kubism.Core.Actions;
+using Kubism.Core.Drain;
 using Kubism.Core.Api;
 using Kubism.Core.Catalog;
 using Kubism.Core.Discovery;
@@ -107,7 +108,11 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         NavRoots.Add(new NavNode("Overview".T(), NavTarget.Overview, null, "overview"));
         NavRoots.Add(new NavNode("Right-sizing".T(), NavTarget.RightSizing, null, "rightsizing"));
         NavRoots.Add(new NavNode("Capacity".T(), NavTarget.Capacity, null, "capacity"));
-        if (Find("nodes") is { } nodes) NavRoots.Add(new NavNode("Nodes".T(), NavTarget.Kind, nodes, "node"));
+        if (Find("nodes") is { } nodes)
+        {
+            NavRoots.Add(new NavNode("Nodes".T(), NavTarget.Kind, nodes, "node"));
+            if (Find("pods") is not null) NavRoots.Add(new NavNode("Drain nodes".T(), NavTarget.Drain, null, "node"));
+        }
         foreach (var (section, names) in Fixed)
         {
             var g = new NavNode(section.T());
@@ -323,6 +328,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             NavTarget.NetworkGraph => new NetworkViewModel(this, TakeState<NetworkState>()),
             NavTarget.GitOps => new GitOpsViewModel(this),
             NavTarget.Capacity => new CapacityViewModel(this),
+            NavTarget.Drain => new DrainViewModel(this, TakePendingDrainSelection()),
             _ => null,
         };
         // Dock items own their lifetime (the dock closes them); never dispose one from here.
@@ -462,7 +468,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         {
             var cordoned = o.At("spec", "unschedulable")?.ToString().Equals("true", StringComparison.OrdinalIgnoreCase) == true;
             list.Add(new ActionItem(cordoned ? "Uncordon".T() : "Cordon".T(), () => RunActionAsync(cordoned ? "Uncordon" : "Cordon", $"node {name}", false, name, _ => Session.Actions.SetCordonAsync(name, !cordoned, Session.SessionToken))) { Verb = "patch" });
-            list.Add(new ActionItem("Drain".T() + "…", () => DrainAsync(name), destructive: true) { Verb = "delete", Subresource = "eviction" });
+            list.Add(new ActionItem("Drain".T() + "…", () => { OpenDrain([name]); return Task.CompletedTask; }) { Verb = "delete", Subresource = "eviction" });
         }
         if (kind.Kind == "CronJob")
         {
@@ -569,12 +575,49 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             c => Session.Actions.ScaleAsync(kind.Gvr, o.Namespace!, o.Name, desired, Session.SessionToken, c));
     }
 
-    private async Task DrainAsync(string node)
+    private IReadOnlyList<string>? _pendingDrainSelection;
+
+    private IReadOnlyList<string>? TakePendingDrainSelection() { var p = _pendingDrainSelection; _pendingDrainSelection = null; return p; }
+
+    /// <summary>Opens the Drain page with these nodes ticked. Nothing is checked against the cluster or changed until the user presses Drain there.</summary>
+    public void OpenDrain(IReadOnlyList<string> nodes)
     {
-        await RunActionAsync("Drain", $"node {node}", true, node, async c =>
+        var nav = FindNav(NavTarget.Drain);
+        if (nav is null) return;
+        _pendingDrainSelection = nodes;
+        if (ReferenceEquals(SelectedNav, nav) && CurrentContent is DrainViewModel open) { _pendingDrainSelection = null; open.Select(nodes); return; }
+        Navigate(nav);
+    }
+
+    /// <summary>
+    /// Cordon and drain nodes the user chose on the Drain page, after its pre-flight. Asks once more, in words, what is about to happen
+    /// (production asks for the node name, or the node count); returns whether it ran.
+    /// </summary>
+    public async Task<bool> DrainNodesAsync(IReadOnlyList<string> nodes, DrainOptions options, DrainPlan plan)
+    {
+        if (nodes.Count == 0) return false;
+        var target = nodes.Count == 1 ? $"node {nodes[0]}" : $"{nodes.Count} nodes";
+        var mode = Session.Metadata.SafetyMode;
+        if (mode == SafetyMode.ReadOnly)
         {
-            var progress = new Progress<DrainProgress>(p => Main.SetStatus($"Draining {node}: {p.Pod} {p.Status} ({p.Done}/{p.Total})"));
-            await Session.Actions.DrainAsync(node, new DrainOptions(), progress, Session.SessionToken, c);
+            await Dialogs.ShowErrorAsync("Read-only cluster", $"Drain {target} is refused: this cluster is in read-only mode.");
+            return false;
+        }
+        var effects = $"{plan.Nodes.Count} node{(plan.Nodes.Count == 1 ? "" : "s")} ({string.Join(", ", plan.Nodes.Take(6))}{(plan.Nodes.Count > 6 ? ", …" : "")}) will be cordoned, then {plan.Pods.Count(p => p.MovesTo is not null || p.Severity == DrainSeverity.Blocker)} pod(s) evicted.";
+        var risk = plan.Blockers > 0 ? $"\n\n{plan.Blockers} pod(s) will NOT be migrated: they will be deleted or stay Pending." : "";
+        var expected = nodes.Count == 1 ? nodes[0] : nodes.Count.ToString();
+        string? confirmation = null;
+        if (mode == SafetyMode.Production)
+        {
+            confirmation = await Dialogs.ConfirmTypedAsync("Drain on production", $"You are about to drain {target} on a PRODUCTION cluster.\n{effects}{risk}", expected);
+            if (confirmation is null) return false;
+        }
+        else if (!await Dialogs.ConfirmAsync(new ConfirmRequest("Drain nodes", $"{effects}{risk}", nodes.Count == 1 ? "Cordon and drain" : $"Cordon and drain {nodes.Count} nodes", true))) return false;
+        return await RunActionAsync("Drain", target, false, expected, async _ =>
+        {
+            var progress = new Progress<DrainProgress>(p => Main.SetStatus($"Draining {target}: {p.Pod} {p.Status} ({p.Done}/{p.Total})"));
+            if (nodes.Count == 1) await Session.Actions.DrainAsync(nodes[0], options, progress, Session.SessionToken, confirmation);
+            else await Session.Actions.DrainManyAsync(nodes, options, progress, Session.SessionToken, confirmation);
         });
     }
 

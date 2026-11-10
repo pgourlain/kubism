@@ -84,9 +84,9 @@ public class McpReadToolsTests
     public async Task Server_lists_read_tools_and_hides_write_tools_by_default()
     {
         await using var f = await McpFixture.StartAsync([]);
-        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of", "network_exposure", "list_images", "compare_images" })
+        foreach (var t in new[] { "list_clusters", "list_kinds", "list_resources", "get_resource", "get_events", "get_logs", "top_pods", "top_nodes", "rightsizing_report", "describe", "rbac_who_can", "rbac_rights_of", "network_exposure", "list_images", "compare_images", "drain_preflight" })
             Assert.Contains(t, f.ToolNames);
-        foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart" })
+        foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart", "drain_nodes" })
             Assert.DoesNotContain(t, f.ToolNames);
     }
 
@@ -211,6 +211,22 @@ public class McpReadToolsTests
     }
 }
 
+public class McpDrainToolsTests
+{
+    [Fact]
+    public async Task Drain_preflight_reports_pods_that_would_not_be_migrated_and_changes_nothing()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var plan = JsonNode.Parse(await f.CallAsync("drain_preflight", new() { ["cluster"] = "fake", ["nodes"] = "node-1,node-2" }))!;
+        Assert.False(plan["canComplete"]!.GetValue<bool>());
+        var bare = plan["pods"]!.AsArray().Single(p => p!["pod"]!.GetValue<string>() == "default/crashy-0")!;
+        Assert.Equal("Blocker", bare["severity"]!.GetValue<string>());
+        Assert.Contains("Bare pod", bare["reason"]!.GetValue<string>());
+        await Assert.ThrowsAnyAsync<Exception>(() => f.CallAsync("drain_preflight", new() { ["cluster"] = "fake", ["nodepool"] = "nope" }));
+        Assert.DoesNotContain(f.Server.Requests, r => r.Method is "PATCH" or "DELETE");
+    }
+}
+
 public class McpWriteToolsTests
 {
     private static readonly string[] WriteArgs = ["--allow-writes"];
@@ -219,7 +235,7 @@ public class McpWriteToolsTests
     public async Task Write_tools_exist_only_with_allow_writes_and_go_through_cluster_actions()
     {
         await using var f = await McpFixture.StartAsync(WriteArgs);
-        foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart" }) Assert.Contains(t, f.ToolNames);
+        foreach (var t in new[] { "apply", "delete", "scale", "rollout_restart", "drain_nodes" }) Assert.Contains(t, f.ToolNames);
         await f.CallAsync("scale", new() { ["cluster"] = "fake", ["kind"] = "deploy", ["name"] = "web", ["namespace"] = "default", ["replicas"] = 5 });
         Assert.Equal(5, f.Server.Get(Core.Api.Gvr.Deployments, "default", "web")!["spec"]!["replicas"]!.GetValue<int>());
         await f.CallAsync("rollout_restart", new() { ["cluster"] = "fake", ["kind"] = "deploy", ["name"] = "web", ["namespace"] = "default" });
@@ -228,6 +244,17 @@ public class McpWriteToolsTests
         Assert.Contains("from-mcp", applied);
         await f.CallAsync("delete", new() { ["cluster"] = "fake", ["kind"] = "configmap", ["name"] = "from-mcp", ["namespace"] = "default" });
         Assert.Null(f.Server.Get(Core.Api.Gvr.ConfigMaps, "default", "from-mcp"));
+    }
+
+    [Fact]
+    public async Task Drain_nodes_refuses_on_blockers_unless_forced_and_cordons_first()
+    {
+        await using var f = await McpFixture.StartAsync(WriteArgs);
+        var ex = await Assert.ThrowsAsync<McpException>(() => f.CallAsync("drain_nodes", new() { ["cluster"] = "fake", ["nodes"] = "node-1,node-2" }));
+        Assert.Contains("would not be migrated", ex.Message);
+        Assert.DoesNotContain(f.Server.Requests, r => r.Method is "PATCH");
+        await f.CallAsync("drain_nodes", new() { ["cluster"] = "fake", ["nodes"] = "node-2", ["force"] = true });
+        Assert.True(f.Server.Get(Core.Api.Gvr.Nodes, null, "node-2")!["spec"]!["unschedulable"]!.GetValue<bool>());
     }
 
     [Fact]

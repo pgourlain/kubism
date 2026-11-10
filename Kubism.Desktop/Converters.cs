@@ -18,6 +18,11 @@ public static class Converters
         Severity.Ok => "KubismOkBrush", Severity.Warning => "KubismWarnBrush", Severity.Error => "KubismErrorBrush", _ => "KubismMutedBrush",
     }));
 
+    public static readonly IValueConverter DrainSeverityBrush = new FuncConverter<Core.Drain.DrainSeverity, IBrush?>(s => Brush(s switch
+    {
+        Core.Drain.DrainSeverity.Ok => "KubismOkBrush", Core.Drain.DrainSeverity.Warning => "KubismWarnBrush", _ => "KubismErrorBrush",
+    }));
+
     public static readonly IValueConverter StateBrush = new FuncConverter<SessionState, IBrush?>(s => Brush(s switch
     {
         SessionState.Connected => "KubismOkBrush", SessionState.Degraded => "KubismWarnBrush", SessionState.Connecting => "KubismAccentBrush",
