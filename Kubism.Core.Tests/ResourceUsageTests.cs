@@ -212,4 +212,32 @@ public class ResourceUsageTests
         Assert.Contains(u.Dangling, f => f.Name == "stuck-min" && f.Problem.Contains("drain stalls"));
         Assert.Contains(u.Dangling, f => f.Name == "stuck-max" && f.Problem.Contains("drain stalls"));
     }
+
+    [Fact]
+    public void Gateway_classes_listener_certificates_and_route_backends_are_references()
+    {
+        var listed = new HashSet<string>(Listed) { ResourceUsage.Service };
+        var u = ResourceUsage.Analyze(
+        [
+            O("""{"kind":"GatewayClass","metadata":{"name":"envoy"}}"""), O("""{"kind":"GatewayClass","metadata":{"name":"spare"}}"""),
+            O("""{"kind":"Gateway","metadata":{"name":"public","namespace":"edge"},"spec":{"gatewayClassName":"envoy","listeners":[{"name":"https","port":443,"protocol":"HTTPS","tls":{"certificateRefs":[{"name":"gw-tls"},{"name":"certs","namespace":"other"}]}}]}}"""),
+            O("""{"kind":"Gateway","metadata":{"name":"orphan","namespace":"edge"},"spec":{"gatewayClassName":"gone","listeners":[]}}"""),
+            O("""{"kind":"Secret","metadata":{"name":"gw-tls","namespace":"edge"},"type":"kubernetes.io/tls"}"""), O("""{"kind":"Secret","metadata":{"name":"unused-tls","namespace":"edge"},"type":"kubernetes.io/tls"}"""),
+            O("""{"kind":"HTTPRoute","metadata":{"name":"web","namespace":"edge"},"spec":{"rules":[{"backendRefs":[{"name":"web","port":80},{"name":"ghost","port":80},{"kind":"ServiceImport","name":"elsewhere"}]}]}}"""),
+            O("""{"kind":"Service","metadata":{"name":"web","namespace":"edge"}}"""),
+        ], listed);
+        Assert.Equal(UsageStatus.Used, Row(u, "GatewayClass", "envoy").Status);
+        Assert.Equal(("Gateway", "class"), (Row(u, "GatewayClass", "envoy").Consumers.Single().Kind, Row(u, "GatewayClass", "envoy").Consumers.Single().How));
+        Assert.Equal(UsageStatus.Unused, Row(u, "GatewayClass", "spare").Status);
+        Assert.Equal("TLS", Row(u, "Secret", "gw-tls").Consumers.Single().How);
+        Assert.Equal(UsageStatus.Used, Row(u, "Secret", "gw-tls").Status);
+        Assert.Equal(UsageStatus.Unused, Row(u, "Secret", "unused-tls").Status);
+        Assert.Contains("gateway", Row(u, "Secret", "unused-tls").Note);
+        var broken = u.Broken.Select(b => b.Target).ToArray();
+        Assert.Contains("GatewayClass/gone", broken);                 // a Gateway naming a class that does not exist
+        Assert.Contains("Secret/other/certs", broken);                // a certificate of another namespace that is not there
+        Assert.Contains("Service/edge/ghost", broken);                // a route backend
+        Assert.DoesNotContain("Service/edge/web", broken);
+        Assert.DoesNotContain(broken, t => t.Contains("elsewhere"));  // only Services are followed
+    }
 }

@@ -109,7 +109,23 @@ public static class FakeKinds
         new("kustomize.toolkit.fluxcd.io", "v1", "kustomizations", "Kustomization", true, ["ks"], StdColl, ["status"], [Name, AgeCol]),
         new("helm.toolkit.fluxcd.io", "v2", "helmreleases", "HelmRelease", true, ["hr"], StdColl, ["status"], [Name, AgeCol]),
         new("source.toolkit.fluxcd.io", "v1", "gitrepositories", "GitRepository", true, ["gitrepo"], StdColl, ["status"], [Name, AgeCol]),
+        // Gateway API: the columns of the standard channel's printer columns.
+        new("gateway.networking.k8s.io", "v1", "gatewayclasses", "GatewayClass", false, ["gc"], StdColl, ["status"],
+            [Name, new("Controller", "string", 0, o => S(o, "spec", "controllerName")), new("Accepted", "string", 0, o => Condition(o, "Accepted")), AgeCol]),
+        new("gateway.networking.k8s.io", "v1", "gateways", "Gateway", true, ["gtw"], StdColl, ["status"],
+            [Name, new("Class", "string", 0, o => S(o, "spec", "gatewayClassName")), new("Address", "string", 0, o => (o["status"]?["addresses"] as JsonArray)?.FirstOrDefault()?["value"]?.ToString()),
+             new("Programmed", "string", 0, o => Condition(o, "Programmed")), AgeCol]),
+        new("gateway.networking.k8s.io", "v1", "httproutes", "HTTPRoute", true, [], StdColl, ["status"], [Name, new("Hostnames", "string", 0, Hostnames), AgeCol]),
+        new("gateway.networking.k8s.io", "v1", "grpcroutes", "GRPCRoute", true, [], StdColl, ["status"], [Name, new("Hostnames", "string", 0, Hostnames), AgeCol]),
+        new("gateway.networking.k8s.io", "v1alpha2", "tcproutes", "TCPRoute", true, [], StdColl, ["status"], [Name, AgeCol]),
+        new("gateway.networking.k8s.io", "v1beta1", "referencegrants", "ReferenceGrant", true, ["refgrant"], StdColl, [], [Name, AgeCol]),
     ];
+
+    private static string? Condition(JsonObject o, string type) =>
+        (o["status"]?["conditions"] as JsonArray ?? []).OfType<JsonObject>().FirstOrDefault(c => S(c, "type") == type) is { } c ? S(c, "status") : null;
+
+    private static string? Hostnames(JsonObject o) =>
+        o["spec"]?["hostnames"] is JsonArray { Count: > 0 } h ? string.Join(",", h.Select(x => x?.ToString())) : "*";
 
     public static FakeKind? Find(string group, string version, string resource) =>
         All.FirstOrDefault(k => k.Group == group && k.Version == version && k.Resource == resource);

@@ -323,28 +323,33 @@ public sealed class FakeApiServer : IAsyncDisposable
             var items = new JsonArray();
             foreach (var g in VisibleKinds.Where(k => core ? k.Group == "" : k.Group != "").GroupBy(k => k.Group))
             {
-                var resources = new JsonArray();
-                foreach (var k in g)
+                // A group may serve several versions (Gateway API: v1, v1beta1, v1alpha2): one entry per version, the first kind's version first.
+                var versions = new JsonArray();
+                foreach (var vg in g.GroupBy(k => k.Version))
                 {
-                    var subs = new JsonArray();
-                    foreach (var s in k.Subresources) subs.Add((JsonNode?)new JsonObject { ["subresource"] = s, ["verbs"] = new JsonArray(Array.ConvertAll(new[] { "get", "create", "update", "patch" }, v => (JsonNode?)JsonValue.Create(v))) });
-                    resources.Add((JsonNode?)new JsonObject
+                    var resources = new JsonArray();
+                    foreach (var k in vg)
                     {
-                        ["resource"] = k.Resource,
-                        ["responseKind"] = new JsonObject { ["group"] = k.Group, ["version"] = k.Version, ["kind"] = k.Kind },
-                        ["scope"] = k.Namespaced ? "Namespaced" : "Cluster",
-                        ["singularResource"] = k.Kind.ToLowerInvariant(),
-                        ["verbs"] = new JsonArray(k.Verbs.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()),
-                        ["shortNames"] = new JsonArray(k.ShortNames.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()),
-                        ["categories"] = new JsonArray((k.Categories ?? []).Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()),
-                        ["subresources"] = subs,
-                    });
+                        var subs = new JsonArray();
+                        foreach (var s in k.Subresources) subs.Add((JsonNode?)new JsonObject { ["subresource"] = s, ["verbs"] = new JsonArray(Array.ConvertAll(new[] { "get", "create", "update", "patch" }, v => (JsonNode?)JsonValue.Create(v))) });
+                        resources.Add((JsonNode?)new JsonObject
+                        {
+                            ["resource"] = k.Resource,
+                            ["responseKind"] = new JsonObject { ["group"] = k.Group, ["version"] = k.Version, ["kind"] = k.Kind },
+                            ["scope"] = k.Namespaced ? "Namespaced" : "Cluster",
+                            ["singularResource"] = k.Kind.ToLowerInvariant(),
+                            ["verbs"] = new JsonArray(k.Verbs.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()),
+                            ["shortNames"] = new JsonArray(k.ShortNames.Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()),
+                            ["categories"] = new JsonArray((k.Categories ?? []).Select(v => (JsonNode?)JsonValue.Create(v)).ToArray()),
+                            ["subresources"] = subs,
+                        });
+                    }
+                    versions.Add((JsonNode?)new JsonObject { ["version"] = vg.Key, ["resources"] = resources, ["freshness"] = "Current" });
                 }
-                var first = g.First();
                 items.Add((JsonNode?)new JsonObject
                 {
                     ["metadata"] = g.Key.Length == 0 ? new JsonObject() : new JsonObject { ["name"] = g.Key },
-                    ["versions"] = new JsonArray((JsonNode?)new JsonObject { ["version"] = first.Version, ["resources"] = resources, ["freshness"] = "Current" }),
+                    ["versions"] = versions,
                 });
             }
             ctx.Response.ContentType = "application/json;g=apidiscovery.k8s.io;v=v2;as=APIGroupDiscoveryList";
@@ -360,7 +365,7 @@ public sealed class FakeApiServer : IAsyncDisposable
             groups.Add((JsonNode?)new JsonObject
             {
                 ["name"] = g.Key,
-                ["versions"] = new JsonArray((JsonNode?)new JsonObject { ["groupVersion"] = $"{g.Key}/{v}", ["version"] = v }),
+                ["versions"] = new JsonArray(g.Select(k => k.Version).Distinct().Select(x => (JsonNode?)new JsonObject { ["groupVersion"] = $"{g.Key}/{x}", ["version"] = x }).ToArray()),
                 ["preferredVersion"] = new JsonObject { ["groupVersion"] = $"{g.Key}/{v}", ["version"] = v },
             });
         }

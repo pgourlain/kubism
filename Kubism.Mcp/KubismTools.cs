@@ -269,7 +269,7 @@ public sealed class KubismReadTools(McpContext ctx)
         ctx.Run(async () =>
         {
             var s = await ctx.SessionAsync(cluster, ct);
-            var graph = await Core.Network.NetworkLoader.LoadAsync(s.Transport, ct);
+            var graph = await Core.Network.NetworkLoader.LoadAsync(s.Transport, ct, discovered: s.Discovery.Kinds);
             var filter = new Core.Network.NetworkFilter
             {
                 Namespaces = string.IsNullOrWhiteSpace(@namespace) ? null : new HashSet<string> { @namespace },
@@ -293,7 +293,7 @@ public sealed class KubismReadTools(McpContext ctx)
                 }).ToArray()),
                 ["routes"] = new JsonArray(view.Routes.Take(300).Select(r => (JsonNode?)new JsonObject
                 {
-                    ["url"] = r.Url, ["ingress"] = r.Ingress, ["class"] = r.Route.Class, ["exposure"] = r.ExposureText, ["comesInThrough"] = r.Via,
+                    ["url"] = r.Url, ["ingress"] = r.Ingress, ["route"] = r.Route.RouteName, ["class"] = r.Route.Class, ["exposure"] = r.ExposureText, ["comesInThrough"] = r.Via,
                     ["backend"] = r.Backend, ["pods"] = r.Target, ["problems"] = r.Problems,
                 }).ToArray()),
                 ["edges"] = new JsonArray(view.Edges.Select(e => (JsonNode?)new JsonObject { ["from"] = e.From, ["to"] = e.To, ["hop"] = e.Label, ["entryPorts"] = new JsonArray(e.Ports.Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()), ["problem"] = e.Problem }).ToArray()),

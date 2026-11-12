@@ -102,4 +102,18 @@ public class HelmActionTests
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => a.RollbackHelmReleaseAsync("web", "nginx", 1, default));
         Assert.Contains("helm", ex.Message);
     }
+
+    [Fact]
+    public void Aggregated_discovery_lists_a_kind_served_only_by_an_older_version_and_prefers_the_newest_for_the_others()
+    {
+        var list = JsonNode.Parse("""
+            {"kind":"APIGroupDiscoveryList","items":[{"metadata":{"name":"gateway.networking.k8s.io"},"versions":[
+              {"version":"v1","resources":[{"resource":"gateways","responseKind":{"kind":"Gateway"},"scope":"Namespaced","verbs":["list"]}]},
+              {"version":"v1beta1","resources":[{"resource":"gateways","responseKind":{"kind":"Gateway"},"scope":"Namespaced","verbs":["list"]},
+                                               {"resource":"referencegrants","responseKind":{"kind":"ReferenceGrant"},"scope":"Namespaced","verbs":["list"]}]},
+              {"version":"v1alpha2","resources":[{"resource":"tcproutes","responseKind":{"kind":"TCPRoute"},"scope":"Namespaced","verbs":["list"]}]}]}]}
+            """)!.AsObject();
+        var kinds = ApiDiscovery.ParseAggregated(list).Select(k => $"{k.Kind}:{k.Version}").ToArray();
+        Assert.Equal(["Gateway:v1", "ReferenceGrant:v1beta1", "TCPRoute:v1alpha2"], kinds);
+    }
 }

@@ -6,13 +6,15 @@ using Kubism.Core.Views;
 
 namespace Kubism.Desktop.ViewModels;
 
-/// <summary>One URL of the Routes table: where it comes in, which Ingress, which backend, which pods, what is wrong.</summary>
+/// <summary>One URL of the Routes table: where it comes in, which Ingress (or Gateway and route), which backend, which pods, what is wrong.</summary>
 public sealed record RouteRowVm(NetworkRouteRow Row)
 {
     public string Url => Row.Url;
     public string Exposure => Row.ExposureText;
     public Severity ExposureSeverity => Row.Exposure switch { ExposureLevel.Outside => Severity.Warning, ExposureLevel.Unknown => Severity.Neutral, _ => Severity.Ok };
     public string Ingress => Row.Ingress;
+    /// <summary>The Gateway API route that carries the URL ("HTTPRoute edge/web"); empty for an Ingress.</summary>
+    public string Route => Row.Route.RouteName ?? "";
     public string Class => Row.Route.Class ?? "(none)";
     public string Via => Row.Via;
     public string Backend => Row.Backend;
@@ -48,7 +50,7 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable, Navigat
             _tab = restore.Tab; _selectedExposure = restore.Exposure; _problemsOnly = restore.ProblemsOnly; _includeInternal = restore.IncludeInternal; _showNodes = restore.ShowNodes; _search = restore.Search;
             _restoreNodeId = restore.SelectedNodeId;
         }
-        try { _store = new NetworkStore(ws.Session.Cache, ws.Session.Transport); }
+        try { _store = new NetworkStore(ws.Session.Cache, ws.Session.Transport, discovered: ws.Session.Discovery.Kinds); }
         catch (Exception ex) { Error = ex.Message; IsLoading = false; return; }
         _store.Changed += g => _ws.Ui.Post(() => Apply(g));
         ws.Namespaces.Changed += OnNamespacesChanged;
@@ -102,9 +104,10 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable, Navigat
     {
         _graph = g;
         Warning = g.IncompleteWarning;
-        var ingresses = g.Nodes.Count(n => n.Kind == NetworkNodeKind.Ingress);
+        var ingresses = g.Nodes.Count(n => n.Kind == NetworkNodeKind.Ingress && !n.IsGateway);
+        var gateways = g.Nodes.Count(n => n.IsGateway);
         var outside = g.Nodes.Count(n => n.Kind == NetworkNodeKind.Ingress && n.Exposure == ExposureLevel.Outside);
-        Summary = $"{ingresses} ingress(es), {outside} outside the cluster · {g.Nodes.Count(n => n.Kind == NetworkNodeKind.Service)} services · {g.Nodes.Count(n => n.Kind == NetworkNodeKind.Workload)} workloads"
+        Summary = $"{ingresses} ingress(es){(gateways > 0 ? $", {gateways} gateway(s)" : "")}, {outside} outside the cluster · {g.Nodes.Count(n => n.Kind == NetworkNodeKind.Service)} services · {g.Nodes.Count(n => n.Kind == NetworkNodeKind.Workload)} workloads"
                   + " · 'Outside the cluster' is judged from Services and ingress controllers; DNS, firewalls and WAFs are not visible.";
         Rebuild();
     }
@@ -174,7 +177,7 @@ public sealed partial class NetworkViewModel : ViewModelBase, IClosable, Navigat
     {
         // On the Routes tab the table is what is copied (tab-separated: it pastes into a sheet or a ticket).
         if (Tab == RoutesTab)
-            return _ws.Clipboard.SetTextAsync(string.Join("\n", Routes.Select(r => string.Join("\t", r.Url, r.Exposure, r.Ingress, r.Class, r.Via, r.Backend, r.Target, r.Problems))));
+            return _ws.Clipboard.SetTextAsync(string.Join("\n", Routes.Select(r => string.Join("\t", r.Url, r.Exposure, r.Ingress, r.Route, r.Class, r.Via, r.Backend, r.Target, r.Problems))));
         var text = NodeLines.Count > 0 ? string.Join("\n", NodeLines)
             : string.Join("\n", View?.Nodes.Where(p => p.Node.Kind == NetworkNodeKind.Ingress).SelectMany(p => p.Node.Lines.Where(l => !l.StartsWith("class:") && !l.StartsWith("TLS")).Select(l => $"{p.Node.Namespace}/{p.Node.Label}: {l}")) ?? []);
         return _ws.Clipboard.SetTextAsync(text);

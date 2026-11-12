@@ -18,6 +18,16 @@ public static class NetworkFixture
         return YamlJson.ParseDocuments(r.ReadToEnd()).OfType<JsonObject>().Select(o => new KubeObject(o)).ToList();
     }
 
+    /// <summary>The objects of Data/gateway.yaml: Gateway API objects, their controller Services and the backends they route to. Kept apart from network.yaml so the Ingress tests do not see them.</summary>
+    public static IReadOnlyList<KubeObject> GatewayYaml()
+    {
+        var asm = typeof(NetworkFixture).Assembly;
+        var name = asm.GetManifestResourceNames().Single(n => n.EndsWith("gateway.yaml", StringComparison.Ordinal));
+        using var s = asm.GetManifestResourceStream(name)!;
+        using var r = new StreamReader(s);
+        return YamlJson.ParseDocuments(r.ReadToEnd()).OfType<JsonObject>().Select(o => new KubeObject(o)).ToList();
+    }
+
     public static readonly DateTimeOffset Now = new(2026, 10, 10, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>shop-tls expires in 10 days, admin-tls does not exist; other secrets were not checked.</summary>
@@ -25,6 +35,9 @@ public static class NetworkFixture
     {
         [("shop", "shop-tls")] = new(true, Now.AddDays(10)),
         [("shop", "admin-tls")] = new(false, null),
+        // the Gateway fixture's listeners: gw-tls is fine for 90 days, agc-tls does not exist
+        [("edge", "gw-tls")] = new(true, Now.AddDays(90)),
+        [("edge", "agc-tls")] = new(false, null),
     };
 
     /// <summary>The two nodes the fixture's pods run on. The demo environment has nodes of the same names, so UI and MCP tests see the same.</summary>
@@ -44,5 +57,14 @@ public static class NetworkFixture
         var all = Objects().Where(o => skip is null || !skip(o)).ToList();
         IEnumerable<KubeObject> Of(string kind) => all.Where(o => o.Kind == kind);
         return NetworkGraph.Build(Of("Ingress"), Of("IngressClass"), Of("Service"), Of("EndpointSlice"), Of("Pod"), tls ? Tls() : null, availability, Now, unreadableNodes ? null : nodes ?? Nodes());
+    }
+
+    /// <summary>The Ingress fixture and the Gateway API fixture in one graph.</summary>
+    public static NetworkGraph GatewayGraph(Func<KubeObject, bool>? skip = null, IReadOnlyList<RbacKindStatus>? availability = null)
+    {
+        var all = Objects().Concat(GatewayYaml()).Where(o => skip is null || !skip(o)).ToList();
+        IEnumerable<KubeObject> Of(string kind) => all.Where(o => o.Kind == kind);
+        var gateway = new GatewayObjects(Of("GatewayClass").ToList(), Of("Gateway").ToList(), GatewayApi.RouteKinds.SelectMany(Of).ToList(), Of("ReferenceGrant").ToList());
+        return NetworkGraph.Build(Of("Ingress"), Of("IngressClass"), Of("Service"), Of("EndpointSlice"), Of("Pod"), Tls(), availability, Now, Nodes(), gateway);
     }
 }

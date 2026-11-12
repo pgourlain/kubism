@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Kubism.Core.Api;
 using Kubism.Core.Cache;
+using Kubism.Core.Discovery;
 using Kubism.Core.Events;
 using Kubism.Core.Security;
 
@@ -26,7 +27,8 @@ public static class NetworkTls
 /// <summary>
 /// Keeps a <see cref="NetworkGraph"/> current: shared informers for Ingresses, IngressClasses, Services, EndpointSlices and Pods through the session's
 /// <see cref="ResourceCache"/>, a new graph after each batch of changes, and the TLS secrets named by Ingresses looked up one by one (cached 5 minutes).
-/// A kind that cannot be read is reported in <see cref="NetworkGraph.Availability"/>.
+/// A kind that cannot be read is reported in <see cref="NetworkGraph.Availability"/>. Gateway API kinds are read only where the cluster serves them
+/// (<c>discovered</c>); the kinds present when the store is created are the ones followed.
 /// </summary>
 public sealed class NetworkStore : IDisposable
 {
@@ -39,6 +41,8 @@ public sealed class NetworkStore : IDisposable
     // Nodes are optional (a namespaced user often cannot list them): not part of Kinds, so an unreadable node list does not make the whole graph "incomplete".
     private static readonly Gvr NodesGvr = new("", "v1", "nodes");
     private readonly List<InformerLease> _leases = [];
+    // Gateway API leases come after the nodes lease in _leases, in the order of this list.
+    private readonly List<GatewayKind> _gatewayKinds = [];
     private readonly List<IDisposable> _subscriptions = [];
     private readonly IKubeTransport _transport;
     private readonly ConcurrentDictionary<(string, string), (TlsSecretStatus Status, DateTimeOffset At)> _tls = new();
@@ -48,7 +52,7 @@ public sealed class NetworkStore : IDisposable
     private Timer? _debounce;
     private bool _disposed;
 
-    public NetworkStore(ResourceCache cache, IKubeTransport transport, TimeSpan? debounce = null)
+    public NetworkStore(ResourceCache cache, IKubeTransport transport, TimeSpan? debounce = null, IEnumerable<ResourceKind>? discovered = null)
     {
         _transport = transport;
         Debounce = debounce ?? TimeSpan.FromMilliseconds(200);
@@ -63,6 +67,13 @@ public sealed class NetworkStore : IDisposable
         _leases.Add(nodeLease);
         _subscriptions.Add(nodeLease.Informer.Changes.Subscribe(_ => Schedule()));
         nodeLease.Informer.StateChanged += OnState;
+        foreach (var gk in GatewayApi.Find(discovered ?? []))
+        {
+            var lease = cache.Subscribe(gk.Gvr);
+            _leases.Add(lease); _gatewayKinds.Add(gk);
+            _subscriptions.Add(lease.Informer.Changes.Subscribe(_ => Schedule()));
+            lease.Informer.StateChanged += OnState;
+        }
         Graph = Rebuild();
     }
 
@@ -110,13 +121,29 @@ public sealed class NetworkStore : IDisposable
             // The IngressClass list is optional (a cluster with only annotation classes has none, and listing it can be forbidden): reported, but chains still draw.
             status.Add(new RbacKindStatus(Kinds[i].Name, inf.IsListed, inf.IsListed ? null : inf.LastError ?? "not loaded yet"));
         }
-        var needed = NetworkGraph.TlsSecretsOf(sets[0]);
+        var gatewayObjects = GatewaySnapshot(status);
+        var needed = NetworkGraph.TlsSecretsOf(sets[0], gatewayObjects?.Gateways);
         var known = needed.Where(k => _tls.TryGetValue(k, out _)).ToDictionary(k => k, k => _tls[k].Status);
         var nodeInformer = _leases[Kinds.Length].Informer;
         var nodes = nodeInformer.IsListed ? nodeInformer.Snapshot().Select(c => Tag(c.Object, "Node")).ToList() : null;
-        var graph = NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], known, status, null, nodes);
+        var graph = NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], known, status, null, nodes, gatewayObjects);
         foreach (var k in needed) if (!_tls.TryGetValue(k, out var e) || DateTimeOffset.UtcNow - e.At > TlsTtl) _ = FetchTlsAsync(k);
         return graph;
+    }
+
+    /// <summary>The Gateway API objects held by the informers (null when the cluster has none), and one availability entry per kind.</summary>
+    private GatewayObjects? GatewaySnapshot(List<RbacKindStatus> status)
+    {
+        if (_gatewayKinds.Count == 0) return null;
+        var byKind = new Dictionary<string, List<KubeObject>>();
+        for (var i = 0; i < _gatewayKinds.Count; i++)
+        {
+            var inf = _leases[Kinds.Length + 1 + i].Informer;
+            var kind = _gatewayKinds[i].Kind;
+            byKind[kind] = inf.Snapshot().Select(c => Tag(c.Object, kind)).ToList();
+            status.Add(new RbacKindStatus(_gatewayKinds[i].Name, inf.IsListed, inf.IsListed ? null : inf.LastError ?? "not loaded yet"));
+        }
+        return GatewayApi.FromKinds(byKind);
     }
 
     private async Task FetchTlsAsync((string Namespace, string Secret) key)
@@ -156,7 +183,8 @@ public sealed class NetworkStore : IDisposable
 /// <summary>One-shot graph for callers with no live cache (the MCP server): lists the kinds through the transport and looks up the TLS secrets.</summary>
 public static class NetworkLoader
 {
-    public static async Task<NetworkGraph> LoadAsync(IKubeTransport transport, CancellationToken ct, bool checkTls = true)
+    /// <param name="discovered">The kinds the cluster serves: Gateway API is read only for the ones found. Null: Gateway API is not read.</param>
+    public static async Task<NetworkGraph> LoadAsync(IKubeTransport transport, CancellationToken ct, bool checkTls = true, IEnumerable<ResourceKind>? discovered = null)
     {
         var sets = new List<KubeObject>[Kinds.Length]; var status = new List<RbacKindStatus>();
         for (var i = 0; i < Kinds.Length; i++)
@@ -184,9 +212,10 @@ public static class NetworkLoader
                 status.Add(new RbacKindStatus(Kinds[i].Name, false, ex.Message));
             }
         }
+        var gatewayObjects = await LoadGatewayAsync(transport, discovered, status, ct).ConfigureAwait(false);
         var tls = new Dictionary<(string Namespace, string Secret), TlsSecretStatus>();
         if (checkTls)
-            foreach (var k in NetworkGraph.TlsSecretsOf(sets[0])) tls[k] = await NetworkTls.LookupAsync(transport, k.Namespace, k.Secret, ct).ConfigureAwait(false);
+            foreach (var k in NetworkGraph.TlsSecretsOf(sets[0], gatewayObjects?.Gateways)) tls[k] = await NetworkTls.LookupAsync(transport, k.Namespace, k.Secret, ct).ConfigureAwait(false);
         // Optional: without the right to list nodes, node boxes say their status is unknown.
         List<KubeObject>? nodes = null;
         try
@@ -201,7 +230,36 @@ public static class NetworkLoader
             } while (cont is not null);
         }
         catch (Exception ex) when (ex is KubeApiException or KubeConnectionException) { nodes = null; }
-        return NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], tls, status, null, nodes);
+        return NetworkGraph.Build(sets[0], sets[1], sets[2], sets[3], sets[4], tls, status, null, nodes, gatewayObjects);
+    }
+
+    private static async Task<GatewayObjects?> LoadGatewayAsync(IKubeTransport transport, IEnumerable<ResourceKind>? discovered, List<RbacKindStatus> status, CancellationToken ct)
+    {
+        var kinds = GatewayApi.Find(discovered ?? []);
+        if (kinds.Count == 0) return null;
+        var byKind = new Dictionary<string, List<KubeObject>>();
+        foreach (var gk in kinds)
+        {
+            var items = new List<KubeObject>();
+            try
+            {
+                string? cont = null;
+                do
+                {
+                    var page = await transport.ListAsync(gk.Gvr, null, new ListOptions { Limit = 500, Continue = cont }, ct).ConfigureAwait(false);
+                    foreach (var item in page.Items) { var o = new KubeObject(item); if (o.Kind.Length == 0) item["kind"] = gk.Kind; items.Add(o); }
+                    cont = string.IsNullOrEmpty(page.Continue) ? null : page.Continue;
+                } while (cont is not null);
+                status.Add(new RbacKindStatus(gk.Name, true, null));
+            }
+            catch (Exception ex) when (ex is KubeApiException or KubeConnectionException)
+            {
+                items = [];
+                status.Add(new RbacKindStatus(gk.Name, false, ex.Message));
+            }
+            byKind[gk.Kind] = items;
+        }
+        return GatewayApi.FromKinds(byKind);
     }
 
     private static readonly (Gvr Gvr, string Name, string Kind)[] Kinds =

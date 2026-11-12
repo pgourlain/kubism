@@ -37,20 +37,28 @@ public sealed partial class NetworkGraph
     public string? IncompleteWarning => IsComplete ? null
         : $"Incomplete data: cannot read {string.Join(", ", MissingKinds)}. Chains may be missing or show wrong problems.{Availability.Where(a => !a.Loaded && a.Error is not null).Select(a => $" {a.Kind}: {a.Error}").FirstOrDefault()}";
 
-    /// <summary>Hosts of every Ingress that has TLS, with the secrets they need: for the store to look them up.</summary>
-    public static IReadOnlyList<(string Namespace, string Secret)> TlsSecretsOf(IEnumerable<KubeObject> ingresses) =>
+    /// <summary>The TLS secrets named by Ingresses and by Gateway listeners (a certificateRef may name another namespace), for the store to look them up.</summary>
+    public static IReadOnlyList<(string Namespace, string Secret)> TlsSecretsOf(IEnumerable<KubeObject> ingresses, IEnumerable<KubeObject>? gateways = null) =>
         ingresses.SelectMany(i => (i.At("spec", "tls") as JsonArray ?? []).OfType<JsonObject>().Select(t => (Ns: i.Namespace ?? "", Name: KubeObject.Str(t, "secretName") ?? "")))
+            .Concat((gateways ?? []).SelectMany(CertificateRefs))
             .Where(t => t.Name.Length > 0).Distinct().Select(t => (t.Ns, t.Name)).ToList();
+
+    /// <summary>The Secrets a Gateway's TLS listeners point at (namespace defaults to the Gateway's).</summary>
+    private static IEnumerable<(string Ns, string Name)> CertificateRefs(KubeObject gw) =>
+        (gw.At("spec", "listeners") as JsonArray ?? []).OfType<JsonObject>()
+            .SelectMany(l => (l["tls"]?["certificateRefs"] as JsonArray ?? []).OfType<JsonObject>())
+            .Where(r => (KubeObject.Str(r, "kind") ?? "Secret") == "Secret" && (KubeObject.Str(r, "group") ?? "") == "")
+            .Select(r => (Ns: KubeObject.Str(r, "namespace") ?? gw.Namespace ?? "", Name: KubeObject.Str(r, "name") ?? ""));
 
     // ---------- build ----------
 
     public static NetworkGraph Build(IEnumerable<KubeObject> ingresses, IEnumerable<KubeObject> ingressClasses, IEnumerable<KubeObject> services, IEnumerable<KubeObject> endpointSlices,
         IEnumerable<KubeObject> pods, IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus>? tls = null, IReadOnlyList<RbacKindStatus>? availability = null, DateTimeOffset? now = null,
-        IEnumerable<KubeObject>? nodes = null)
+        IEnumerable<KubeObject>? nodes = null, GatewayObjects? gateway = null)
     {
         var g = new NetworkGraph(availability ?? [new("ingresses", true, null), new("ingressclasses", true, null), new("services", true, null), new("endpointslices", true, null), new("pods", true, null)]);
         // Nodes are optional: a namespaced user often cannot list them. Null means "not readable" (the node boxes then say their status is unknown), not "no nodes".
-        new Builder(g, ingresses.ToList(), ingressClasses.ToList(), services.ToList(), endpointSlices.ToList(), pods.ToList(), tls ?? new Dictionary<(string, string), TlsSecretStatus>(), now ?? DateTimeOffset.UtcNow, nodes?.ToList()).Run();
+        new Builder(g, ingresses.ToList(), ingressClasses.ToList(), services.ToList(), endpointSlices.ToList(), pods.ToList(), tls ?? new Dictionary<(string, string), TlsSecretStatus>(), now ?? DateTimeOffset.UtcNow, nodes?.ToList(), gateway).Run();
         return g;
     }
 
@@ -77,8 +85,8 @@ public sealed partial class NetworkGraph
         public bool Exposed => Type is "LoadBalancer" or "NodePort" || ExternalIps.Length > 0;
     }
 
-    private sealed class Builder(NetworkGraph g, List<KubeObject> ingresses, List<KubeObject> classes, List<KubeObject> services, List<KubeObject> slices, List<KubeObject> pods,
-        IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus> tls, DateTimeOffset now, List<KubeObject>? nodeObjects)
+    private sealed partial class Builder(NetworkGraph g, List<KubeObject> ingresses, List<KubeObject> classes, List<KubeObject> services, List<KubeObject> slices, List<KubeObject> pods,
+        IReadOnlyDictionary<(string Namespace, string Secret), TlsSecretStatus> tls, DateTimeOffset now, List<KubeObject>? nodeObjects, GatewayObjects? gateway)
     {
         private readonly Dictionary<string, ServiceInfo> _svc = [];
         private readonly Dictionary<string, NetworkNode> _nodes = [];
@@ -95,6 +103,7 @@ public sealed partial class NetworkGraph
             IndexServices();
             var controllers = Controllers();
             foreach (var ing in ingresses.OrderBy(i => i.Namespace, StringComparer.Ordinal).ThenBy(i => i.Name, StringComparer.Ordinal)) AddIngress(ing, controllers);
+            AddGateways();
             foreach (var s in _svc.Values.Where(s => !s.IsController).OrderBy(s => s.Ns, StringComparer.Ordinal).ThenBy(s => s.Obj.Name, StringComparer.Ordinal)) AddService(s);
             AddNodes();
             Propagate();
@@ -240,17 +249,7 @@ public sealed partial class NetworkGraph
                 var secret = KubeObject.Str(t, "secretName") ?? "";
                 var thosts = string.Join(", ", RbacJson.Strings(t["hosts"]));
                 if (secret.Length == 0) { Line(id, $"TLS: {thosts} (controller default certificate)"); continue; }
-                if (!tls.TryGetValue((ns, secret), out var st) || st.Exists is null) { Line(id, $"TLS: {thosts} → secret {secret} (not checked)"); continue; }
-                if (st.Exists == false) { Line(id, $"TLS: {thosts} → secret {secret} MISSING"); Problem(id, "tls-secret-missing", $"TLS secret {secret} does not exist.", FindingSeverity.High); continue; }
-                if (st.NotAfter is { } na)
-                {
-                    var days = (int)Math.Floor((na - now).TotalDays);
-                    Line(id, $"TLS: {thosts} → secret {secret}, certificate {(days < 0 ? $"expired {-days}d ago" : $"expires in {days}d")}");
-                    if (CertificateScan.HealthFor(days) is var h && h != CertificateHealth.Ok)
-                        Problem(id, h == CertificateHealth.Expired ? "tls-expired" : "tls-expiring", days < 0 ? $"The certificate in {secret} expired {-days} day(s) ago." : $"The certificate in {secret} expires in {days} day(s).",
-                            h == CertificateHealth.ExpiresSoon ? FindingSeverity.Medium : FindingSeverity.High);
-                }
-                else Line(id, $"TLS: {thosts} → secret {secret}");
+                CheckTls(id, ns, secret, thosts);
             }
 
             // exposure: which controller carries this ingress
@@ -280,17 +279,37 @@ public sealed partial class NetworkGraph
                 return;
             }
             foreach (var s in ctl.Services)
+                if (!ControllerService(id, s)) Line(id, "The ingress controller's Service is ClusterIP: this Ingress is NOT reachable from outside the cluster.");
+        }
+
+        /// <summary>The TLS secret of an Ingress or a Gateway listener: whether it exists and how long its certificate lasts, as lines and problems on <paramref name="id"/>.</summary>
+        private void CheckTls(string id, string secretNs, string secret, string thosts)
+        {
+            if (!tls.TryGetValue((secretNs, secret), out var st) || st.Exists is null) { Line(id, $"TLS: {thosts} → secret {secret} (not checked)"); return; }
+            if (st.Exists == false) { Line(id, $"TLS: {thosts} → secret {secret} MISSING"); Problem(id, "tls-secret-missing", $"TLS secret {secret} does not exist.", FindingSeverity.High); return; }
+            if (st.NotAfter is { } na)
             {
-                s.IsController = true;
-                var level = s.Exposed ? ExposureLevel.Outside : ExposureLevel.InCluster;
-                var detail = s.Exposed ? $"{s.Type}{(s.Address.Length > 0 ? " " + s.Address : "")}" : "ClusterIP: in-cluster only";
-                var note = InternalLbNote(s);
-                var lines = new List<string> { $"Service {s.Ns}/{s.Obj.Name} ({s.Type})", $"ports: {PortsText(s)}", $"controller pods: {s.Pods.Count}" };
-                if (s.Address.Length > 0) lines.Add($"address: {s.Address}");
-                if (note is not null) lines.Add(note);
-                AddExposure($"x:svc/{s.Ns}/{s.Obj.Name}", $"{s.Ns}/{s.Obj.Name}", s.Ns, detail + (note is null ? "" : " · private network"), level, id, lines, "", s.Obj, s.Ports.Select(p => p.Number.ToString()));
-                if (!s.Exposed) Line(id, "The ingress controller's Service is ClusterIP: this Ingress is NOT reachable from outside the cluster.");
+                var days = (int)Math.Floor((na - now).TotalDays);
+                Line(id, $"TLS: {thosts} → secret {secret}, certificate {(days < 0 ? $"expired {-days}d ago" : $"expires in {days}d")}");
+                if (CertificateScan.HealthFor(days) is var h && h != CertificateHealth.Ok)
+                    Problem(id, h == CertificateHealth.Expired ? "tls-expired" : "tls-expiring", days < 0 ? $"The certificate in {secret} expired {-days} day(s) ago." : $"The certificate in {secret} expires in {days} day(s).",
+                        h == CertificateHealth.ExpiresSoon ? FindingSeverity.Medium : FindingSeverity.High);
             }
+            else Line(id, $"TLS: {thosts} → secret {secret}");
+        }
+
+        /// <summary>Draws a controller's Service as the exposure node in front of <paramref name="toId"/> (an Ingress or a Gateway). Returns whether the Service is reachable from outside.</summary>
+        private bool ControllerService(string toId, ServiceInfo s)
+        {
+            s.IsController = true;
+            var level = s.Exposed ? ExposureLevel.Outside : ExposureLevel.InCluster;
+            var detail = s.Exposed ? $"{s.Type}{(s.Address.Length > 0 ? " " + s.Address : "")}" : "ClusterIP: in-cluster only";
+            var note = InternalLbNote(s);
+            var lines = new List<string> { $"Service {s.Ns}/{s.Obj.Name} ({s.Type})", $"ports: {PortsText(s)}", $"controller pods: {s.Pods.Count}" };
+            if (s.Address.Length > 0) lines.Add($"address: {s.Address}");
+            if (note is not null) lines.Add(note);
+            AddExposure($"x:svc/{s.Ns}/{s.Obj.Name}", $"{s.Ns}/{s.Obj.Name}", s.Ns, detail + (note is null ? "" : " · private network"), level, toId, lines, "", s.Obj, s.Ports.Select(p => p.Number.ToString()));
+            return s.Exposed;
         }
 
         private void AddExposure(string xid, string label, string? ns, string detail, ExposureLevel level, string toId, List<string> lines, string edgeLabel, KubeObject? source = null, IEnumerable<string>? ports = null)

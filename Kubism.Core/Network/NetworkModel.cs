@@ -25,7 +25,10 @@ public sealed record NetworkNode(string Id, NetworkNodeKind Kind, string Label, 
     public IReadOnlyDictionary<string, string> PortOwners { get; init; } = new Dictionary<string, string>();
     public bool HasProblem => Problems.Count > 0;
     public FindingSeverity? Worst => Problems.Count == 0 ? null : Problems.Max(p => p.Severity);
-    public string KindText => Kind switch { NetworkNodeKind.Exposure => "Exposure", NetworkNodeKind.Ingress => "Ingress", NetworkNodeKind.Service => "Service", NetworkNodeKind.Node => "Node", _ => "Workload" };
+    /// <summary>A Gateway API Gateway sits in the Ingress column; this says which it is ("Gateway"), null for an Ingress.</summary>
+    public string? Flavor { get; init; }
+    public bool IsGateway => Flavor == "Gateway";
+    public string KindText => Kind switch { NetworkNodeKind.Exposure => "Exposure", NetworkNodeKind.Ingress => Flavor ?? "Ingress", NetworkNodeKind.Service => "Service", NetworkNodeKind.Node => "Node", _ => "Workload" };
 }
 
 /// <param name="Label">The full text of the hop (paths, port mapping), for tooltips and the MCP tool.</param>
@@ -39,9 +42,18 @@ public sealed record NetworkEdge(string From, string To, string Label, bool Prob
 /// <summary>What is known about a TLS secret named by an Ingress. Only existence and the public certificate's expiry are read; nothing of the secret is kept.</summary>
 public sealed record TlsSecretStatus(bool? Exists, DateTimeOffset? NotAfter, string? Detail = null);
 
-/// <summary>One URL an Ingress serves: host + path to a backend Service port. <see cref="Host"/> is "*" for a rule with no host (any host).</summary>
+/// <summary>
+/// One URL an Ingress (or a Gateway through a route) serves: host + path to a backend Service port. <see cref="Host"/> is "*" for a rule with no host (any host).
+/// For a Gateway, <c>IngressId</c>/<c>Ingress</c>/<c>Namespace</c> name the Gateway and <c>Class</c> its GatewayClass.
+/// </summary>
 public sealed record NetworkRoute(string IngressId, string Namespace, string Ingress, string? Class, string Host, string Path, string PathType, string Service, string ServicePort,
-    string ServiceId, bool DefaultBackend, bool TlsCovered, bool BackendMissing);
+    string ServiceId, bool DefaultBackend, bool TlsCovered, bool BackendMissing)
+{
+    /// <summary>The Gateway API route that carries it ("HTTPRoute shop/web"); null for an Ingress.</summary>
+    public string? RouteName { get; init; }
+    /// <summary>What to show instead of <c>scheme://host/path</c> (a TCP, UDP, TLS or gRPC route has no such URL).</summary>
+    public string? UrlOverride { get; init; }
+}
 
 /// <summary>A route joined with what serves it, for the "which URL goes through which Ingress" table.</summary>
 public sealed record NetworkRouteRow(NetworkRoute Route, string Url, ExposureLevel Exposure, string Via, string Backend, string Target, string Problems, FindingSeverity? Worst)

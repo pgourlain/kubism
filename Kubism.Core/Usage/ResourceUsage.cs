@@ -50,12 +50,12 @@ public sealed record BrokenReference(Consumer Consumer, string TargetKind, strin
 public sealed class ResourceUsage
 {
     public const string ConfigMap = "ConfigMap", Secret = "Secret", Pvc = "PersistentVolumeClaim", Pv = "PersistentVolume", StorageClass = "StorageClass",
-        ServiceAccount = "ServiceAccount", IngressClass = "IngressClass", Service = "Service";
-    public static readonly IReadOnlyList<string> AnalyzedKinds = [ConfigMap, Secret, Pvc, Pv, StorageClass, ServiceAccount, IngressClass];
+        ServiceAccount = "ServiceAccount", IngressClass = "IngressClass", GatewayClass = "GatewayClass", Service = "Service";
+    public static readonly IReadOnlyList<string> AnalyzedKinds = [ConfigMap, Secret, Pvc, Pv, StorageClass, ServiceAccount, IngressClass, GatewayClass];
     /// <summary>Kinds a reference can point at: the analyzed ones, and Services (an Ingress backend that does not exist is worth reporting).</summary>
     private static readonly string[] TargetKinds = [.. AnalyzedKinds, Service];
     /// <summary>Kinds that hold what refers to the analyzed ones. A missing one means "unused" cannot be trusted.</summary>
-    public static readonly IReadOnlyList<string> ConsumerKinds = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Ingress", "ServiceAccount", "RoleBinding", "ClusterRoleBinding", "HorizontalPodAutoscaler", "PodDisruptionBudget"];
+    public static readonly IReadOnlyList<string> ConsumerKinds = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "Job", "CronJob", "Ingress", "Gateway", "HTTPRoute", "GRPCRoute", "TLSRoute", "TCPRoute", "UDPRoute", "ServiceAccount", "RoleBinding", "ClusterRoleBinding", "HorizontalPodAutoscaler", "PodDisruptionBudget"];
     private static readonly HashSet<string> ControllerKinds = ["ReplicaSet", "StatefulSet", "DaemonSet", "Job", "ReplicationController"];
 
     private ResourceUsage(IReadOnlyList<UsageRow> rows, IReadOnlyList<BrokenReference> broken, IReadOnlyList<DanglingFinding> dangling) { Rows = rows; Broken = broken; Dangling = dangling; }
@@ -78,6 +78,8 @@ public sealed class ResourceUsage
         foreach (var o in all)
         {
             if (o.Kind == "Ingress") AddIngressRefs(o, defaultIngressClass, refs);
+            else if (o.Kind == "Gateway") AddGatewayRefs(o, refs);
+            else if (o.Kind is "HTTPRoute" or "GRPCRoute" or "TLSRoute" or "TCPRoute" or "UDPRoute") AddRouteRefs(o, refs);
             if (o.Kind is "RoleBinding" or "ClusterRoleBinding")
                 foreach (var subject in o.At("subjects") as JsonArray ?? [])
                     if (subject?["kind"]?.ToString() == "ServiceAccount" && subject["name"]?.ToString() is { Length: > 0 } sa)
@@ -194,6 +196,8 @@ public sealed class ResourceUsage
             case IngressClass:
                 if (used.Count > 0) return (UsageStatus.Used, o.Name == defaultIngressClass ? "Default class" : "");
                 return (UsageStatus.Unused, o.Name == defaultIngressClass ? "Default class: unused today, but any ingress without a class would get it" : "No ingress uses it");
+            case GatewayClass:
+                return used.Count > 0 ? (UsageStatus.Used, "") : (UsageStatus.Unused, "No Gateway uses it");
             case Secret:
                 if (used.Count > 0) return (UsageStatus.Used, "");
                 var type = o.StringAt("type") ?? "";
@@ -202,7 +206,7 @@ public sealed class ResourceUsage
                 if (type.StartsWith("bootstrap.kubernetes.io/", StringComparison.Ordinal)) return (UsageStatus.External, "Bootstrap token");
                 if (o.Annotations.TryGetValue("cert-manager.io/certificate-name", out var cert)) return (UsageStatus.External, $"Issued for cert-manager Certificate {cert}: read by what serves the certificate");
                 if (Controller(o) is { } owner) return (UsageStatus.External, $"Owned by {owner}");
-                return (UsageStatus.Unused, type == "kubernetes.io/tls" ? "TLS secret: no ingress or pod refers to it (a gateway or controller may still read it)" : "");
+                return (UsageStatus.Unused, type == "kubernetes.io/tls" ? "TLS secret: no ingress, gateway or pod refers to it (a controller may still read it)" : "");
             default: // ConfigMap
                 if (used.Count > 0) return (UsageStatus.Used, "");
                 if (o.Name == "kube-root-ca.crt") return (UsageStatus.External, "Injected into every namespace by the root CA publisher");
@@ -316,6 +320,27 @@ public sealed class ResourceUsage
             foreach (var path in rule?["http"]?["paths"] as JsonArray ?? [])
                 if (path?["backend"]?["service"]?["name"]?.ToString() is { Length: > 0 } n) backends.Add(n);
         foreach (var b in backends.Distinct()) refs.Add(new Ref(Service, ingress.Namespace, b, C("backend"), false));
+    }
+
+    /// <summary>A Gateway uses its GatewayClass and the Secrets of its TLS listeners (a certificateRef may name another namespace; the ReferenceGrant is the network graph's business).</summary>
+    private static void AddGatewayRefs(KubeObject gateway, List<Ref> refs)
+    {
+        Consumer C(string how) => new(gateway.Kind, gateway.Namespace, gateway.Name, how);
+        if (gateway.StringAt("spec", "gatewayClassName") is { Length: > 0 } cls) refs.Add(new Ref(GatewayClass, null, cls, C("class"), false));
+        foreach (var l in gateway.At("spec", "listeners") as JsonArray ?? [])
+            foreach (var r in l?["tls"]?["certificateRefs"] as JsonArray ?? [])
+                if ((r?["kind"]?.ToString() ?? "Secret") == "Secret" && string.IsNullOrEmpty(r?["group"]?.ToString()) && r?["name"]?.ToString() is { Length: > 0 } n)
+                    refs.Add(new Ref(Secret, r["namespace"]?.ToString() ?? gateway.Namespace, n, C("TLS"), false));
+    }
+
+    /// <summary>A route uses the Services it sends traffic to (in its own namespace unless the backend names another).</summary>
+    private static void AddRouteRefs(KubeObject route, List<Ref> refs)
+    {
+        var consumer = new Consumer(route.Kind, route.Namespace, route.Name, "backend");
+        foreach (var rule in route.At("spec", "rules") as JsonArray ?? [])
+            foreach (var b in rule?["backendRefs"] as JsonArray ?? [])
+                if ((b?["kind"]?.ToString() ?? "Service") == "Service" && string.IsNullOrEmpty(b?["group"]?.ToString()) && b?["name"]?.ToString() is { Length: > 0 } n)
+                    refs.Add(new Ref(Service, b["namespace"]?.ToString() ?? route.Namespace, n, consumer, false));
     }
 
     /// <summary>A StatefulSet's claims are named "{template}-{set}-{ordinal}" and carry no owner reference: they are read from the naming rule.</summary>

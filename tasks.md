@@ -380,7 +380,9 @@ Read-only (no `ClusterActions`). One page, under Network in the sidebar, that sh
   - Done: `network_exposure` (namespace, exposure, problemsOnly, search, includeInternalServices); 3 tests; `docs/mcp.md` updated.
 - [x] ADR `docs/adr/000X-network-graph.md`: how exposure is derived, what is not visible (DNS, firewall, WAF, service mesh, cloud load balancer rules), controller discovery.
   - Done: `docs/adr/0005-network-graph.md`.
-- [ ] Second batch: Gateway API (`Gateway`, `HTTPRoute`) as another source of chains; NetworkPolicy overlay (isolated pods, allowed ingress per pod).
+- [x] Second batch, Gateway API: a Gateway is a chain source in the Ingress column (`NetworkGraph.Gateway.cs`, `GatewayApi`): listeners in its box, `HTTPRoute`/`GRPCRoute`/`TLSRoute`/`TCPRoute`/`UDPRoute` matched by `parentRefs` (section, port, compatible protocol) into edges to Services and rows of the Routes tab (new *Route* column; TCP/UDP/TLS/gRPC URLs), exposure from the controller's Service (labels set by Envoy Gateway, Istio, NGINX Gateway Fabric, Cilium; shared Service for Traefik/Kong) or an external controller (AGC, GKE, VPC Lattice), the controller's own conditions as problems, `ReferenceGrant` checks for backends and listener certificates, TLS lookups, sidebar entries under Network (and out of Custom Resources), Usage (GatewayClass, certificates, backends) and MCP `network_exposure`. Read only where the CRDs exist (`NetworkStore(discovered:)`, `NetworkLoader(discovered:)`). Discovery now lists a kind served only by an older version.
+  - Done. `Data/gateway.yaml` (4 Gateways: healthy behind an Envoy LoadBalancer, Envoy behind ClusterIP with a missing backend / foreign-namespace route / TCPRoute, Application Gateway for Containers with a missing certificate and a GRPCRoute without grant, a Gateway whose class is not accepted), `NetworkGatewayTests`, `GatewayUiTests` (screenshots `72`, `73`), `McpNetworkTests`, `DiscoveryTests`, `ResourceUsageTests`, ADR 0005. **Open:** `BackendTLSPolicy`, `ListenerSet`, route filters, namespace selectors in `allowedRoutes`, hostname intersection between a route and its listener, implementation-specific policies, hostname/listener-level status of routes; Gateway API kinds are followed from the discovery taken when the page opens (a CRD installed later needs the page reopened); not compared with a real cluster yet.
+- [ ] NetworkPolicy overlay (isolated pods, allowed ingress per pod).
 
 **Validation**
 - [ ] (automated) Classification, port-resolution and namespace-filter tests green on the 3 OSes.
@@ -388,6 +390,7 @@ Read-only (no `ClusterActions`). One page, under Network in the sidebar, that sh
 - [ ] (manual) On AKS with ingress-nginx or AGIC: every Ingress and its exposure level match what `kubectl get ingress,svc -A` and the cloud load balancers show; an internal ingress is not reported as exposed.
 - [ ] (manual) Filtering by an application namespace keeps the controller in its own namespace in the chain.
 - [ ] (manual) A service with no ready endpoint and a wrong `targetPort` are flagged on a real cluster.
+- [ ] (manual) Gateway API on a kind cluster with Envoy Gateway (or Istio) and on AKS with Application Gateway for Containers: every Gateway, route and backend matches `kubectl get gateway,httproute -A`, the exposure level matches the controller's Service or load balancer, a route to another namespace without a `ReferenceGrant` and a route the listener refuses are flagged as the controller's own status says.
 
 ## Phase 12 — MCP server
 

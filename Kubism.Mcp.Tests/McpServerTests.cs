@@ -351,7 +351,7 @@ public class McpNetworkTests
     {
         await using var f = await McpFixture.StartAsync([]);
         var r = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["exposure"] = "outside" }))!;
-        Assert.True(r["complete"]!.GetValue<bool>());
+        Assert.True(r["complete"]!.GetValue<bool>(), r["warning"]?.ToString());
         Assert.Contains("DNS, firewalls", r["limits"]!.ToString());
         Assert.Equal("outside the cluster", Node(r, "i:shop/shop")["exposure"]!.ToString());
         Assert.Equal("outside the cluster", Node(r, "x:svc/ingress-nginx/ingress-nginx-controller")["exposure"]!.ToString());
@@ -365,6 +365,21 @@ public class McpNetworkTests
         Assert.Equal(("shop/shop", "api:80", "outside the cluster"), (route["ingress"]!.ToString(), route["backend"]!.ToString(), route["exposure"]!.ToString()));
         Assert.Contains("Deployment api", route["pods"]!.ToString());
         Assert.Contains("ingress-nginx/ingress-nginx-controller", route["comesInThrough"]!.ToString());
+    }
+
+    [Fact]
+    public async Task Network_exposure_reads_gateway_api_where_the_cluster_serves_it()
+    {
+        await using var f = await McpFixture.StartAsync([]);
+        var r = JsonNode.Parse(await f.CallAsync("network_exposure", new() { ["cluster"] = "fake", ["namespace"] = "edge" }))!;
+        Assert.True(r["complete"]!.GetValue<bool>(), r["warning"]?.ToString());
+        var gw = Node(r, "g:edge/public");
+        Assert.Equal(("Gateway", "outside the cluster"), (gw["kind"]!.ToString(), gw["exposure"]!.ToString()));
+        Assert.Contains("https :443 shop.gw.example.com", gw["matches"]!.AsArray().Select(x => x!.ToString()));
+        Assert.Contains(Node(r, "g:edge/internal")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "route-not-allowed");
+        Assert.Contains(Node(r, "g:edge/azure")["problems"]!.AsArray(), p => p!["code"]!.ToString() == "reference-not-permitted");
+        var route = r["routes"]!.AsArray().Select(x => x!.AsObject()).Single(x => x["url"]!.ToString() == "https://shop.gw.example.com/api");
+        Assert.Equal(("edge/public", "HTTPRoute edge/web", "envoy", "api:8080"), (route["ingress"]!.ToString(), route["route"]!.ToString(), route["class"]!.ToString(), route["backend"]!.ToString()));
     }
 
     [Fact]

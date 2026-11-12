@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Kubism.Core.Network;
 using CommunityToolkit.Mvvm.Input;
 using Kubism.Core;
 using Kubism.Core.Actions;
@@ -118,6 +119,10 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
             var g = new NavNode(section.T());
             foreach (var n in names)
                 if (Find(n) is { } k) g.Children.Add(new NavNode(Plural(k.Kind), NavTarget.Kind, k));
+            // Gateway API (where installed) sits with the other network kinds, not under Custom Resources.
+            if (section == "Network")
+                foreach (var gk in kinds.Where(k => GatewayApi.IsGatewayApi(k.Group)).OrderBy(k => GatewayOrder(k.Kind)).ThenBy(k => k.Kind, StringComparer.Ordinal))
+                    g.Children.Add(new NavNode(Plural(gk.Kind), NavTarget.Kind, gk));
             if (section == "Workloads" && Find("pods") is not null) g.Children.Add(new NavNode("Images".T(), NavTarget.Images, null, "images"));
             // The RBAC graph lives with the RBAC kinds; it needs to list at least the bindings or the roles.
             if (section == "Access Control" && (Find("rolebindings") is not null || Find("clusterrolebindings") is not null)) g.Children.Add(new NavNode("RBAC graph".T(), NavTarget.Rbac, null, "security"));
@@ -135,7 +140,7 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (kinds.Any(k => Core.Delivery.GitOpsApp.IsGitOpsKind(k.Group, k.Resource))) NavRoots.Add(new NavNode("GitOps".T(), NavTarget.GitOps, null, "gitops"));
         NavRoots.Add(new NavNode("Compare".T(), NavTarget.Compare, null, "compare"));
         NavRoots.Add(new NavNode("Security".T(), NavTarget.Security, null, "security"));
-        var custom = kinds.Where(k => !BuiltinGroups.Contains(k.Group)).GroupBy(k => k.Group).OrderBy(g => g.Key).ToList();
+        var custom = kinds.Where(k => !BuiltinGroups.Contains(k.Group) && !GatewayApi.IsGatewayApi(k.Group)).GroupBy(k => k.Group).OrderBy(g => g.Key).ToList();
         var cr = new NavNode("Custom Resources".T()) { IsExpanded = false };
         cr.Children.Add(new NavNode("Definitions (CRDs)", NavTarget.Kind, Find("customresourcedefinitions")));
         foreach (var g in custom)
@@ -154,8 +159,13 @@ public sealed partial class WorkspaceViewModel : ViewModelBase, IClosable
         if (selectedTitle is not null) SelectedNav = Flatten(NavRoots).FirstOrDefault(n => n.Title == selectedTitle && n.Target != NavTarget.Group);
     }
 
+    /// <summary>Gateway API kinds in the order of the traffic: class, gateway, routes, then grants and policies.</summary>
+    private static int GatewayOrder(string kind) => kind == "GatewayClass" ? 0 : kind == "Gateway" ? 1 : GatewayApi.RouteKinds.Contains(kind) ? 2 + GatewayApi.RouteKinds.ToList().IndexOf(kind) : 10;
+
     private static string Plural(string kind) => kind switch
     {
+        "GatewayClass" => "Gateway Classes", "Gateway" => "Gateways", "HTTPRoute" => "HTTP Routes", "GRPCRoute" => "gRPC Routes", "TLSRoute" => "TLS Routes", "TCPRoute" => "TCP Routes", "UDPRoute" => "UDP Routes",
+        "ReferenceGrant" => "Reference Grants", "BackendTLSPolicy" => "Backend TLS Policies", "ListenerSet" => "Listener Sets",
         "Endpoints" => "Endpoints", "NetworkPolicy" => "Network Policies", "Ingress" => "Ingresses", "IngressClass" => "Ingress Classes", "StorageClass" => "Storage Classes",
         "PodDisruptionBudget" => "Pod Disruption Budgets", "HorizontalPodAutoscaler" => "HPAs", "EndpointSlice" => "Endpoint Slices", "ResourceQuota" => "Resource Quotas",
         "LimitRange" => "Limit Ranges", "PersistentVolumeClaim" => "Persistent Volume Claims", "PersistentVolume" => "Persistent Volumes", "ClusterRole" => "Cluster Roles",

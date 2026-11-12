@@ -27,7 +27,7 @@ public class NetworkUiTests
         var (h, ws, vm) = await OpenAsync();
         await using var _ = h;
         Assert.Contains(ws.NavRoots.Single(n => n.Title == "Network").Children, n => n.Target == NavTarget.NetworkGraph);
-        Assert.True(vm.Graph.IsComplete);
+        Assert.True(vm.Graph.IsComplete, vm.Graph.IncompleteWarning);
         Assert.False(vm.HasWarning);
         var v = vm.View!;
         Assert.Equal(new[] { 0, 1, 2, 3 }, v.Nodes.Select(n => n.Column).Distinct().Order());

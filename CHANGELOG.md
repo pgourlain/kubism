@@ -4,6 +4,12 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Added
+- **Gateway API** in the Network section. Where a cluster has the CRDs, *Gateway Classes*, *Gateways*, *HTTP/gRPC/TLS/TCP/UDP Routes* and *Reference Grants* are listed under Network in the sidebar (they no longer sit under Custom Resources). The **Network graph** draws a Gateway like an Ingress, with its listeners, and each attached route becomes edges to its backend Services and rows in the Routes tab (new *Route* column). Exposure comes from the controller's Service or from a controller that runs outside the cluster (Application Gateway for Containers, GKE, VPC Lattice). Problems use what the controller reported (GatewayClass or Gateway not accepted or programmed, route not accepted, unresolved references, listener conditions) plus our own checks: a route no listener accepts, a missing backend Service or port, a missing or expiring listener certificate, and cross-namespace backends or certificates with no `ReferenceGrant` for that kind of route. The **Usage** page (Network) lists unused GatewayClasses and broken references from Gateways and routes; a TLS Secret used by a Gateway is no longer reported as not referenced. MCP `network_exposure` returns Gateways, their routes (`route` field) and problems.
+- `--demo`: the demo workloads are now reachable on the Network graph: `web` and `api` through a public and an internal Ingress and an Application Gateway for Containers Gateway, `checkout` through an Envoy Gateway; the Services have EndpointSlices and the demo pods carry the `Ready` condition, so the graph shows a healthy cluster (the `shop`, `tools` and `edge` namespaces keep the broken cases).
+
+### Fixed
+- Discovery read only the preferred version of each API group, so a kind served only by an older version was missing everywhere (Gateway API's `ReferenceGrant` in `v1beta1` and `TCPRoute` in `v1alpha2`). A resource is now listed at the first version that serves it.
 ### Fixed
 - Grids can be sorted from their header everywhere: columns that show a badge or a gauge (status, level, verdict, exposure, CPU/memory bars, expiry…) were not sortable. The pod/resource list now shows a ▲/▼ arrow on the sorted column. `GridSortingTests` fails when a titled template column has no `SortMemberPath`.
 - A narrow grid column no longer cuts its title under an invisible block: the header kept 32 px for a sort arrow even on unsorted columns. The title now uses the whole width and ends with "…" when it does not fit.

@@ -23,7 +23,7 @@ public sealed class NetworkGraphControl : Control
 
     public const double BoxW = 250, BoxH = 60, GapX = 100, GapY = 12, Pad = 14, HeaderH = 22, LineH = 13, MaxFilterLines = 6, BadgeH = 16;
     private static readonly Typeface Face = new("Inter, Segoe UI, Helvetica Neue, sans-serif");
-    private static readonly string[] Headers = ["Exposure", "Ingresses (what they match)", "Services", "Workloads", "Nodes (where the pods run)"];
+    private static readonly string[] Headers = ["Exposure", "Ingresses and Gateways (what they match)", "Services", "Workloads", "Nodes (where the pods run)"];
 
     private NetworkView? _layoutFor;
     private double[] _tops = [];

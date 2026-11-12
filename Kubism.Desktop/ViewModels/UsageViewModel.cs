@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Kubism.Core.Network;
 using CommunityToolkit.Mvvm.Input;
 using Kubism.Core.Api;
 using Kubism.Core.Usage;
@@ -75,7 +76,7 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
             UsageMode.Config => ["ConfigMaps", "Secrets", "Unread keys", "HPA & PDB", "Broken references"],
             UsageMode.Storage => ["Claims", "Volumes", "Storage classes", "Broken references"],
             UsageMode.Access => ["Service accounts", "Broken references"],
-            _ => ["Ingress classes", "Broken references"],
+            _ => ["Ingress & gateway classes", "Broken references"],
         };
         for (var i = 0; i < Sections.Count; i++) Tabs.Add(new SectionTab(Sections[i], i) { IsActive = i == 0 });
         if (restore is not null)
@@ -142,10 +143,10 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
             string[] targets, consumers;
             switch (Mode)
             {
-                case UsageMode.Config: targets = ["configmaps", "secrets"]; consumers = [.. workloads, "ingresses", "serviceaccounts", "horizontalpodautoscalers", "poddisruptionbudgets"]; break;
+                case UsageMode.Config: targets = ["configmaps", "secrets"]; consumers = [.. workloads, "ingresses", "gateways", "serviceaccounts", "horizontalpodautoscalers", "poddisruptionbudgets"]; break;
                 case UsageMode.Storage: targets = ["persistentvolumeclaims", "persistentvolumes", "storageclasses"]; consumers = workloads; break;
                 case UsageMode.Access: targets = ["serviceaccounts"]; consumers = [.. workloads, "rolebindings", "clusterrolebindings"]; break;
-                default: targets = ["ingressclasses", "services"]; consumers = ["ingresses"]; break;
+                default: targets = ["ingressclasses", "gatewayclasses", "services"]; consumers = ["ingresses", "gateways", .. GatewayApi.RouteKinds.Select(GatewayApi.Resource)]; break;
             }
             var listed = new HashSet<string>();
             var notRead = new List<string>();
@@ -155,7 +156,10 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
 
             async Task ReadAsync(string resource, bool isTarget)
             {
-                var kind = _ws.Session.Discovery.FindByName(resource);
+                // Gateway API is optional and "gateways" also names other groups' kinds (Istio): only the Gateway API group counts, and not having it is not a failure.
+                var gatewayApi = GatewayApiResources.Contains(resource);
+                var kind = gatewayApi ? _ws.Session.Discovery.Kinds.FirstOrDefault(k => GatewayApi.IsGatewayApi(k.Group) && k.Resource == resource) : _ws.Session.Discovery.FindByName(resource);
+                if (kind is null && gatewayApi) return;
                 if (kind is null || !kind.CanList) { if (!isTarget || kind is not null) lock (gate) notRead.Add(resource); return; }
                 var found = new List<KubeObject>();
                 try
@@ -194,16 +198,18 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
         finally { IsLoading = false; }
     }
 
+    private static readonly HashSet<string> GatewayApiResources = [.. GatewayApi.Kinds.Select(GatewayApi.Resource)];
+
     private string[] ModeKinds() => Mode switch
     {
         UsageMode.Config => ["ConfigMap", "Secret"],
         UsageMode.Storage => ["PersistentVolumeClaim", "PersistentVolume", "StorageClass"],
         UsageMode.Access => ["ServiceAccount"],
-        _ => ["IngressClass"],
+        _ => ["IngressClass", "GatewayClass"],
     };
 
     /// <summary>What a reference points at in this mode (Network also reports an ingress backend Service that does not exist).</summary>
-    private string[] BrokenKinds() => Mode == UsageMode.Network ? ["IngressClass", "Service"] : Mode == UsageMode.Access ? ["ServiceAccount"] : ModeKinds();
+    private string[] BrokenKinds() => Mode == UsageMode.Network ? ["IngressClass", "GatewayClass", "Service"] : Mode == UsageMode.Access ? ["ServiceAccount"] : ModeKinds();
 
     private string[] SectionKinds() => Mode switch
     {

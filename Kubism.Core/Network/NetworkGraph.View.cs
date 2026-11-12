@@ -77,7 +77,7 @@ public sealed partial class NetworkGraph
     {
         var ingress = byId[r.IngressId];
         var scheme = r.TlsCovered ? "https" : "http";
-        var url = r.DefaultBackend ? "(default backend)" : $"{scheme}://{r.Host}{(r.Path.Length == 0 ? "/" : r.Path)}";
+        var url = r.UrlOverride ?? (r.DefaultBackend ? "(default backend)" : $"{scheme}://{r.Host}{(r.Path.Length == 0 ? "/" : r.Path)}");
         var via = string.Join("; ", _edges.Where(e => e.To == r.IngressId && byId.TryGetValue(e.From, out var x) && x.Kind == NetworkNodeKind.Exposure)
             .Select(e => byId[e.From]).Select(x => x.Detail.Length > 0 ? $"{x.Label} · {x.Detail}" : x.Label));
         var service = byId.GetValueOrDefault(r.ServiceId);

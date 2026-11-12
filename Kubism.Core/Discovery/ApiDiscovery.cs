@@ -52,17 +52,20 @@ public sealed class ApiDiscovery(IKubeTransport transport)
         foreach (var g in (list["items"] as JsonArray ?? []).OfType<JsonObject>())
         {
             var group = KubeObject.Str(g["metadata"] as JsonObject ?? new JsonObject(), "name") ?? "";
-            // The first version is the preferred one (servers sort by priority).
-            var versions = (g["versions"] as JsonArray ?? []).OfType<JsonObject>().ToList();
-            if (versions.Count == 0) continue;
-            var v = versions[0];
-            var version = KubeObject.Str(v, "version") ?? "";
-            foreach (var r in (v["resources"] as JsonArray ?? []).OfType<JsonObject>())
+            // Versions come sorted by priority, the preferred one first. A resource is listed at the first version that serves it: a kind served only by an older
+            // version (Gateway API's ReferenceGrant in v1beta1 and TCPRoute in v1alpha2, next to v1 GatewayClass, Gateway and HTTPRoute) is still found.
+            var seen = new HashSet<string>();
+            foreach (var v in (g["versions"] as JsonArray ?? []).OfType<JsonObject>())
             {
-                var rk = r["responseKind"] as JsonObject;
-                yield return new ResourceKind(group, version, KubeObject.Str(r, "resource") ?? "", KubeObject.Str(rk ?? new JsonObject(), "kind") ?? "",
-                    KubeObject.Str(r, "scope") == "Namespaced", Strs(r["verbs"]), Strs(r["shortNames"]), Strs(r["categories"]),
-                    (r["subresources"] as JsonArray ?? []).OfType<JsonObject>().Select(s => KubeObject.Str(s, "subresource") ?? "").ToList());
+                var version = KubeObject.Str(v, "version") ?? "";
+                foreach (var r in (v["resources"] as JsonArray ?? []).OfType<JsonObject>())
+                {
+                    if (!seen.Add(KubeObject.Str(r, "resource") ?? "")) continue;
+                    var rk = r["responseKind"] as JsonObject;
+                    yield return new ResourceKind(group, version, KubeObject.Str(r, "resource") ?? "", KubeObject.Str(rk ?? new JsonObject(), "kind") ?? "",
+                        KubeObject.Str(r, "scope") == "Namespaced", Strs(r["verbs"]), Strs(r["shortNames"]), Strs(r["categories"]),
+                        (r["subresources"] as JsonArray ?? []).OfType<JsonObject>().Select(s => KubeObject.Str(s, "subresource") ?? "").ToList());
+                }
             }
         }
     }
@@ -79,7 +82,10 @@ public sealed class ApiDiscovery(IKubeTransport transport)
             var ver = KubeObject.Str(pv ?? new JsonObject(), "version")
                       ?? KubeObject.Str((g["versions"] as JsonArray)?.FirstOrDefault() as JsonObject ?? new JsonObject(), "version");
             if (ver is not null) groups.Add((name, ver));
+            // The other served versions follow the preferred one: they only add the kinds it does not serve.
+            foreach (var other in (g["versions"] as JsonArray ?? []).OfType<JsonObject>().Select(x => KubeObject.Str(x, "version")).Where(x => x is not null && x != ver)) groups.Add((name, other!));
         }
+        var seenResources = new HashSet<(string, string)>();
 
         foreach (var (group, version) in groups)
         {
@@ -92,6 +98,7 @@ public sealed class ApiDiscovery(IKubeTransport transport)
                 foreach (var r in all.Where(r => !(KubeObject.Str(r, "name") ?? "").Contains('/')))
                 {
                     var name = KubeObject.Str(r, "name")!;
+                    if (!seenResources.Add((group, name))) continue;
                     var subNames = subs.Select(s => KubeObject.Str(s, "name")!).Where(n => n.StartsWith(name + "/")).Select(n => n[(name.Length + 1)..]).ToList();
                     result.Add(new ResourceKind(group, version, name, KubeObject.Str(r, "kind") ?? "", r["namespaced"]?.GetValue<bool>() ?? false,
                         Strs(r["verbs"]), Strs(r["shortNames"]), Strs(r["categories"]), subNames));
