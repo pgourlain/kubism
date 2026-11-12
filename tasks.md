@@ -460,6 +460,26 @@ Read-only (no `ClusterActions`). One page, under Network in the sidebar, that sh
 - [ ] (automated) `ExplorationTests` and `UiExplorationTests` green on the 3 OSes.
 - [ ] (manual) On kind and AKS: the graph of a deployment shows its ingress, service, pods and config; opening a node from the graph works; comparing two real clusters (a namespace in staging and production) lists the expected drift and no Secret value.
 
+## Phase 15 — .NET 11 migration
+
+.NET 10 is an LTS release, .NET 11 a standard-term one: move only once every dependency below ships a build that supports `net11.0`, and keep the switch to one commit that can be reverted.
+
+- [ ] **Decision record** `docs/adr/0007-dotnet-11.md`: why move (runtime/JIT/GC gains, AOT and trimming improvements, C# version), support window of .NET 11 vs .NET 10 LTS, what is blocked and by which package. If a blocker remains, record "stay on net10.0" and stop here.
+- [ ] **Dependency check**: Avalonia 12 (and `Avalonia.Controls.DataGrid`, `Avalonia.AvaloniaEdit`, `AvaloniaEdit.TextMate`, `Avalonia.Headless.XUnit`), `KubernetesClient`, `ModelContextProtocol`, `YamlDotNet`, `CommunityToolkit.Mvvm` (source generators), `Microsoft.Data.Sqlite` (native `e_sqlite3` per RID), xunit v3 + Microsoft.Testing.Platform, the terminal engine chosen in ADR 0002. Note for each one the version that supports `net11.0` (or that it is TFM-agnostic `netstandard2.0`/`net8.0`).
+- [ ] **Retarget**: `global.json` (`sdk.version` 11.0.100, `rollForward: latestFeature`), `TargetFramework` `net11.0` in `Directory.Build.props`, `Microsoft.Extensions.*` and `Microsoft.Data.Sqlite` to 11.0.x in `Directory.Packages.props`, `dotnet-version: 11.0.x` in `ci.yml` and `release.yml`.
+- [ ] **Hard-coded `net10.0` paths**: `ci.yml` (screenshot upload path), `Kubism.Mcp.Tests/McpServerTests.cs` (path to `Kubism.dll`), `docs/mcp.md`, `CLAUDE.md` (stack, commands, screenshot path). Prefer computing the path from `AppContext.BaseDirectory` in tests so the next TFM change touches no test.
+- [ ] **Warnings and analyzers**: Core and Kube stay warnings-as-errors clean; new analyzer warnings and obsoletions (`SYSLIB*`) are fixed, not suppressed, unless the ADR names the reason. Trim/AOT warnings stay at zero in our projects.
+- [ ] **AOT and JSON**: `AotJsonTests` green; rerun the ADR 0001 AOT spike on `net11.0` (compile **and** link on osx-arm64, linux-x64, win-x64) and update ADR 0001 with the result: if the link now passes on all three, releases may switch to Native AOT (separate task, not part of this phase).
+- [ ] **Behaviour changes to check against our code**: `System.Text.Json` defaults and source-generator output, `HttpClient`/`SocketsHttpHandler` (TLS client-certificate selection in `KubeTls`, `MutualTlsTests` on Windows), `ClientWebSocket` (exec and port-forward channels), `FileSystemWatcher` (kubeconfig catalog), `Process` start and PATH resolution for exec plugins on macOS.
+- [ ] **Packaging**: `packaging/package.sh` for win-x64, linux-x64, osx-arm64; `check-macho-archs.sh` still finds only arm64 slices (the new runtime's native libraries included); package size noted before/after in the commit message.
+- [ ] CHANGELOG entry and README "Requirements" (none for self-contained packages; .NET 11 SDK to build from source).
+
+**Validation**
+- [ ] (automated) `dotnet build Kubism.slnx` and every test project green on the 3 OSes in CI with the .NET 11 SDK; headless screenshots identical or differences explained.
+- [ ] (automated) Release workflow builds the three packages on `net11.0`; macOS Mach-O check passes.
+- [ ] (manual) On each OS: the packaged app starts, connects to kind and to AKS with `kubelogin` (exec plugin found from a Finder/Dock launch on macOS), lists pods with live updates, opens a shell, starts a port-forward, and `Kubism --mcp` answers `list_clusters`.
+- [ ] (manual) Startup time and memory with 5 clusters connected compared with the last `net10.0` build; no regression beyond 10 %.
+
 ## Criteria for 1.0
 
 - [ ] Validation checklists of every phase passed on real macOS, Linux and Windows machines.
