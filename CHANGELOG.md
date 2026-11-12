@@ -4,6 +4,8 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-12
+
 ### Added
 - **Gateway API** in the Network section. Where a cluster has the CRDs, *Gateway Classes*, *Gateways*, *HTTP/gRPC/TLS/TCP/UDP Routes* and *Reference Grants* are listed under Network in the sidebar (they no longer sit under Custom Resources). The **Network graph** draws a Gateway like an Ingress, with its listeners, and each attached route becomes edges to its backend Services and rows in the Routes tab (new *Route* column). Exposure comes from the controller's Service or from a controller that runs outside the cluster (Application Gateway for Containers, GKE, VPC Lattice). Problems use what the controller reported (GatewayClass or Gateway not accepted or programmed, route not accepted, unresolved references, listener conditions) plus our own checks: a route no listener accepts, a missing backend Service or port, a missing or expiring listener certificate, and cross-namespace backends or certificates with no `ReferenceGrant` for that kind of route. The **Usage** page (Network) lists unused GatewayClasses and broken references from Gateways and routes; a TLS Secret used by a Gateway is no longer reported as not referenced. MCP `network_exposure` returns Gateways, their routes (`route` field) and problems.
 - `--demo`: the demo workloads are now reachable on the Network graph: `web` and `api` through a public and an internal Ingress and an Application Gateway for Containers Gateway, `checkout` through an Envoy Gateway; the Services have EndpointSlices and the demo pods carry the `Ready` condition, so the graph shows a healthy cluster (the `shop`, `tools` and `edge` namespaces keep the broken cases).
@@ -174,7 +176,9 @@ First release.
 - Native AOT releases, own kubeconfig reader, third-party notices, About dialog, Arch/Omarchy package, macOS dmg with Applications shortcut.
 - CI and release workflows, headless UI tests, `FakeApiServer`, integration tests against kind.
 
-[Unreleased]: https://github.com/pgourlain/kubism/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/pgourlain/kubism/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/pgourlain/kubism/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/pgourlain/kubism/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pgourlain/kubism/compare/v0.3.9...v0.4.0
 [0.3.9]: https://github.com/pgourlain/kubism/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/pgourlain/kubism/compare/v0.3.7...v0.3.8
