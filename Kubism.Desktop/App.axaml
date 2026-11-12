@@ -38,6 +38,8 @@
 
   <Application.Resources>
     <ResourceDictionary>
+      <!-- The DataGrid header keeps this much room for the sort arrow even when the column is not sorted, and clips the title under it. -->
+      <x:Double x:Key="DataGridSortIconMinWidth">0</x:Double>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="KubismBgBrush" Color="#F6F7F9" />
@@ -154,6 +156,10 @@
     <Style Selector="DataGridCell TextBlock">
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
       <Setter Property="ToolTip.Tip" Value="{ReflectionBinding $self.Text}" />
+    </Style>
+    <!-- A narrow column trims its title with an ellipsis instead of cutting it. -->
+    <Style Selector="DataGridColumnHeader TextBlock">
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
     <Style Selector="DataGridColumnHeader"><Setter Property="Foreground" Value="{DynamicResource KubismMutedBrush}" /><Setter Property="Background" Value="Transparent" /><Setter Property="FontWeight" Value="Medium" /></Style>
     <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle"><Setter Property="Fill" Value="{DynamicResource KubismAccentSoftBrush}" /></Style>

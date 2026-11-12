@@ -25,7 +25,7 @@
         <DataGrid.Columns>
           <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" x:DataType="vm:GitOpsRow" />
           <DataGridTextColumn Header="Name" Binding="{Binding Display}" x:DataType="vm:GitOpsRow" Width="*" MinWidth="190" />
-          <DataGridTemplateColumn Header="Sync" Width="110">
+          <DataGridTemplateColumn Header="Sync" Width="110" SortMemberPath="Sync">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:GitOpsRow">
                 <TextBlock Text="{Binding Sync}" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />

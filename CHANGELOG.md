@@ -4,6 +4,10 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Fixed
+- Grids can be sorted from their header everywhere: columns that show a badge or a gauge (status, level, verdict, exposure, CPU/memory bars, expiry…) were not sortable. The pod/resource list now shows a ▲/▼ arrow on the sorted column. `GridSortingTests` fails when a titled template column has no `SortMemberPath`.
+- A narrow grid column no longer cuts its title under an invisible block: the header kept 32 px for a sort arrow even on unsorted columns. The title now uses the whole width and ends with "…" when it does not fit.
+
 ## [0.5.0] - 2026-11-10
 
 ### Added

@@ -127,7 +127,7 @@
           </StackPanel>
           <DataGrid Grid.Row="3" ItemsSource="{Binding WhoCanRows}" SelectedItem="{Binding SelectedWho}" IsReadOnly="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Who can">
             <DataGrid.Columns>
-              <DataGridTemplateColumn Header="Subject" Width="1.3*">
+              <DataGridTemplateColumn Header="Subject" Width="1.3*" SortMemberPath="Subject">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:WhoCanRow">
                     <TextBlock Text="{Binding Subject}" VerticalAlignment="Center" Margin="8,0" FontWeight="SemiBold" Foreground="{Binding Severity, Converter={x:Static app:Converters.SeverityBrush}}" />

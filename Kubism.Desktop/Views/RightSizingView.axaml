@@ -77,7 +77,7 @@
                   <DataTemplate x:DataType="vm:ContainerRowViewModel"><CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}" HorizontalAlignment="Center" AutomationProperties.Name="Select container" /></DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="Verdict" Width="150">
+              <DataGridTemplateColumn Header="Verdict" Width="150" SortMemberPath="Verdict">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ContainerRowViewModel">
                     <Border Classes="pill" Margin="4" HorizontalAlignment="Left" BorderBrush="{Binding VerdictSeverity, Converter={x:Static app:Converters.SeverityBrush}}">
@@ -106,7 +106,7 @@
               <DataGridTextColumn Header="Workload" Binding="{Binding Workload}" x:DataType="vm:ContainerRowViewModel" Width="1.5*" MinWidth="170" />
               <DataGridTextColumn Header="Container" Binding="{Binding Container}" x:DataType="vm:ContainerRowViewModel" />
               <DataGridTextColumn Header="Repl." Binding="{Binding Replicas}" x:DataType="vm:ContainerRowViewModel" />
-              <DataGridTemplateColumn Header="CPU  (req | p95 | max)" Width="1.3*" MinWidth="170">
+              <DataGridTemplateColumn Header="CPU  (req | p95 | max)" Width="1.3*" MinWidth="170" SortMemberPath="CpuP95V">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ContainerRowViewModel">
                     <StackPanel Margin="6,2" Spacing="1">
@@ -125,7 +125,7 @@
                   </TextBlock>
                 </DataGridTextColumn.Header>
               </DataGridTextColumn>
-              <DataGridTemplateColumn Header="Memory  (req | p95 | max)" Width="1.3*" MinWidth="170">
+              <DataGridTemplateColumn Header="Memory  (req | p95 | max)" Width="1.3*" MinWidth="170" SortMemberPath="MemP95V">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ContainerRowViewModel">
                     <StackPanel Margin="6,2" Spacing="1">
@@ -144,7 +144,7 @@
                   </TextBlock>
                 </DataGridTextColumn.Header>
               </DataGridTextColumn>
-              <DataGridTemplateColumn Header="Verdict">
+              <DataGridTemplateColumn Header="Verdict" SortMemberPath="Verdict">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate x:DataType="vm:ContainerRowViewModel">
                     <Border CornerRadius="9" Padding="8,1" Margin="4" HorizontalAlignment="Left" BorderThickness="1" BorderBrush="{Binding VerdictSeverity, Converter={x:Static app:Converters.SeverityBrush}}">

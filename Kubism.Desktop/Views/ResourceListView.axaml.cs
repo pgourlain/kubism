@@ -95,6 +95,20 @@ public partial class ResourceListView : UserControl
     {
         if (e.PropertyName == nameof(ResourceListViewModel.SelectedRow) && _vm?.SelectedRow is { } row && !ReferenceEquals(Grid.SelectedItem, row) && _vm.Rows.Contains(row))
             Grid.SelectedItem = row;
+        if (e.PropertyName is nameof(ResourceListViewModel.SortColumn) or nameof(ResourceListViewModel.SortDescending)) ShowSortGlyph();
+    }
+
+    /// <summary>The list sorts itself (the grid's own sorting is bypassed), so the header arrow is drawn from the view model's state.</summary>
+    private void ShowSortGlyph()
+    {
+        if (_vm is null) return;
+        var cols = _vm.Columns;
+        foreach (var c in Grid.Columns)
+        {
+            if (c.Tag is not int i || i >= cols.Count) continue;
+            var arrow = i == _vm.SortColumn ? (_vm.SortDescending ? " ▼" : " ▲") : "";
+            c.Header = HeaderFor(cols[i], arrow);
+        }
     }
 
     private void Reveal(ResourceRowViewModel row) => Avalonia.Threading.Dispatcher.UIThread.Post(() => { if (Grid.SelectedItem == row) Grid.ScrollIntoView(row, Grid.Columns.FirstOrDefault()); }, Avalonia.Threading.DispatcherPriority.Loaded);
@@ -116,13 +130,14 @@ public partial class ResourceListView : UserControl
                 CellTemplate = new FuncDataTemplate<ResourceRowViewModel>((_, _) => new CellTextBlock(idx, colored)),
             });
         }
+        ShowSortGlyph();
     }
 
-    private object HeaderFor(ColumnDef def)
+    private object HeaderFor(ColumnDef def, string arrow = "")
     {
         var tip = _vm?.HeaderTip(def);
-        if (tip is null) return def.Name;
-        var tb = new TextBlock { Text = def.Name, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        if (tip is null) return def.Name + arrow;
+        var tb = new TextBlock { Text = def.Name + arrow, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
         ToolTip.SetTip(tb, tip);
         return tb;
     }
