@@ -11,12 +11,19 @@ public partial class UsageView : UserControl
     public UsageView()
     {
         InitializeComponent();
+        RowsGrid.SelectionChanged += (_, _) => _vm?.SetSelectedRows(RowsGrid.SelectedItems.OfType<UsageRowViewModel>());
         DataContextChanged += (_, _) =>
         {
-            if (_vm is not null) _vm.RevealRequested -= Reveal;
+            if (_vm is not null) { _vm.RevealRequested -= Reveal; _vm.SelectionRequested -= Select; }
             _vm = DataContext as UsageViewModel;
-            if (_vm is not null) _vm.RevealRequested += Reveal;
+            if (_vm is not null) { _vm.RevealRequested += Reveal; _vm.SelectionRequested += Select; }
         };
+    }
+
+    private void Select(IReadOnlyList<UsageRowViewModel> rows)
+    {
+        RowsGrid.SelectedItems.Clear();
+        foreach (var r in rows) RowsGrid.SelectedItems.Add(r);
     }
 
     /// <summary>After a restore the selected row may be far down a long list: scroll it into view once the grid has laid out.</summary>

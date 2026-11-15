@@ -45,6 +45,7 @@ public sealed class DemoEnvironment : IAsyncDisposable
         SeedSecurity(server);
         SeedGitOps(server);
         SeedCapacity(server);
+        SeedStorage(server);
         server.NodeMetrics["node-1"] = ("1200m", "6Gi"); server.NodeMetrics["node-2"] = ("900m", "5Gi");
         var drifted = withDrift ? await StartDriftedAsync() : null;
         var devCluster = drifted is null ? "" : "- {name: demo-dev, cluster: {server: " + drifted.Url + "}}";
@@ -222,6 +223,42 @@ public sealed class DemoEnvironment : IAsyncDisposable
         Flux("""{"apiVersion":"helm.toolkit.fluxcd.io/v2","kind":"HelmRelease","metadata":{"name":"ingress-nginx","namespace":"flux-system"},"spec":{"chart":{"spec":{"chart":"ingress-nginx","version":"4.11.x","sourceRef":{"name":"ingress-nginx"}}}},"status":{"lastAppliedRevision":"4.11.2","conditions":[{"type":"Ready","status":"True","message":"Helm upgrade succeeded for release ingress-nginx/ingress-nginx.v3 with chart ingress-nginx@4.11.2","lastTransitionTime":"AGO2D"}]}}""");
         Flux("""{"apiVersion":"helm.toolkit.fluxcd.io/v2","kind":"HelmRelease","metadata":{"name":"podinfo","namespace":"flux-system"},"spec":{"suspend":true,"chart":{"spec":{"chart":"podinfo","version":"6.x","sourceRef":{"name":"podinfo"}}}},"status":{"conditions":[{"type":"Ready","status":"True","lastTransitionTime":"AGO6D"}]}}""");
     }
+
+    /// <summary>
+    /// Storage for the Usage pages: a claim, a volume and a class that something uses, and several that nothing refers to (the Delete selected button),
+    /// plus a ConfigMap and a ServiceAccount nobody uses.
+    /// </summary>
+    private static void SeedStorage(FakeApiServer server) => server.SeedYaml("""
+        {"apiVersion":"storage.k8s.io/v1","kind":"StorageClass","metadata":{"name":"fast-ssd"},"provisioner":"disk.csi.azure.com"}
+        ---
+        {"apiVersion":"storage.k8s.io/v1","kind":"StorageClass","metadata":{"name":"slow-hdd-old"},"provisioner":"disk.csi.azure.com"}
+        ---
+        {"apiVersion":"storage.k8s.io/v1","kind":"StorageClass","metadata":{"name":"azurefile-legacy"},"provisioner":"file.csi.azure.com"}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":"db-data","namespace":"staging"},"spec":{"storageClassName":"fast-ssd","volumeName":"pv-db-data","resources":{"requests":{"storage":"20Gi"}}},"status":{"phase":"Bound"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":"old-uploads","namespace":"staging"},"spec":{"storageClassName":"fast-ssd","volumeName":"pv-old-uploads","resources":{"requests":{"storage":"50Gi"}}},"status":{"phase":"Bound"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":"tmp-export","namespace":"staging"},"spec":{"storageClassName":"slow-hdd-old","volumeName":"pv-tmp-export","resources":{"requests":{"storage":"5Gi"}}},"status":{"phase":"Bound"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolumeClaim","metadata":{"name":"scratch-2023","namespace":"default"},"spec":{"storageClassName":"fast-ssd","resources":{"requests":{"storage":"10Gi"}}},"status":{"phase":"Pending"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":"pv-db-data"},"spec":{"storageClassName":"fast-ssd","capacity":{"storage":"20Gi"},"persistentVolumeReclaimPolicy":"Delete","claimRef":{"namespace":"staging","name":"db-data"}},"status":{"phase":"Bound"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":"pv-old-uploads"},"spec":{"storageClassName":"fast-ssd","capacity":{"storage":"50Gi"},"persistentVolumeReclaimPolicy":"Delete","claimRef":{"namespace":"staging","name":"old-uploads"}},"status":{"phase":"Bound"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":"pv-tmp-export"},"spec":{"storageClassName":"slow-hdd-old","capacity":{"storage":"5Gi"},"persistentVolumeReclaimPolicy":"Delete","claimRef":{"namespace":"staging","name":"tmp-export"}},"status":{"phase":"Bound"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":"pv-released-1"},"spec":{"storageClassName":"fast-ssd","capacity":{"storage":"100Gi"},"persistentVolumeReclaimPolicy":"Retain","claimRef":{"namespace":"staging","name":"deleted-claim"}},"status":{"phase":"Released"}}
+        ---
+        {"apiVersion":"v1","kind":"PersistentVolume","metadata":{"name":"pv-available-1"},"spec":{"storageClassName":"slow-hdd-old","capacity":{"storage":"30Gi"},"persistentVolumeReclaimPolicy":"Retain"},"status":{"phase":"Available"}}
+        ---
+        {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"db","namespace":"staging","uid":"dep-staging-db","labels":{"app":"db"}},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"db"}},"template":{"metadata":{"labels":{"app":"db"}},"spec":{"containers":[{"name":"main","image":"postgres:16","volumeMounts":[{"name":"data","mountPath":"/var/lib/postgresql/data"}]}],"volumes":[{"name":"data","persistentVolumeClaim":{"claimName":"db-data"}}]}}},"status":{"replicas":1,"readyReplicas":1,"availableReplicas":1,"updatedReplicas":1}}
+        ---
+        {"apiVersion":"v1","kind":"ConfigMap","metadata":{"name":"old-feature-flags","namespace":"staging"},"data":{"x":"1"}}
+        ---
+        {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"name":"unused-runner","namespace":"staging"}}
+        """);
 
     /// <summary>A batch pod that asks for more CPU than any node has free (the free room is spread over both nodes), for the Capacity page.</summary>
     private static void SeedCapacity(FakeApiServer server) =>

@@ -6,6 +6,7 @@ using Kubism.Core.Api;
 using Kubism.Core.Usage;
 using Kubism.Core.Views;
 using Kubism.Desktop.Navigation;
+using Kubism.Desktop.Services;
 
 namespace Kubism.Desktop.ViewModels;
 
@@ -67,6 +68,9 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
     /// <summary>Raised with the row to bring into view after a restore, so the grid scrolls back to where the user was.</summary>
     public event Action<object>? RevealRequested;
 
+    /// <summary>Raised with the rows the view should select (the "Select not referenced" button).</summary>
+    public event Action<IReadOnlyList<UsageRowViewModel>>? SelectionRequested;
+
     public UsageViewModel(WorkspaceViewModel ws, UsageMode mode, UsageState? restore = null)
     {
         _ws = ws; Mode = mode;
@@ -114,6 +118,16 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
     public bool ShowDangling => Mode == UsageMode.Config && Section == 3;
     public bool ShowRows => !ShowBroken && !ShowDeadKeys && !ShowDangling;
     public bool HasWarning => Warning.Length > 0;
+
+    /// <summary>The rows selected in the grid (several can be). Set by the view.</summary>
+    public IReadOnlyList<UsageRowViewModel> SelectedRows { get; private set; } = [];
+    public bool CanDeleteSelected => SelectedRows.Any(r => r.Row.Status == UsageStatus.Unused);
+
+    public void SetSelectedRows(IEnumerable<UsageRowViewModel> rows)
+    {
+        SelectedRows = [.. rows];
+        OnPropertyChanged(nameof(CanDeleteSelected));
+    }
 
     partial void OnSectionChanged(int value) { foreach (var t in Tabs) t.IsActive = t.Index == value; OnPropertyChanged(nameof(ShowBroken)); OnPropertyChanged(nameof(ShowDeadKeys)); OnPropertyChanged(nameof(ShowDangling)); OnPropertyChanged(nameof(ShowRows)); ShowResults(); }
     partial void OnFilterChanged(string value) => ShowResults();
@@ -264,6 +278,49 @@ public sealed partial class UsageViewModel : ViewModelBase, IClosable, INavigabl
     }
 
     public object? CaptureState() => new UsageState(Section, Filter, UnusedOnly, SelectionKey());
+
+    [RelayCommand]
+    private void SelectUnreferenced() => SelectionRequested?.Invoke([.. Rows.Where(r => r.Row.Status == UsageStatus.Unused)]);
+
+    /// <summary>
+    /// Deletes the selected rows that are "Not referenced" (never a Used or Managed one, even when selected), one bulk delete per kind through
+    /// ClusterActions: read-only clusters refuse, production asks for the count to be typed. "Not referenced" is only what the objects read say:
+    /// the confirmation says so, and says more when part of the cluster could not be read.
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteSelected()
+    {
+        var unused = SelectedRows.Where(r => r.Row.Status == UsageStatus.Unused).Select(r => r.Row).ToList();
+        if (unused.Count == 0)
+        {
+            await _ws.Dialogs.ShowTextAsync("Nothing to delete", "Select rows marked \"Not referenced\". Used and managed objects are never deleted from this page.");
+            return;
+        }
+        if (HasWarning && !await _ws.Dialogs.ConfirmAsync(new ConfirmRequest("Usage may be incomplete", Warning, "Continue", true))) return;
+        var deleted = 0;
+        foreach (var group in unused.GroupBy(r => r.Kind))
+        {
+            var kind = _ws.Session.Discovery.Kinds.FirstOrDefault(k => k.Kind == group.Key && (group.Key != "GatewayClass" || GatewayApi.IsGatewayApi(k.Group)));
+            if (kind is null || !kind.Verbs.Contains("delete"))
+            {
+                await _ws.Dialogs.ShowErrorAsync("Delete", $"{group.Key} cannot be deleted on this cluster.");
+                continue;
+            }
+            var rows = group.ToList();
+            var names = string.Join(", ", rows.Take(5).Select(r => r.Display)) + (rows.Count > 5 ? $" and {rows.Count - 5} more" : "");
+            var target = $"{rows.Count} {group.Key} not referenced by any object read ({names}). Something outside the cluster's objects may still use {(rows.Count == 1 ? "it" : "them")}";
+            var items = rows.Select(r => (r.Namespace, r.Name)).ToList();
+            var ok = await _ws.RunActionAsync("Delete", target, true, rows.Count.ToString(), async c =>
+            {
+                var res = await _ws.Session.Actions.DeleteManyAsync(kind.Gvr, items, _ws.Session.SessionToken, confirmation: c);
+                var failed = res.Where(x => x.error is not null).ToList();
+                deleted += res.Count - failed.Count;
+                if (failed.Count > 0) await _ws.Dialogs.ShowTextAsync("Some deletions failed", string.Join("\n", failed.Select(f => $"{f.target}: {f.error}")));
+            });
+            if (!ok) break;
+        }
+        if (deleted > 0) await LoadAsync();
+    }
 
     [RelayCommand]
     private void OpenSelected()

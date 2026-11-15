@@ -24,7 +24,8 @@ public sealed class RangeObservableCollection<T> : ObservableCollection<T>
         var wanted = new HashSet<T>(desired);
         var removals = present.Count(p => !wanted.Contains(p));
         var additions = desired.Count(d => !present.Contains(d));
-        if (removals + additions > resetThreshold) { ReplaceAll(desired); return; }
+        // The DataGrid does not redraw its rows for Move: a pure reorder (a sort) is announced as a Reset.
+        if (removals + additions > resetThreshold || (removals + additions == 0 && Count == desired.Count)) { ReplaceAll(desired); return; }
         for (var i = Count - 1; i >= 0; i--) if (!wanted.Contains(this[i])) RemoveAt(i);
         for (var i = 0; i < desired.Count; i++)
         {

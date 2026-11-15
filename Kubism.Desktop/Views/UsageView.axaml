@@ -29,10 +29,12 @@
       <TextBlock Text="{Binding Warning}" IsVisible="{Binding HasWarning}" Foreground="{DynamicResource KubismWarnBrush}" TextWrapping="Wrap" />
       <TextBlock Text="{Binding Error}" Foreground="{DynamicResource KubismErrorBrush}" IsVisible="{Binding Error, Converter={x:Static app:Converters.NotNull}}" />
     </StackPanel>
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
       <TextBox Text="{Binding Filter, Mode=TwoWay}" PlaceholderText="Filter by name or consumer" AutomationProperties.Name="Filter" />
       <CheckBox Grid.Column="1" Content="Not referenced only" IsChecked="{Binding UnusedOnly}" IsVisible="{Binding ShowRows}" />
-      <Button Grid.Column="2" Content="Open object" Command="{Binding OpenSelectedCommand}" ToolTip.Tip="Open the selected object (or, for a broken reference, the object that holds it)" />
+      <Button Grid.Column="2" Content="Select not referenced" Command="{Binding SelectUnreferencedCommand}" IsVisible="{Binding ShowRows}" ToolTip.Tip="Select every row marked Not referenced (Ctrl/Shift+click to adjust the selection)" />
+      <Button Grid.Column="3" Content="Delete selected…" Command="{Binding DeleteSelectedCommand}" IsEnabled="{Binding CanDeleteSelected}" IsVisible="{Binding ShowRows}" ToolTip.Tip="Delete the selected rows that are Not referenced. Used and managed objects are never deleted from here." />
+      <Button Grid.Column="4" Content="Open object" Command="{Binding OpenSelectedCommand}" ToolTip.Tip="Open the selected object (or, for a broken reference, the object that holds it)" />
     </Grid>
     <ItemsControl Grid.Row="3" ItemsSource="{Binding Tabs}" AutomationProperties.Name="Section">
       <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="4" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -44,7 +46,7 @@
       </ItemsControl.ItemTemplate>
     </ItemsControl>
     <Grid Grid.Row="4" RowDefinitions="*,Auto" RowSpacing="6">
-      <DataGrid x:Name="RowsGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowRows}" IsReadOnly="True" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Usage">
+      <DataGrid x:Name="RowsGrid" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" IsVisible="{Binding ShowRows}" IsReadOnly="True" SelectionMode="Extended" CanUserResizeColumns="True" CanUserSortColumns="True" AutoGenerateColumns="False" GridLinesVisibility="Horizontal" AutomationProperties.Name="Usage">
                     <DataGrid.Columns>
                       <DataGridTemplateColumn Header="Status" Width="130" SortMemberPath="StatusText">
                         <DataGridTemplateColumn.CellTemplate>

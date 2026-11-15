@@ -113,6 +113,18 @@ public class ViewsTests
     }
 
     [Fact]
+    public void Sort_keys_of_a_column_mixing_numbers_and_text_do_not_throw()
+    {
+        // kubectl prints "3 (5m ago)" or "<none>" next to plain numbers in the same column.
+        var col = new ColumnDef("Restarts", "string", 0, false, 0);
+        CacheItem I(string n) => new(new KubeObject(new JsonObject { ["metadata"] = new JsonObject { ["name"] = n } }), [n]);
+        var asc = new[] { "3 (5m ago)", "10", "<none>", "2" }.Select(I).OrderBy(i => TableService.SortKey(i, col)).Select(i => i.Cells![0]).ToList();
+        Assert.Equal(["2", "3 (5m ago)", "10", "<none>"], asc);
+        var desc = new[] { "3 (5m ago)", "10", "<none>", "2" }.Select(I).OrderByDescending(i => TableService.SortKey(i, col)).Select(i => i.Cells![0]).ToList();
+        Assert.Equal(["<none>", "10", "3 (5m ago)", "2"], desc);
+    }
+
+    [Fact]
     public void Filter_matches_name_and_labels()
     {
         var item = new CacheItem(new KubeObject(JsonNode.Parse("""{"metadata":{"name":"web-1","labels":{"app":"web","tier":"fe"}}}""")!.AsObject()), null);

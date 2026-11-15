@@ -4,6 +4,13 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Added
+- **Usage pages: delete what nothing refers to** (#15). The grid takes a multi-selection; *Select not referenced* selects every row marked Not referenced and *Delete selected…* deletes the selected ones that are, one bulk delete per kind through `ClusterActions` (read-only refuses, production asks for the count to be typed). A Used or Managed row is never deleted, even when selected. The `--demo` clusters now carry unreferenced storage to try it on (claims `old-uploads`, `tmp-export` and `scratch-2023`, volumes `pv-released-1` and `pv-available-1`, class `azurefile-legacy`, plus a ConfigMap and a ServiceAccount nobody uses). The confirmation says that something outside the cluster's objects can still use an object, and warns first when part of the cluster could not be read.
+
+### Fixed
+- Sorting a resource list from its header only moved the arrow: the rows were reordered in the view model but the grid kept drawing the old order, because the DataGrid does not redraw for a `Move`. A pure reorder is now sent as a Reset, and the selected row stays selected.
+- Sorting a resource list from its header did nothing (only the arrow moved) on a column that mixes numbers and text, such as Restarts (`0`, `3 (5m ago)`) or values like `<none>`: the sort key changed type from one row to the next and the comparer threw. Numbers now sort before text with one key type. A cell such as `3 (5m ago)` sorts on its leading number, and the Pods and Nodes CPU / Memory columns sort on the usage itself instead of on the text (`119m` came before `12m`, `128Mi` before `26Mi`).
+
 ## [0.6.0] - 2026-11-12
 
 ### Added

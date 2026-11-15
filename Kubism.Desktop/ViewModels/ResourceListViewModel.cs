@@ -330,19 +330,27 @@ public sealed partial class ResourceListViewModel : ViewModelBase, IClosable, IN
         }
         else
             sorted = q.OrderBy(r => r.Namespace, StringComparer.Ordinal).ThenBy(r => r.Name, StringComparer.Ordinal).ToList();
+        var selected = SelectedRow;
         Rows.SyncTo(sorted);
+        // A reorder is a Reset for the grid, which drops its selection: put it back.
+        if (selected is not null && !ReferenceEquals(SelectedRow, selected) && Rows.Contains(selected)) SelectedRow = selected;
         TryApplyPendingSelect();
         CountText = Filter.Length > 0 ? $"{sorted.Count} of {_rows.Count}" : $"{_rows.Count}";
     }
 
     private IComparable SortKeyOf(ResourceRowViewModel r, ColumnDef col)
     {
-        if (col.Index is CpuColumn or MemoryColumn)
-        {
-            var text = r.Cells.Length > Columns.ToList().IndexOf(col) ? r.Cells[Columns.ToList().IndexOf(col)] : "";
-            return text;
-        }
+        // CPU / Memory cells read "119m (48%, 24%)": sort on the usage itself (cores, bytes), not on the text. No metric = smallest.
+        if (col.Index is CpuColumn or MemoryColumn) return MetricValue(r, col.Index == CpuColumn);
         return TableService.SortKey(r.Item, col);
+    }
+
+    private double MetricValue(ResourceRowViewModel row, bool cpu)
+    {
+        var m = _ws.Session.Metrics;
+        if (m is null || m.Available != true) return -1;
+        if (Kind.Kind == "Pod") return m.Pods.TryGetValue($"{row.Namespace}/{row.Name}", out var u) ? (cpu ? u.CpuCores : u.MemoryBytes) : -1;
+        return m.Nodes.TryGetValue(row.Name, out var n) ? (cpu ? n.CpuCores : n.MemoryBytes) : -1;
     }
 
     // ---------- commands ----------

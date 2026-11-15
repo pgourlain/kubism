@@ -36,21 +36,26 @@ public static class TableService
         };
     }
 
-    /// <summary>Comparable key: numbers numerically, Age by creation time (newest = smallest age), otherwise natural string order.</summary>
+    /// <summary>Comparable key: numbers numerically (before any text), Age by creation time (newest = smallest age), otherwise natural string order.
+    /// One type for every cell: a column that mixes "0" and "3 (5m ago)" or "&lt;none&gt;" must not make the comparer throw.</summary>
     public static IComparable SortKey(CacheItem item, ColumnDef col)
     {
-        if (col.IsAge) return -(item.Object.CreationTimestamp?.ToUnixTimeSeconds() ?? 0);
+        if (col.IsAge) return new NaturalString(null, -(item.Object.CreationTimestamp?.ToUnixTimeSeconds() ?? 0));
         var text = Cell(item, col);
-        if (col.Type is "integer" or "number" || double.TryParse(text, out _))
-            if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
-        return new NaturalString(text);
+        if (double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)) return new NaturalString(null, d);
+        // "3 (5m ago)" (Restarts): the number in front is what the column is about.
+        var space = text.IndexOf(' ');
+        if (space > 0 && double.TryParse(text.AsSpan(0, space), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var lead)) return new NaturalString(null, lead);
+        return new NaturalString(text, 0);
     }
 
-    private readonly record struct NaturalString(string Value) : IComparable
+    private readonly record struct NaturalString(string? Value, double Number) : IComparable
     {
         public int CompareTo(object? obj)
         {
             if (obj is not NaturalString other) return 1;
+            if (Value is null) return other.Value is null ? Number.CompareTo(other.Number) : -1;
+            if (other.Value is null) return 1;
             return Compare(Value, other.Value);
         }
 
