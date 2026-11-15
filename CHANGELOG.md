@@ -4,6 +4,8 @@ All notable changes to Kubism are listed here. Format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-15
+
 ### Added
 - **Usage pages: delete what nothing refers to** (#15). The grid takes a multi-selection; *Select not referenced* selects every row marked Not referenced and *Delete selected…* deletes the selected ones that are, one bulk delete per kind through `ClusterActions` (read-only refuses, production asks for the count to be typed). A Used or Managed row is never deleted, even when selected. The `--demo` clusters now carry unreferenced storage to try it on (claims `old-uploads`, `tmp-export` and `scratch-2023`, volumes `pv-released-1` and `pv-available-1`, class `azurefile-legacy`, plus a ConfigMap and a ServiceAccount nobody uses). The confirmation says that something outside the cluster's objects can still use an object, and warns first when part of the cluster could not be read.
 
@@ -183,7 +185,8 @@ First release.
 - Native AOT releases, own kubeconfig reader, third-party notices, About dialog, Arch/Omarchy package, macOS dmg with Applications shortcut.
 - CI and release workflows, headless UI tests, `FakeApiServer`, integration tests against kind.
 
-[Unreleased]: https://github.com/pgourlain/kubism/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/pgourlain/kubism/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/pgourlain/kubism/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/pgourlain/kubism/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/pgourlain/kubism/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/pgourlain/kubism/compare/v0.3.9...v0.4.0
